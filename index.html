@@ -2,352 +2,292 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Секретное послание 💌</title>
-<meta name="description" content="Маленький квест с сюрпризом внутри." />
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💌</text></svg>" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Мы вдвоём 💜</title>
+<meta name="description" content="Наш маленький общий дом в интернете — пока мы на расстоянии." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💜</text></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@400;600&display=swap" media="print" onload="this.media='all'" />
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@400;600&display=swap" /></noscript>
+<link rel="stylesheet" href="assets/css/style.css" />
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  html, body { height: 100%; }
-
-  body {
-    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-    background: radial-gradient(ellipse at 20% 20%, #2b1055 0%, #16052e 45%, #0b0220 100%);
-    color: #fff;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    -webkit-tap-highlight-color: transparent;
-    user-select: none;
+  .hero { padding: 70px 0 10px; text-align: center; }
+  .hero-names {
+    display: flex; align-items: center; justify-content: center;
+    gap: clamp(14px, 4vw, 34px); flex-wrap: wrap;
   }
-
-  /* ---------- звёзды ---------- */
-  .star {
-    position: fixed;
-    border-radius: 50%;
-    background: #fff;
-    opacity: .8;
-    animation: twinkle 3s ease-in-out infinite;
-    pointer-events: none;
-  }
-  @keyframes twinkle {
-    0%, 100% { opacity: .15; transform: scale(.8); }
-    50%      { opacity: .9;  transform: scale(1.15); }
-  }
-
-  /* ---------- экраны ---------- */
-  .screen {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 24px;
-    padding: 24px;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity .8s ease;
-  }
-  .screen.active { opacity: 1; visibility: visible; }
-
-  h1 { font-size: clamp(1.4rem, 5vw, 2.4rem); font-weight: 600; text-shadow: 0 2px 20px rgba(255,105,180,.45); }
-  p.hint { font-size: clamp(1rem, 3.5vw, 1.2rem); color: #e6c9ff; opacity: .85; }
-
-  /* ---------- конверт ---------- */
-  .envelope {
-    font-size: clamp(5rem, 22vw, 9rem);
-    cursor: pointer;
-    filter: drop-shadow(0 10px 30px rgba(255,105,180,.35));
-    transition: transform .3s ease;
-    animation: float 3.2s ease-in-out infinite;
-  }
-  .envelope:hover { transform: scale(1.08); }
-  @keyframes float {
-    0%, 100% { translate: 0 0; }
-    50%      { translate: 0 -14px; }
-  }
-  .envelope.shake { animation: shake .5s ease; }
-  @keyframes shake {
-    0%, 100% { transform: rotate(0); }
-    20% { transform: rotate(-8deg); }
-    40% { transform: rotate(8deg); }
-    60% { transform: rotate(-6deg); }
-    80% { transform: rotate(6deg); }
-  }
-
-  .lock-badge {
-    position: absolute;
-    font-size: clamp(1.8rem, 8vw, 3rem);
-    translate: 40px 30px;
-    pointer-events: none;
-    transition: opacity .5s ease, transform .5s ease;
-  }
-  .lock-badge.open { opacity: 0; transform: translateY(-40px) rotate(30deg); }
-
-  .envelope-wrap { position: relative; display: inline-block; }
-
-  /* ---------- ключ ---------- */
-  .key {
-    position: fixed;
-    font-size: clamp(2.2rem, 9vw, 3.5rem);
-    cursor: pointer;
-    z-index: 50;
-    filter: drop-shadow(0 0 14px gold);
-    animation: keyfloat 2.4s ease-in-out infinite;
-    transition: transform .25s ease;
-  }
-  .key:hover { transform: scale(1.2); }
-  @keyframes keyfloat {
-    0%, 100% { margin-top: 0; }
-    50%      { margin-top: -12px; }
-  }
-
-  /* ---------- кнопки ---------- */
-  .btn {
-    font-family: inherit;
-    font-size: 1.05rem;
-    font-weight: 600;
-    color: #fff;
-    background: linear-gradient(135deg, #ff5e9c, #b445ff);
-    border: none;
-    border-radius: 999px;
-    padding: 14px 34px;
-    cursor: pointer;
-    box-shadow: 0 8px 30px rgba(255,94,156,.4);
-    transition: transform .2s ease, box-shadow .2s ease;
-  }
-  .btn:hover { transform: translateY(-2px) scale(1.03); box-shadow: 0 12px 36px rgba(255,94,156,.55); }
-  .btn:active { transform: scale(.97); }
-
-  /* ---------- финал ---------- */
-  .final-heart {
-    font-size: clamp(4rem, 18vw, 7rem);
-    animation: beat 1.1s ease-in-out infinite;
-    filter: drop-shadow(0 0 30px rgba(255,60,120,.8));
+  .hero-heart {
+    font-size: clamp(2rem, 7vw, 3.4rem);
+    animation: beat 1.4s ease-in-out infinite;
+    filter: drop-shadow(0 0 26px rgba(255, 60, 120, .75));
   }
   @keyframes beat {
     0%, 100% { transform: scale(1); }
-    25%      { transform: scale(1.18); }
-    40%      { transform: scale(1); }
-    60%      { transform: scale(1.12); }
+    25% { transform: scale(1.16); }
+    40% { transform: scale(1); }
+    60% { transform: scale(1.1); }
+  }
+  .hero .lead { max-width: 560px; margin: 20px auto 0; }
+
+  /* --- плитки со статистикой --- */
+  .stat { text-align: center; padding: 22px 16px; }
+  .stat .big {
+    font-family: var(--font-display);
+    font-size: clamp(1.7rem, 5vw, 2.5rem);
+    font-weight: 600;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat .cap { color: var(--text-faint); font-size: .8rem; margin-top: 7px; letter-spacing: .04em; }
+  .stat .ico { font-size: 1.5rem; margin-bottom: 8px; }
+
+  /* --- часы --- */
+  .clocks { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; }
+  .clock { text-align: center; padding: 6px 4px; }
+  .clock .time {
+    font-family: var(--font-display);
+    font-size: clamp(1.6rem, 6vw, 2.3rem);
+    font-variant-numeric: tabular-nums;
+  }
+  .clock .city { font-size: .86rem; color: var(--text-dim); margin-top: 4px; font-weight: 700; }
+  .clock .day { font-size: .74rem; color: var(--text-faint); margin-top: 2px; }
+  .clock-split { color: var(--text-faint); font-size: .72rem; text-align: center; line-height: 1.4; }
+  .clock-split .line { width: 1px; height: 34px; background: var(--line); margin: 6px auto; }
+
+  /* --- присутствие --- */
+  .presence-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .avatar {
+    width: 46px; height: 46px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 1.4rem;
+    background: linear-gradient(135deg, rgba(255,94,156,.3), rgba(180,69,255,.3));
+    border: 1px solid var(--line);
+    flex: none;
   }
 
-  .message {
-    font-size: clamp(2rem, 8vw, 4rem);
-    font-weight: 800;
-    background: linear-gradient(90deg, #ff9ecb, #ff5e9c, #ffd1e8, #ff5e9c);
-    background-size: 300% auto;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    animation: shine 4s linear infinite;
-    line-height: 1.25;
-    min-height: 1.3em;
+  /* --- кнопки-эмоции --- */
+  .pings { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; }
+  .ping-btn {
+    background: var(--glass);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 16px 10px;
+    cursor: pointer;
+    text-align: center;
+    transition: transform .2s, border-color .2s, background .2s;
   }
-  @keyframes shine { to { background-position: 300% center; } }
+  .ping-btn:hover { transform: translateY(-3px); background: var(--glass-strong); border-color: rgba(255,94,156,.45); }
+  .ping-btn:active { transform: scale(.96); }
+  .ping-btn .e { font-size: 1.7rem; display: block; }
+  .ping-btn .t { font-size: .8rem; font-weight: 700; color: var(--text-dim); margin-top: 6px; display: block; }
 
-  .sub {
-    font-size: clamp(1rem, 4vw, 1.3rem);
-    color: #ffd7ec;
-    opacity: 0;
-    transition: opacity 1.5s ease;
+  /* --- полноэкранное «обнимашки получены» --- */
+  #ping-overlay {
+    position: fixed; inset: 0; z-index: 85;
+    display: grid; place-items: center; text-align: center;
+    background: radial-gradient(circle at 50% 50%, rgba(180,69,255,.4), rgba(8,1,15,.94));
+    backdrop-filter: blur(6px);
+    animation: fade .4s ease;
   }
-  .sub.show { opacity: .9; }
+  #ping-overlay .huge { font-size: clamp(5rem, 26vw, 12rem); animation: beat 1s ease-in-out infinite; }
+  #ping-overlay .who { font-family: var(--font-display); font-size: clamp(1.1rem, 4vw, 1.7rem); margin-top: 14px; }
 
-  /* ---------- летящие сердечки ---------- */
-  .fly-heart {
-    position: fixed;
-    bottom: -60px;
-    font-size: 26px;
-    animation: fly linear forwards;
-    pointer-events: none;
-    z-index: 5;
-  }
-  @keyframes fly {
-    to { transform: translateY(-115vh) rotate(360deg); opacity: 0; }
-  }
-
-  /* ---------- конфетти-взрыв ---------- */
-  .burst {
-    position: fixed;
-    font-size: 24px;
-    pointer-events: none;
-    z-index: 60;
-    animation: burst .9s ease-out forwards;
-  }
-  @keyframes burst {
-    to { transform: translate(var(--dx), var(--dy)) scale(.4) rotate(220deg); opacity: 0; }
-  }
+  /* --- навигационные плитки --- */
+  .tile { display: block; padding: 22px; }
+  .tile .ico { font-size: 2rem; }
+  .tile h3 { margin: 12px 0 6px; }
+  .tile p { color: var(--text-faint); font-size: .86rem; line-height: 1.55; }
 </style>
 </head>
 <body>
 
-  <!-- Экран 1: приветствие -->
-  <section class="screen active" id="screen-start">
-    <div style="font-size: clamp(3.5rem, 15vw, 6rem);">✨</div>
-    <h1>Рагим, прости меня 🥺<br>И не поленись пройти это&nbsp;🗝️</h1>
-    <p class="hint">Внутри спрятано кое-что важное…</p>
-    <button class="btn" id="btn-start">Начать</button>
-  </section>
+<div id="starfield"></div>
 
-  <!-- Экран 2: конверт под замком, надо найти ключ -->
-  <section class="screen" id="screen-quest">
-    <h1 id="quest-title">Тебе письмо! Но оно под замком&nbsp;🔒</h1>
-    <p class="hint" id="quest-hint">Найди золотой ключик — он где-то на экране…</p>
-    <div class="envelope-wrap">
-      <div class="envelope" id="envelope">💌</div>
-      <div class="lock-badge" id="lock">🔒</div>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="index.html"><span class="dot">💜</span> Мы&nbsp;вдвоём</a>
+    <nav class="nav">
+      <a href="index.html" class="nav-home">Главная</a>
+      <a href="chat.html">Чат</a>
+      <a href="letters.html">Письма</a>
+      <a href="games.html">Игры</a>
+      <a href="memories.html">История</a>
+      <a href="quest.html">Сюрприз</a>
+    </nav>
+    <button class="who-chip" id="who-chip">💜</button>
+  </div>
+</header>
+
+<main class="shell">
+
+  <!-- ---------- ГЕРОЙ ---------- -->
+  <section class="hero">
+    <p class="eyebrow">наш общий дом в интернете</p>
+    <div class="hero-names mt">
+      <h1 class="grad-text" id="name-a">…</h1>
+      <div class="hero-heart">❤️</div>
+      <h1 class="grad-text" id="name-b">…</h1>
+    </div>
+    <p class="lead" id="hero-lead">Между нами километры. Но это единственное, что между нами есть.</p>
+    <div class="row center mt-lg" style="justify-content:center">
+      <span class="badge" id="cloud-badge"><span class="pulse dim"></span> подключаюсь…</span>
     </div>
   </section>
 
-  <!-- Экран 3: финал -->
-  <section class="screen" id="screen-final">
-    <div class="final-heart">❤️</div>
-    <div class="message" id="message"></div>
-    <p class="sub" id="sub">навсегда и по-настоящему&nbsp;✨</p>
+  <!-- ---------- СЧЁТЧИКИ ---------- -->
+  <section class="section">
+    <div class="grid four">
+      <div class="card stat">
+        <div class="ico">💞</div>
+        <div class="big" id="stat-together">—</div>
+        <div class="cap" id="stat-together-cap">дней вместе</div>
+      </div>
+      <div class="card stat">
+        <div class="ico">✈️</div>
+        <div class="big" id="stat-countdown">—</div>
+        <div class="cap" id="stat-countdown-cap">до встречи</div>
+      </div>
+      <div class="card stat">
+        <div class="ico">💌</div>
+        <div class="big" id="stat-messages">—</div>
+        <div class="cap">сообщений в чате</div>
+      </div>
+      <div class="card stat">
+        <div class="ico">🫂</div>
+        <div class="big" id="stat-hugs">—</div>
+        <div class="cap">обнимашек отправлено</div>
+      </div>
+    </div>
   </section>
 
-<script>
-(function () {
-  var screens = {
-    start: document.getElementById('screen-start'),
-    quest: document.getElementById('screen-quest'),
-    final: document.getElementById('screen-final')
-  };
-  var envelope = document.getElementById('envelope');
-  var lock = document.getElementById('lock');
-  var questTitle = document.getElementById('quest-title');
-  var questHint = document.getElementById('quest-hint');
-  var hasKey = false;
+  <!-- ---------- ЧАСЫ ---------- -->
+  <section class="section">
+    <div class="section-head">
+      <h2>Который час у нас</h2>
+      <p>чтобы не будить друг друга в три ночи</p>
+    </div>
+    <div class="card">
+      <div class="clocks">
+        <div class="clock">
+          <div class="time" id="clock-a">--:--</div>
+          <div class="city" id="city-a">—</div>
+          <div class="day" id="day-a"></div>
+        </div>
+        <div class="clock-split">
+          <div class="line"></div>
+          <div id="tz-diff">—</div>
+          <div class="line"></div>
+        </div>
+        <div class="clock">
+          <div class="time" id="clock-b">--:--</div>
+          <div class="city" id="city-b">—</div>
+          <div class="day" id="day-b"></div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-  function show(name) {
-    Object.keys(screens).forEach(function (k) {
-      screens[k].classList.toggle('active', k === name);
-    });
-  }
+  <!-- ---------- ПРИСУТСТВИЕ И НАСТРОЕНИЕ ---------- -->
+  <section class="section">
+    <div class="section-head">
+      <h2>Прямо сейчас</h2>
+      <p>кто здесь и как настроение</p>
+    </div>
+    <div class="grid two">
 
-  /* звёздное небо */
-  for (var i = 0; i < 70; i++) {
-    var s = document.createElement('div');
-    s.className = 'star';
-    var size = 1 + Math.random() * 2.5;
-    s.style.width = s.style.height = size + 'px';
-    s.style.left = Math.random() * 100 + 'vw';
-    s.style.top = Math.random() * 100 + 'vh';
-    s.style.animationDelay = (Math.random() * 3) + 's';
-    document.body.appendChild(s);
-  }
+      <div class="card">
+        <div class="stack">
+          <div class="presence-row">
+            <div class="avatar" id="pres-a-ava">💜</div>
+            <div style="flex:1">
+              <div style="font-weight:800" id="pres-a-name">—</div>
+              <div class="muted" id="pres-a-status">—</div>
+            </div>
+          </div>
+          <hr class="hr" style="margin:4px 0" />
+          <div class="presence-row">
+            <div class="avatar" id="pres-b-ava">💙</div>
+            <div style="flex:1">
+              <div style="font-weight:800" id="pres-b-name">—</div>
+              <div class="muted" id="pres-b-status">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-  /* старт */
-  document.getElementById('btn-start').addEventListener('click', function () {
-    show('quest');
-    setTimeout(spawnKey, 900);
-  });
+      <div class="card">
+        <div class="field">
+          <label for="mood-input">Как ты сейчас? Пару слов — вторая половинка увидит</label>
+          <input type="text" id="mood-input" maxlength="90" placeholder="устал(а), но думаю о тебе…" />
+        </div>
+        <button class="btn small mt" id="mood-save">Сохранить настроение</button>
+        <hr class="hr" />
+        <div class="muted" style="font-weight:700; color:var(--text-dim)" id="partner-mood-label">Настроение второй половинки</div>
+        <div class="mt" id="partner-mood" style="font-size:1.02rem; line-height:1.6">пока тихо…</div>
+      </div>
 
-  /* ключ появляется в случайном месте и пару раз убегает */
-  var dodges = 2;
-  function spawnKey() {
-    var key = document.createElement('div');
-    key.className = 'key';
-    key.textContent = '🗝️';
-    key.setAttribute('role', 'button');
-    key.setAttribute('aria-label', 'Ключ');
-    placeRandom(key);
-    key.addEventListener('click', function () {
-      if (dodges > 0) {
-        dodges--;
-        questHint.textContent = dodges === 1 ? 'Ой, какой шустрый! Лови ещё раз 😄' : 'Почти! Ну давай, последний рывок!';
-        placeRandom(key);
-        return;
-      }
-      key.remove();
-      gotKey();
-    });
-    document.body.appendChild(key);
-  }
+    </div>
+  </section>
 
-  function placeRandom(el) {
-    var pad = 70;
-    var x = pad + Math.random() * (window.innerWidth - pad * 2);
-    var y = pad + Math.random() * (window.innerHeight - pad * 2);
-    el.style.left = x + 'px';
-    el.style.top = y + 'px';
-  }
+  <!-- ---------- ОБНИМАШКИ ---------- -->
+  <section class="section">
+    <div class="section-head">
+      <h2>Дотянуться через экран</h2>
+      <p>нажмите — и у второго это появится на весь экран</p>
+    </div>
+    <div class="card">
+      <div class="pings">
+        <button class="ping-btn" data-ping="hug"   data-emoji="🫂"><span class="e">🫂</span><span class="t">Обнять</span></button>
+        <button class="ping-btn" data-ping="kiss"  data-emoji="😘"><span class="e">😘</span><span class="t">Поцеловать</span></button>
+        <button class="ping-btn" data-ping="think" data-emoji="💭"><span class="e">💭</span><span class="t">Думаю о тебе</span></button>
+        <button class="ping-btn" data-ping="miss"  data-emoji="🥺"><span class="e">🥺</span><span class="t">Скучаю</span></button>
+        <button class="ping-btn" data-ping="night" data-emoji="🌙"><span class="e">🌙</span><span class="t">Спокойной ночи</span></button>
+        <button class="ping-btn" data-ping="love"  data-emoji="❤️"><span class="e">❤️</span><span class="t">Люблю</span></button>
+      </div>
+      <p class="muted mt">Если вторая половинка сейчас на сайте — увидит мгновенно. Если нет — увидит, когда зайдёт.</p>
+    </div>
+  </section>
 
-  function gotKey() {
-    hasKey = true;
-    lock.classList.add('open');
-    questTitle.textContent = 'Ключ у тебя! 🎉';
-    questHint.textContent = 'Теперь нажми на конверт, чтобы открыть его 💌';
-  }
+  <!-- ---------- РАЗДЕЛЫ ---------- -->
+  <section class="section">
+    <div class="section-head">
+      <h2>Куда дальше</h2>
+    </div>
+    <div class="grid three">
+      <a class="card hoverable tile" href="chat.html">
+        <div class="ico">💬</div>
+        <h3>Живой чат</h3>
+        <p>Общая лента на двоих. Видно, когда второй печатает.</p>
+      </a>
+      <a class="card hoverable tile" href="letters.html">
+        <div class="ico">✉️</div>
+        <h3>Письма и капсулы</h3>
+        <p>Написать письмо и запечатать его до нужной даты.</p>
+      </a>
+      <a class="card hoverable tile" href="games.html">
+        <div class="ico">🎲</div>
+        <h3>Игры для двоих</h3>
+        <p>Причины, вопросы, скретч-карточки, колесо свиданий.</p>
+      </a>
+      <a class="card hoverable tile" href="memories.html">
+        <div class="ico">📖</div>
+        <h3>Наша история</h3>
+        <p>Таймлайн, фото и список «когда встретимся».</p>
+      </a>
+      <a class="card hoverable tile" href="quest.html">
+        <div class="ico">🗝️</div>
+        <h3>Секретный квест</h3>
+        <p>Найди ключ, открой конверт. Внутри — признание.</p>
+      </a>
+    </div>
+  </section>
 
-  /* конверт */
-  envelope.addEventListener('click', function () {
-    if (!hasKey) {
-      envelope.classList.remove('shake');
-      void envelope.offsetWidth; /* перезапуск анимации */
-      envelope.classList.add('shake');
-      questHint.textContent = 'Заперто! Сначала поймай ключик 🗝️';
-      return;
-    }
-    burstAt(window.innerWidth / 2, window.innerHeight / 2);
-    show('final');
-    startHearts();
-    typeMessage('Я люблю тебя, Рагим ❤️');
-  });
+</main>
 
-  /* печатающийся текст */
-  function typeMessage(text) {
-    var el = document.getElementById('message');
-    var i = 0;
-    (function tick() {
-      if (i <= text.length) {
-        el.textContent = text.slice(0, i);
-        i++;
-        setTimeout(tick, 90);
-      } else {
-        document.getElementById('sub').classList.add('show');
-      }
-    })();
-  }
+<div class="footer">сделано с 💜 · <span id="footer-note"></span></div>
 
-  /* летящие сердечки */
-  var heartEmojis = ['❤️', '💖', '💘', '💕', '🩷', '💗'];
-  function startHearts() {
-    setInterval(function () {
-      var h = document.createElement('div');
-      h.className = 'fly-heart';
-      h.textContent = heartEmojis[Math.floor(Math.random() * heartEmojis.length)];
-      h.style.left = Math.random() * 100 + 'vw';
-      h.style.fontSize = (18 + Math.random() * 30) + 'px';
-      h.style.animationDuration = (4 + Math.random() * 4) + 's';
-      document.body.appendChild(h);
-      setTimeout(function () { h.remove(); }, 9000);
-    }, 350);
-  }
-
-  /* взрыв сердечек */
-  function burstAt(x, y) {
-    var pieces = ['❤️', '💖', '✨', '💫', '💗', '🌟'];
-    for (var i = 0; i < 26; i++) {
-      var p = document.createElement('div');
-      p.className = 'burst';
-      p.textContent = pieces[Math.floor(Math.random() * pieces.length)];
-      p.style.left = x + 'px';
-      p.style.top = y + 'px';
-      var angle = Math.random() * Math.PI * 2;
-      var dist = 90 + Math.random() * 200;
-      p.style.setProperty('--dx', Math.cos(angle) * dist + 'px');
-      p.style.setProperty('--dy', Math.sin(angle) * dist + 'px');
-      document.body.appendChild(p);
-      setTimeout(function (el) { el.remove(); }.bind(null, p), 1000);
-    }
-  }
-})();
-</script>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/common.js"></script>
+<script type="module" src="assets/js/home.js"></script>
 </body>
 </html>

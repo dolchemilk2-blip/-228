@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Игры для двоих 🎲</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎲</text></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@400;600&family=Caveat:wght@500;700&display=swap" media="print" onload="this.media='all'" />
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@400;600&family=Caveat:wght@500;700&display=swap" /></noscript>
+<link rel="stylesheet" href="assets/css/style.css" />
+<style>
+  .play-card { min-height: 250px; display: flex; flex-direction: column; }
+  .play-card .body { flex: 1; display: grid; place-items: center; text-align: center; padding: 18px 6px; }
+
+  .reason-text {
+    font-family: 'Caveat', cursive;
+    font-size: clamp(1.5rem, 4.5vw, 2.1rem);
+    line-height: 1.35;
+    color: var(--pink-soft);
+    animation: swap-in .5s ease;
+  }
+  @keyframes swap-in { from { opacity: 0; transform: translateY(14px) scale(.96); } }
+
+  .question-text {
+    font-family: var(--font-display);
+    font-size: clamp(1.05rem, 3.2vw, 1.35rem);
+    line-height: 1.45;
+    animation: swap-in .5s ease;
+  }
+
+  /* --- скретч --- */
+  .scratch-wrap {
+    position: relative;
+    width: 100%; height: 170px;
+    border-radius: var(--r-md);
+    overflow: hidden;
+    border: 1px solid var(--line);
+    touch-action: none;
+  }
+  .scratch-under {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    padding: 20px; text-align: center;
+    background: radial-gradient(circle at 50% 40%, rgba(255,94,156,.24), rgba(20,4,42,.9));
+    font-family: 'Caveat', cursive;
+    font-size: clamp(1.35rem, 4vw, 1.8rem);
+    color: #fff;
+    line-height: 1.35;
+  }
+  .scratch-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; }
+  .scratch-wrap canvas:active { cursor: grabbing; }
+
+  /* --- колесо --- */
+  .wheel-stage { position: relative; width: min(240px, 70vw); margin: 0 auto; }
+  .wheel-stage::before {
+    content: '▼';
+    position: absolute; top: -13px; left: 50%; transform: translateX(-50%);
+    font-size: 1.5rem; color: var(--pink);
+    filter: drop-shadow(0 3px 8px rgba(0,0,0,.6));
+    z-index: 3;
+  }
+  .wheel {
+    position: relative;
+    width: 100%; aspect-ratio: 1;
+    border-radius: 50%;
+    border: 5px solid rgba(255,255,255,.14);
+    box-shadow: 0 20px 55px rgba(0,0,0,.55), inset 0 0 40px rgba(0,0,0,.4);
+    transition: transform 4.6s cubic-bezier(.15,.9,.2,1);
+  }
+  .wheel-hub {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 46px; height: 46px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--pink), var(--violet));
+    display: grid; place-items: center; font-size: 1.15rem;
+    box-shadow: 0 5px 18px rgba(0,0,0,.5);
+    z-index: 2;
+  }
+  .wheel-label {
+    position: absolute; top: 50%; left: 50%;
+    font-size: 1.05rem;
+    transform-origin: 0 0;
+    pointer-events: none;
+  }
+  .wheel-result {
+    font-family: 'Caveat', cursive;
+    font-size: clamp(1.35rem, 4vw, 1.8rem);
+    line-height: 1.35;
+    color: var(--pink-soft);
+    min-height: 2.4em;
+    display: grid; place-items: center;
+    text-align: center;
+  }
+
+  .counter-note { font-size: .75rem; color: var(--text-faint); }
+</style>
+</head>
+<body>
+
+<div id="starfield"></div>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="index.html"><span class="dot">💜</span> Мы&nbsp;вдвоём</a>
+    <nav class="nav">
+      <a href="index.html" class="nav-home">Главная</a>
+      <a href="chat.html">Чат</a>
+      <a href="letters.html">Письма</a>
+      <a href="games.html">Игры</a>
+      <a href="memories.html">История</a>
+      <a href="quest.html">Сюрприз</a>
+    </nav>
+    <button class="who-chip" id="who-chip">💜</button>
+  </div>
+</header>
+
+<main class="shell">
+
+  <section class="section" style="padding-top:34px">
+    <div class="section-head">
+      <h2>Игры для двоих</h2>
+      <p>чем заняться, когда между вами только экран</p>
+      <span class="badge" id="cloud-badge" style="margin-left:auto"></span>
+    </div>
+
+    <div class="grid two start">
+
+      <!-- ---------- 100 ПРИЧИН ---------- -->
+      <div class="card play-card">
+        <h3>💘 Сто причин, почему ты</h3>
+        <div class="body"><div class="reason-text" id="reason">Нажмите кнопку — и узнаете одну из них</div></div>
+        <div class="row">
+          <button class="btn" id="reason-btn">Ещё причину</button>
+          <button class="btn ghost small" data-share="reason">Отправить в чат</button>
+        </div>
+        <p class="counter-note mt" id="reason-count"></p>
+      </div>
+
+      <!-- ---------- ВОПРОСЫ ---------- -->
+      <div class="card play-card">
+        <h3>🃏 Вопрос для двоих</h3>
+        <div class="body"><div class="question-text" id="question">Вытяните карточку — и оба ответьте честно</div></div>
+        <div class="row">
+          <button class="btn" id="question-btn">Вытянуть карточку</button>
+          <button class="btn ghost small" data-share="question">Отправить в чат</button>
+        </div>
+        <p class="counter-note mt" id="question-count"></p>
+      </div>
+
+      <!-- ---------- СКРЕТЧ ---------- -->
+      <div class="card play-card">
+        <h3>🪙 Сотри и узнай</h3>
+        <p class="muted" style="margin-bottom:12px">Проведите пальцем или мышкой по серебру.</p>
+        <div class="scratch-wrap" id="scratch-wrap">
+          <div class="scratch-under" id="scratch-under">…</div>
+          <canvas id="scratch-canvas"></canvas>
+        </div>
+        <div class="row mt">
+          <button class="btn ghost" id="scratch-again">Новая карточка</button>
+        </div>
+      </div>
+
+      <!-- ---------- КОЛЕСО ---------- -->
+      <div class="card play-card">
+        <h3>🎡 Колесо свиданий</h3>
+        <p class="muted" style="margin-bottom:14px">Что делаем сегодня вместе — решает случай.</p>
+        <div class="wheel-stage">
+          <div class="wheel" id="wheel"></div>
+          <div class="wheel-hub">💜</div>
+        </div>
+        <div class="wheel-result mt" id="wheel-result"></div>
+        <div class="row">
+          <button class="btn" id="wheel-btn">Крутить!</button>
+          <button class="btn ghost small" data-share="wheel">Отправить в чат</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="card center">
+      <div style="font-size:2rem">✍️</div>
+      <h3 class="mt">Своих причин и вопросов будет больше</h3>
+      <p class="muted mt" style="max-width:520px; margin-left:auto; margin-right:auto">
+        Все тексты на этой странице лежат в файле <code>assets/js/config.js</code> — 
+        разделы <code>reasons</code>, <code>questions</code>, <code>dateIdeas</code> и <code>scratchMessages</code>.
+        Добавляйте свои: чем личнее, тем лучше работает.
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<div class="footer">сделано с 💜</div>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/common.js"></script>
+<script type="module" src="assets/js/games.js"></script>
+</body>
+</html>

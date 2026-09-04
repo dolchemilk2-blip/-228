@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Письма и капсулы ✉️</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✉️</text></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@400;600&family=Caveat:wght@500;700&display=swap" media="print" onload="this.media='all'" />
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@400;600&family=Caveat:wght@500;700&display=swap" /></noscript>
+<link rel="stylesheet" href="assets/css/style.css" />
+<style>
+  /* --- полка с конвертами --- */
+  .shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 14px; }
+
+  .envelope-card {
+    position: relative;
+    text-align: center;
+    padding: 24px 16px 20px;
+    cursor: pointer;
+    transition: transform .25s ease, border-color .25s ease;
+  }
+  .envelope-card:hover { transform: translateY(-5px) rotate(-1deg); border-color: rgba(255,94,156,.45); }
+  .envelope-card .ico { font-size: 2.6rem; filter: drop-shadow(0 6px 18px rgba(255,94,156,.35)); }
+  .envelope-card .from { font-weight: 800; margin-top: 10px; font-size: .95rem; }
+  .envelope-card .title { color: var(--text-dim); font-size: .86rem; margin-top: 4px; line-height: 1.45; }
+  .envelope-card .when { color: var(--text-faint); font-size: .74rem; margin-top: 9px; }
+  .envelope-card.sealed { opacity: .82; }
+  .envelope-card.sealed .ico { filter: grayscale(.35) drop-shadow(0 6px 18px rgba(120,120,180,.3)); }
+  .envelope-card .lock { position: absolute; top: 13px; right: 15px; font-size: 1.05rem; }
+  .envelope-card .del {
+    position: absolute; top: 9px; left: 10px;
+    background: none; border: none; cursor: pointer;
+    color: var(--text-faint); font-size: .95rem; opacity: 0; transition: opacity .2s;
+  }
+  .envelope-card:hover .del { opacity: .7; }
+  .envelope-card .del:hover { opacity: 1; color: var(--pink); }
+
+  /* --- открытое письмо (бумага) --- */
+  .paper {
+    width: min(560px, 100%);
+    max-height: 84vh;
+    overflow-y: auto;
+    background: linear-gradient(175deg, #fffaf2, #ffeede);
+    color: #3a2a3f;
+    border-radius: 20px;
+    padding: 34px 30px 28px;
+    box-shadow: 0 30px 70px rgba(0,0,0,.6);
+    animation: pop .45s cubic-bezier(.2,.9,.3,1.25);
+    text-align: left;
+    position: relative;
+  }
+  .paper::before {
+    content: '';
+    position: absolute; inset: 12px;
+    border: 1px dashed rgba(180,69,255,.28);
+    border-radius: 13px;
+    pointer-events: none;
+  }
+  .paper .p-from { font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; color: #a2789b; font-weight: 700; }
+  .paper .p-title { font-family: 'Caveat', cursive; font-size: 2.1rem; line-height: 1.15; margin: 6px 0 16px; color: #7a2f66; }
+  .paper .p-body {
+    font-family: 'Caveat', cursive;
+    font-size: 1.42rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+  }
+  .paper .p-foot { margin-top: 22px; font-size: .78rem; color: #a2789b; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .paper .p-close {
+    position: absolute; top: 10px; right: 14px;
+    background: none; border: none; font-size: 1.3rem; cursor: pointer; color: #b78bad;
+    z-index: 2;
+  }
+
+  /* --- ссылка-капсула --- */
+  .link-box {
+    display: flex; gap: 8px; align-items: stretch; margin-top: 12px;
+  }
+  .link-box input { font-size: .8rem; font-family: ui-monospace, monospace; }
+
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+  .tab {
+    padding: 9px 18px; border-radius: 999px; cursor: pointer;
+    background: var(--glass); border: 1px solid var(--line);
+    font-size: .88rem; font-weight: 700; color: var(--text-dim);
+    transition: all .2s;
+  }
+  .tab.active {
+    background: linear-gradient(135deg, rgba(255,94,156,.28), rgba(180,69,255,.28));
+    color: #fff; border-color: rgba(255,255,255,.2);
+  }
+</style>
+</head>
+<body>
+
+<div id="starfield"></div>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="index.html"><span class="dot">💜</span> Мы&nbsp;вдвоём</a>
+    <nav class="nav">
+      <a href="index.html" class="nav-home">Главная</a>
+      <a href="chat.html">Чат</a>
+      <a href="letters.html">Письма</a>
+      <a href="games.html">Игры</a>
+      <a href="memories.html">История</a>
+      <a href="quest.html">Сюрприз</a>
+    </nav>
+    <button class="who-chip" id="who-chip">💜</button>
+  </div>
+</header>
+
+<main class="shell">
+
+  <section class="section" style="padding-top:34px">
+    <div class="section-head">
+      <h2>Письма и капсулы времени</h2>
+      <p>то, что не помещается в обычное сообщение</p>
+      <span class="badge" id="cloud-badge" style="margin-left:auto"></span>
+    </div>
+
+    <div class="grid two">
+
+      <!-- ---------- НАПИСАТЬ ---------- -->
+      <div class="card">
+        <h3>✍️ Написать письмо</h3>
+        <div class="stack mt">
+          <div class="field">
+            <label for="l-title">О чём это письмо</label>
+            <input type="text" id="l-title" maxlength="80" placeholder="Например: «Прочитай, когда будет грустно»" />
+          </div>
+          <div class="field">
+            <label for="l-body">Само письмо</label>
+            <textarea id="l-body" maxlength="4000" placeholder="Пиши как есть. Здесь можно всё."></textarea>
+          </div>
+          <div class="field">
+            <label for="l-open">Запечатать до… <span class="muted">(необязательно)</span></label>
+            <input type="datetime-local" id="l-open" />
+            <span class="muted">Пока дата не наступит, письмо нельзя будет открыть — даже вам.</span>
+          </div>
+          <div class="row">
+            <button class="btn" id="l-send">Положить на полку</button>
+            <button class="btn ghost" id="l-link">Сделать ссылку 🔗</button>
+          </div>
+        </div>
+
+        <div id="link-result" class="hidden">
+          <hr class="hr" />
+          <div style="font-weight:800; font-size:.9rem">Ссылка-капсула готова</div>
+          <p class="muted mt" style="margin-top:6px">Всё письмо зашито прямо в ссылку — просто отправьте её в мессенджер. Никакого сервера, никто посторонний не прочитает.</p>
+          <div class="link-box">
+            <input type="text" id="link-value" readonly />
+            <button class="btn small" id="link-copy">Копировать</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- ПОЛКА ---------- -->
+      <div class="card">
+        <h3>📮 Наша почта</h3>
+        <div class="tabs mt" id="tabs">
+          <div class="tab active" data-filter="all">Все</div>
+          <div class="tab" data-filter="in">Мне</div>
+          <div class="tab" data-filter="out">От меня</div>
+          <div class="tab" data-filter="sealed">Запечатанные</div>
+        </div>
+        <div class="shelf" id="shelf"></div>
+        <p class="muted mt" id="shelf-empty">Полка пока пуста. Напишите первое письмо слева 💌</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="card">
+      <h3>💡 Как этим пользоваться</h3>
+      <div class="grid three mt">
+        <div>
+          <div style="font-size:1.5rem">💌</div>
+          <p class="muted mt" style="margin-top:8px"><b style="color:var(--text-dim)">Полка</b> — общая. Всё, что вы туда положите, увидит вторая половинка (если подключён Firebase).</p>
+        </div>
+        <div>
+          <div style="font-size:1.5rem">🔒</div>
+          <p class="muted mt" style="margin-top:8px"><b style="color:var(--text-dim)">Капсула времени</b> — письмо с датой. Напишите сегодня, а откроется в день рождения или в день встречи.</p>
+        </div>
+        <div>
+          <div style="font-size:1.5rem">🔗</div>
+          <p class="muted mt" style="margin-top:8px"><b style="color:var(--text-dim)">Ссылка</b> — письмо целиком внутри адреса. Работает всегда, даже без настройки. Отправьте её в Telegram.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div class="footer">сделано с 💜</div>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/common.js"></script>
+<script type="module" src="assets/js/letters.js"></script>
+</body>
+</html>
