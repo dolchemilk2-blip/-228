@@ -195,20 +195,32 @@
      иначе при открытой клавиатуре поле ввода уезжает под неё.
      ============================================================ */
   @media (max-width: 720px) {
-    html, body { height: 100%; overflow: hidden; }
+    html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
     .shell { padding: 0; }
     .chat-page-head { display: none; }
 
+    /* Сдвигаем всё на --vvtop: iOS не ужимает страницу под клавиатуру,
+       а опускает видимую область, и закреплённые элементы иначе
+       остаются висеть за краем экрана. */
+    .topbar {
+      position: fixed; top: 0; left: 0; right: 0;
+      transform: translateY(var(--vvtop, 0px));
+    }
     .chat-wrap {
       position: fixed;
-      left: 0; right: 0;
-      top: var(--head-h, 96px);
+      left: 0; right: 0; top: 0;
+      transform: translateY(calc(var(--vvtop, 0px) + var(--head-h, 96px)));
       height: calc(var(--vvh, 100dvh) - var(--head-h, 96px));
       margin: 0;
       border-radius: 0;
       border-left: 0; border-right: 0; border-bottom: 0;
       z-index: 5;
     }
+
+    /* Пока печатаешь, меню сайта прячется — на 430 точках высоты
+       каждая строка на счету, а вернётся оно сразу после клавиатуры. */
+    body.kb-open .topbar { transform: translateY(calc(var(--vvtop, 0px) - 100%)); }
+    body.kb-open .quick { display: none; }
     .chat-log { padding: 14px 14px 4px; }
     .bubble { max-width: 84%; }
     /* одна прокручиваемая строка вместо двух — экономим высоту под клавиатурой */

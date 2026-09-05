@@ -26,23 +26,55 @@ document.addEventListener('me-changed', () => location.reload());
    ============================================================ */
 
 const vv = window.visualViewport;
+const root = document.documentElement;
+const topbar = document.querySelector('.topbar');
+
+// «Спокойная» высота экрана — без клавиатуры. По ней и понимаем, что она вылезла.
+let restHeight = vv ? vv.height : window.innerHeight;
+let keyboardOpen = false;
 
 function fitViewport() {
   const h = vv ? vv.height : window.innerHeight;
-  const head = document.querySelector('.topbar');
-  const headH = head ? head.getBoundingClientRect().height : 0;
+  const top = vv ? vv.offsetTop : 0;
 
-  document.documentElement.style.setProperty('--vvh', Math.round(h) + 'px');
-  document.documentElement.style.setProperty('--head-h', Math.round(headH) + 'px');
+  // экран мог стать выше: поворот, скрытие адресной строки
+  if (h > restHeight) restHeight = h;
+
+  const open = (restHeight - h) > 120;
+  if (open !== keyboardOpen) {
+    keyboardOpen = open;
+    document.body.classList.toggle('kb-open', open);
+  }
+
+  const headH = (open || !topbar) ? 0 : topbar.getBoundingClientRect().height;
+
+  root.style.setProperty('--vvh', Math.round(h) + 'px');
+  root.style.setProperty('--vvtop', Math.round(top) + 'px');
+  root.style.setProperty('--head-h', Math.round(headH) + 'px');
+}
+
+let queued = false;
+function scheduleFit(scrollDown) {
+  if (queued) return;
+  queued = true;
+  requestAnimationFrame(() => {
+    queued = false;
+    fitViewport();
+    if (scrollDown && stick) toBottom();
+  });
 }
 
 fitViewport();
-window.addEventListener('resize', fitViewport);
-window.addEventListener('orientationchange', () => setTimeout(fitViewport, 250));
+window.addEventListener('resize', () => scheduleFit(true));
+window.addEventListener('orientationchange', () => {
+  restHeight = 0;                       // после поворота меряем заново
+  setTimeout(() => scheduleFit(true), 300);
+});
 if (vv) {
-  vv.addEventListener('resize', () => { fitViewport(); if (stick) toBottom(); });
-  vv.addEventListener('scroll', fitViewport);
+  vv.addEventListener('resize', () => scheduleFit(true));
+  vv.addEventListener('scroll', () => scheduleFit(false));
 }
+
 
 /* ============================================================
    Быстрые эмодзи
@@ -211,6 +243,15 @@ function autoGrow() {
 function refreshSendBtn() {
   $('send').classList.toggle('empty', !input.value.trim());
 }
+
+// Пока фокус в поле, iOS норовит подскроллить страницу под себя —
+// возвращаем её на место и пересчитываем раскладку.
+input.addEventListener('focus', () => {
+  for (const d of [50, 200, 450, 800]) {
+    setTimeout(() => { window.scrollTo(0, 0); scheduleFit(true); }, d);
+  }
+});
+input.addEventListener('blur', () => setTimeout(() => scheduleFit(false), 250));
 
 let typingSentAt = 0;
 input.addEventListener('input', () => {
