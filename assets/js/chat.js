@@ -380,7 +380,9 @@ function render() {
     const shouldFollow = prevEl ? prevEl.nextSibling : log.firstChild;
     if (shouldFollow !== el) log.insertBefore(el, shouldFollow);
 
-    if (fresh && s.m) {
+    // Обычное появление и вылет из кнопки — разные вещи, и вместе они
+    // не уживаются: CSS-анимация в каскаде сильнее inline-трансформа.
+    if (fresh && s.m && s.key !== flyKey) {
       el.classList.add('enter');
       el.addEventListener('animationend', () => el.classList.remove('enter'), { once: true });
     }
@@ -390,6 +392,65 @@ function render() {
   if (typingVisible) log.appendChild(typingEl);
   if (stick) log.scrollTop = log.scrollHeight;
   updateJump();
+}
+
+/* ============================================================
+   Вылет сообщения из кнопки отправки.
+
+   Никаких заранее подобранных смещений: замеряем, где на самом деле
+   оказался пузырь и где кнопка, и строим путь между ними. Поэтому
+   он ровный при любой ширине экрана и любой длине сообщения.
+   ============================================================ */
+
+let flyKey = null;   // ключ пузыря, который сейчас должен вылететь
+
+function flyFromSend(el) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  /* Пузырь на один кадр прячем. Сразу после вставки его раскладка ещё
+     не окончательная — ширина не та, лента не досчитала прокрутку, —
+     и замер по горячим следам давал бы кривой старт. Один кадр глазом
+     не заметен, зато к нему всё встаёт на свои места. */
+  el.style.transition = 'none';
+  el.style.visibility = 'hidden';
+
+  requestAnimationFrame(() => {
+    // низ ленты доводим здесь же, чтобы замер и прокрутка были в одном кадре
+    if (stick) log.scrollTop = log.scrollHeight;
+
+    const b = $('send').getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    if (!r.width || !b.width) {
+      el.style.cssText = '';
+      return;
+    }
+
+    // ужимаем пузырь до размера кнопки и совмещаем их центры
+    const scale = Math.max(0.05, Math.min(0.6, b.width / r.width));
+    const dx = (b.left + b.width / 2) - (r.left + r.width / 2);
+    const dy = (b.top + b.height / 2) - (r.top + r.height / 2);
+
+    el.style.transformOrigin = 'center center';   // у своих пузырей она угловая
+    el.style.borderRadius = '50%';
+    el.style.opacity = '.35';
+    el.style.transform = 'translate(' + dx.toFixed(1) + 'px, ' + dy.toFixed(1) + 'px) scale(' + scale.toFixed(3) + ')';
+    el.style.visibility = '';
+
+    requestAnimationFrame(() => {
+      // Кривая нарочно не «выстреливающая»: с резким стартом пузырь
+      // оказывался на месте раньше, чем глаз успевал проследить путь.
+      el.style.transition =
+        'transform .44s cubic-bezier(.3, .78, .28, 1), ' +
+        'opacity .22s ease-out, border-radius .36s ease-out';
+      el.style.transform = '';
+      el.style.opacity = '';
+      el.style.borderRadius = '';
+      setTimeout(() => {
+        el.style.transition = '';
+        el.style.transformOrigin = '';
+      }, 500);
+    });
+  });
 }
 
 /* ---------- кнопка «вниз» ---------- */
@@ -635,6 +696,8 @@ log.addEventListener('pointermove', (e) => {
     swipe.on = true;
     // анимация появления перебила бы наш сдвиг: в каскаде она сильнее inline-стиля
     swipe.el.classList.remove('enter', 'press');
+    // снимаем inline-переход от вылета, иначе свайп поедет с задержкой
+    swipe.el.style.transition = '';
     swipe.el.classList.add('swiping');
   }
   // сопротивление: чем дальше тянешь, тем туже
@@ -734,8 +797,15 @@ async function send() {
   btn.classList.add('launch');
 
   stick = true;
+  flyKey = cid;
   render();
-  toBottom(true);
+
+  unseen = 0;
+  updateJump();
+
+  const born = nodes.get(cid);
+  flyKey = null;
+  if (born) flyFromSend(born);
 
   await cloud.push('messages', payload);
   pending = pending.filter((p) => p.cid !== cid);

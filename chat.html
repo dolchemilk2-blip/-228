@@ -44,6 +44,12 @@
     display: flex; flex-direction: column;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
+    /* Со страницы наследуется плавная прокрутка, а лента должна уметь
+       вставать в низ мгновенно: иначе она продолжает доезжать уже после
+       того, как мы замерили место для вылета сообщения, и вылет косит.
+       Там, где плавность нужна (кнопка «вниз», переход к цитате),
+       она запрашивается явно в коде. */
+    scroll-behavior: auto;
   }
   /* пока сообщений мало, они лежат внизу, а не висят вверху пустого экрана */
   .chat-log::before { content: ''; margin-top: auto; }
@@ -328,12 +334,25 @@
   }
   .send-btn:hover { transform: scale(1.08); }
   .send-btn.empty { opacity: .45; }
-  .send-btn.launch { animation: launch .46s cubic-bezier(.24,.9,.3,1.25); }
+  /* Кнопка не улетает сама — она отдаёт отдачу и пускает кольцо,
+     а путешествует пузырь, который из неё выходит. */
+  .send-btn { position: relative; }
+  .send-btn.launch { animation: launch .44s cubic-bezier(.2, .9, .25, 1.2); }
   @keyframes launch {
     0%   { transform: none; }
-    28%  { transform: translate(-3px, 3px) scale(.88) rotate(8deg); }
-    58%  { transform: translate(8px, -8px) scale(1.2) rotate(-16deg); }
+    26%  { transform: scale(.8); }
+    62%  { transform: scale(1.09); }
     100% { transform: none; }
+  }
+  .send-btn::after {
+    content: ''; position: absolute; inset: -2px;
+    border-radius: 50%; border: 2px solid rgba(255, 255, 255, .6);
+    opacity: 0; pointer-events: none;
+  }
+  .send-btn.launch::after { animation: send-ring .55s cubic-bezier(.2, .7, .3, 1); }
+  @keyframes send-ring {
+    0%   { opacity: .8; transform: scale(.9); }
+    100% { opacity: 0;  transform: scale(2.2); }
   }
   .send-btn:active { transform: scale(.9); }
 
