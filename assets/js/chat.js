@@ -407,50 +407,77 @@ let flyKey = null;   // ключ пузыря, который сейчас до�
 function flyFromSend(el) {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-  /* Пузырь на один кадр прячем. Сразу после вставки его раскладка ещё
-     не окончательная — ширина не та, лента не досчитала прокрутку, —
-     и замер по горячим следам давал бы кривой старт. Один кадр глазом
-     не заметен, зато к нему всё встаёт на свои места. */
+  /* Летит не сам пузырь, а его копия поверх страницы.
+
+     Так вышло не от хорошей жизни: первые кадры после отправки раскладка
+     нестабильна — поле ввода схлопывается, лента меняет высоту и
+     прокрутку. Любая точка, посчитанная один раз, к концу полёта
+     устаревает, и получался то косой старт, то рывок.
+
+     Копия свободна от раскладки: она закреплена поверх экрана, а цель —
+     настоящий пузырь — пересчитывается каждый кадр. Куда бы лента ни
+     уехала, копия придёт ровно на место. Сам пузырь всё это время
+     занимает своё место в ленте, просто невидимый, поэтому ничего
+     не прыгает и не мигает. */
+
+  const btn = $('send');
+  const b0 = btn.getBoundingClientRect();
+  const r0 = el.getBoundingClientRect();
+  if (!r0.width || !b0.width) return;
+
+  const clone = el.cloneNode(true);
+  clone.style.cssText =
+    'position:fixed;left:0;top:0;margin:0;z-index:60;pointer-events:none;' +
+    'width:' + r0.width + 'px;height:' + r0.height + 'px;max-width:none;' +
+    'transform-origin:center center;will-change:transform';
+  document.body.appendChild(clone);
+
   el.style.transition = 'none';
-  el.style.visibility = 'hidden';
+  el.style.opacity = '0';          // место занято, но пузырь пока не виден
 
-  requestAnimationFrame(() => {
-    // низ ленты доводим здесь же, чтобы замер и прокрутка были в одном кадре
-    if (stick) log.scrollTop = log.scrollHeight;
+  const DUR = 420;
+  const t0 = performance.now();
+  /* Разгон и торможение, а не рывок с места: с чистым затуханием копия
+     пролетала полпути за первую четверть времени и движение не читалось.
+     Здесь она набирает ход, выходя из кнопки, и мягко встаёт на место. */
+  const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  const startRadius = Math.min(r0.width, r0.height) / 2;
 
-    const b = $('send').getBoundingClientRect();
-    const r = el.getBoundingClientRect();
-    if (!r.width || !b.width) {
-      el.style.cssText = '';
-      return;
-    }
+  let done = false;
+  function finish() {
+    if (done) return;
+    done = true;
+    clone.remove();
+    el.style.opacity = '';
+    el.style.transition = '';
+  }
 
-    // ужимаем пузырь до размера кнопки и совмещаем их центры
-    const scale = Math.max(0.05, Math.min(0.6, b.width / r.width));
-    const dx = (b.left + b.width / 2) - (r.left + r.width / 2);
-    const dy = (b.top + b.height / 2) - (r.top + r.height / 2);
+  function step() {
+    if (done) return;
+    const t = Math.min(1, (performance.now() - t0) / DUR);
+    const e = ease(t);
 
-    el.style.transformOrigin = 'center center';   // у своих пузырей она угловая
-    el.style.borderRadius = '50%';
-    el.style.opacity = '.35';
-    el.style.transform = 'translate(' + dx.toFixed(1) + 'px, ' + dy.toFixed(1) + 'px) scale(' + scale.toFixed(3) + ')';
-    el.style.visibility = '';
+    const bb = btn.getBoundingClientRect();
+    const rr = el.getBoundingClientRect();       // цель — заново, каждый кадр
+    if (!rr.width) { finish(); return; }
 
-    requestAnimationFrame(() => {
-      // Кривая нарочно не «выстреливающая»: с резким стартом пузырь
-      // оказывался на месте раньше, чем глаз успевал проследить путь.
-      el.style.transition =
-        'transform .44s cubic-bezier(.3, .78, .28, 1), ' +
-        'opacity .22s ease-out, border-radius .36s ease-out';
-      el.style.transform = '';
-      el.style.opacity = '';
-      el.style.borderRadius = '';
-      setTimeout(() => {
-        el.style.transition = '';
-        el.style.transformOrigin = '';
-      }, 500);
-    });
-  });
+    const s0 = Math.max(0.05, Math.min(0.6, bb.width / rr.width));
+    const sc = s0 + (1 - s0) * e;
+    const cx = (bb.left + bb.width / 2) + ((rr.left + rr.width / 2) - (bb.left + bb.width / 2)) * e;
+    const cy = (bb.top + bb.height / 2) + ((rr.top + rr.height / 2) - (bb.top + bb.height / 2)) * e;
+
+    clone.style.transform =
+      'translate(' + (cx - r0.width / 2).toFixed(1) + 'px, ' + (cy - r0.height / 2).toFixed(1) + 'px) ' +
+      'scale(' + sc.toFixed(3) + ')';
+    clone.style.borderRadius = (startRadius * (1 - e) + 18 * e).toFixed(1) + 'px';
+    clone.style.opacity = Math.min(1, 0.45 + e * 2).toFixed(2);
+
+    if (t < 1) requestAnimationFrame(step);
+    else finish();
+  }
+
+  step();
+  setTimeout(finish, DUR + 400);    // страховка, если кадры перестанут идти
 }
 
 /* ---------- кнопка «вниз» ---------- */
