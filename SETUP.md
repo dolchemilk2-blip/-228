@@ -21,9 +21,11 @@ Firebase бесплатен для такой нагрузки с огромны
 ## Шаг 2. Включить базу данных
 
 1. Слева в меню: **Build → Realtime Database** → **Create Database**.
-   
+
    ⚠️ Важно: нужен именно **Realtime Database**, а не Firestore.
-2. Регион — любой ближайший.
+2. Регион: из трёх вариантов берите **Belgium (europe-west1)** — трафик из
+   Казахстана и Азербайджана идёт на запад через Европу, так что пинг будет
+   меньше, чем до Сингапура или США. Регион потом не меняется.
 3. Выберите **Start in locked mode** → **Enable**.
 
 ## Шаг 3. Разрешить доступ
@@ -62,11 +64,21 @@ Firebase бесплатен для такой нагрузки с огромны
 const firebaseConfig = {
   apiKey: "AIzaSy...",
   authDomain: "nash-sait.firebaseapp.com",
-  databaseURL: "https://nash-sait-default-rtdb.firebaseio.com",
+  databaseURL: "https://nash-sait-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "nash-sait",
   appId: "1:123456789:web:abc123"
 };
 ```
+
+⚠️ `databaseURL` выглядит по-разному в зависимости от региона базы:
+
+| Регион | Вид адреса |
+|---|---|
+| Belgium (europe-west1) | `https://ПРОЕКТ-default-rtdb.europe-west1.firebasedatabase.app` |
+| Singapore (asia-southeast1) | `https://ПРОЕКТ-default-rtdb.asia-southeast1.firebasedatabase.app` |
+| United States (us-central1) | `https://ПРОЕКТ-default-rtdb.firebaseio.com` |
+
+Копируйте своё значение как есть — не подгоняйте под пример.
 
 ## Шаг 6. Вставить ключи в сайт
 
@@ -76,16 +88,16 @@ const firebaseConfig = {
   firebase: {
     apiKey:      "AIzaSy...",
     authDomain:  "nash-sait.firebaseapp.com",
-    databaseURL: "https://nash-sait-default-rtdb.firebaseio.com",
+    databaseURL: "https://nash-sait-default-rtdb.europe-west1.firebasedatabase.app",
     projectId:   "nash-sait",
     appId:       "1:123456789:web:abc123"
   },
-  roomId: "pridumayte-svoyo-slovo",
+  roomId: "dima-ragim-secret",
 ```
 
-`roomId` — секретное название вашей комнаты. Придумайте своё, латиницей и без
-пробелов. Оно должно быть **одинаковым** у вас обоих (а оно и будет одинаковым,
-раз файл один на весь сайт).
+`roomId` уже стоит как `dima-ragim-secret` — можете оставить или заменить на
+своё, латиницей и без пробелов. Только не меняйте его потом: старая переписка
+останется в прежней комнате.
 
 Сохраните файл, залейте изменения на GitHub — и через минуту в шапке загорится
 зелёная плашка **«общая комната»**. Готово.
@@ -111,4 +123,5 @@ const firebaseConfig = {
 | Плашка «локальный режим» после настройки | Проверьте, что заполнены `apiKey`, `databaseURL` и `projectId`, и что вы обновили страницу с очисткой кэша (Ctrl+Shift+R) |
 | В консоли `PERMISSION_DENIED` | Не опубликованы правила из шага 3 |
 | В консоли `auth/operation-not-allowed` | Не включён анонимный вход (шаг 4) |
+| В консоли `Can't determine Firebase Database URL` | В `databaseURL` не тот адрес — скопируйте его из консоли Firebase целиком |
 | Сообщения не доходят второму | Разный `roomId` — убедитесь, что оба открываете один и тот же сайт |
