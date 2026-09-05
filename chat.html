@@ -2,7 +2,9 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- interactive-widget: просим браузер ужимать страницу под клавиатуру,
+     а не накрывать её сверху -->
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
 <title>Наш чат 💬</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -11,11 +13,17 @@
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@400;600&display=swap" /></noscript>
 <link rel="stylesheet" href="assets/css/style.css" />
 <style>
-  .chat-wrap { display: flex; flex-direction: column; height: min(72vh, 720px); padding: 0; overflow: hidden; }
+  .chat-wrap {
+    position: relative;              /* якорь для кнопки «вниз» */
+    display: flex; flex-direction: column;
+    height: min(72vh, 720px);
+    padding: 0; overflow: hidden;
+  }
 
+  /* ---------- шапка чата ---------- */
   .chat-head {
     display: flex; align-items: center; gap: 12px;
-    padding: 16px 20px; border-bottom: 1px solid var(--line-soft);
+    padding: 14px 18px; border-bottom: 1px solid var(--line-soft);
     flex: none;
   }
   .chat-head .avatar {
@@ -23,57 +31,96 @@
     display: grid; place-items: center; font-size: 1.3rem;
     background: linear-gradient(135deg, rgba(255,94,156,.3), rgba(180,69,255,.3));
     border: 1px solid var(--line);
+    flex: none;
   }
   .chat-head .name { font-weight: 800; }
-  .chat-head .sub { font-size: .78rem; color: var(--text-faint); }
+  .chat-head .sub { font-size: .78rem; color: var(--text-faint); transition: color .2s; }
+  .chat-head .sub.online { color: var(--mint); }
 
+  /* ---------- лента ---------- */
   .chat-log {
     flex: 1; overflow-y: auto;
-    padding: 20px;
-    display: flex; flex-direction: column; gap: 10px;
-    scroll-behavior: smooth;
+    padding: 18px 18px 8px;
+    display: flex; flex-direction: column;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
+  /* пока сообщений мало, они лежат внизу, а не висят вверху пустого экрана */
+  .chat-log::before { content: ''; margin-top: auto; }
   .chat-log::-webkit-scrollbar { width: 7px; }
   .chat-log::-webkit-scrollbar-thumb { background: rgba(255,255,255,.13); border-radius: 9px; }
 
   .day-sep {
     align-self: center;
     font-size: .72rem; color: var(--text-faint);
-    background: rgba(0,0,0,.28); border: 1px solid var(--line-soft);
+    background: rgba(0,0,0,.3); border: 1px solid var(--line-soft);
     padding: 4px 14px; border-radius: 999px;
-    margin: 8px 0;
+    margin: 10px 0 6px;
   }
 
+  /* ---------- пузыри ---------- */
   .bubble {
-    max-width: min(76%, 520px);
-    padding: 11px 15px;
+    max-width: min(78%, 520px);
+    padding: 9px 14px 8px;
     border-radius: 18px;
-    line-height: 1.55;
+    line-height: 1.5;
     font-size: .96rem;
     word-wrap: break-word;
     overflow-wrap: anywhere;
     white-space: pre-wrap;
-    animation: bubble-in .28s ease;
     position: relative;
+    margin-top: 2px;
+    animation: bubble-in .32s cubic-bezier(.2, .9, .3, 1.2);
   }
-  @keyframes bubble-in { from { opacity: 0; transform: translateY(8px); } }
+  /* сообщения одного человека подряд — слитной группой, как в мессенджерах */
+  .bubble.group-start { margin-top: 10px; }
 
   .bubble.mine {
     align-self: flex-end;
-    background: linear-gradient(135deg, rgba(255,94,156,.9), rgba(180,69,255,.85));
-    border-bottom-right-radius: 6px;
+    background: linear-gradient(135deg, #ff5e9c, #b445ff);
     color: #fff;
+    border-bottom-right-radius: 18px;
+    transform-origin: bottom right;
   }
+  .bubble.mine.group-end { border-bottom-right-radius: 6px; }
+
   .bubble.theirs {
     align-self: flex-start;
     background: var(--glass-strong);
     border: 1px solid var(--line);
-    border-bottom-left-radius: 6px;
+    border-bottom-left-radius: 18px;
+    transform-origin: bottom left;
   }
-  .bubble .meta { display: block; font-size: .68rem; opacity: .65; margin-top: 5px; }
-  .bubble.big-emoji { font-size: 2.6rem; background: none !important; border: none !important; padding: 2px 6px; line-height: 1.2; }
+  .bubble.theirs.group-end { border-bottom-left-radius: 6px; }
 
-  .typing { align-self: flex-start; display: flex; gap: 5px; padding: 12px 16px; }
+  @keyframes bubble-in {
+    from { opacity: 0; transform: translateY(14px) scale(.9); }
+  }
+
+  .bubble .meta {
+    display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+    font-size: .66rem; opacity: .7; margin-top: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+  .bubble.theirs .meta { justify-content: flex-start; }
+  .bubble .tick { font-size: .7rem; }
+
+  /* отправляется — пузырь чуть бледнее, часики вместо галочки */
+  .bubble.pending { opacity: .62; }
+  .bubble.pending .tick { animation: tick-spin 1.4s linear infinite; display: inline-block; }
+  @keyframes tick-spin { to { transform: rotate(360deg); } }
+
+  .bubble.big-emoji {
+    font-size: 2.7rem; line-height: 1.15;
+    background: none !important; border: none !important;
+    padding: 2px 6px;
+    animation: emoji-pop .45s cubic-bezier(.2, .9, .3, 1.5);
+  }
+  .bubble.big-emoji .meta { font-size: .62rem; }
+  @keyframes emoji-pop { from { opacity: 0; transform: scale(.3) rotate(-12deg); } }
+
+  /* ---------- «печатает» ---------- */
+  .typing { align-self: flex-start; display: flex; gap: 5px; padding: 13px 16px; margin-top: 6px; }
   .typing i {
     width: 7px; height: 7px; border-radius: 50%; background: var(--pink-soft);
     animation: dot 1.2s infinite ease-in-out;
@@ -82,36 +129,100 @@
   .typing i:nth-child(3) { animation-delay: .36s; }
   @keyframes dot { 0%, 60%, 100% { opacity: .25; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-5px); } }
 
+  /* ---------- кнопка «вниз» ---------- */
+  .jump {
+    position: absolute; right: 16px; bottom: 92px; z-index: 6;
+    display: flex; align-items: center; gap: 6px;
+    padding: 9px 15px; border-radius: 999px; cursor: pointer;
+    background: rgba(36, 16, 65, .96);
+    border: 1px solid var(--line);
+    color: var(--text); font-size: .82rem; font-weight: 700;
+    box-shadow: 0 8px 24px rgba(0,0,0,.5);
+    animation: bubble-in .3s ease;
+  }
+  .jump:hover { background: rgba(48, 22, 84, .98); }
+  .jump .n {
+    background: linear-gradient(135deg, var(--pink), var(--violet));
+    border-radius: 999px; padding: 1px 7px; font-size: .74rem;
+  }
+
+  /* ---------- ввод ---------- */
+  .quick {
+    display: flex; gap: 7px; padding: 0 16px 10px; flex: none;
+    flex-wrap: wrap;
+  }
+  .quick button {
+    background: var(--glass); border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 12px; cursor: pointer;
+    font-size: 1rem; line-height: 1; transition: transform .15s, background .15s;
+  }
+  .quick button:hover { transform: translateY(-2px); background: var(--glass-strong); }
+  .quick button:active { transform: scale(.9); }
+
   .chat-form {
     flex: none;
     display: flex; gap: 10px; align-items: flex-end;
-    padding: 14px 16px;
+    padding: 12px 14px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid var(--line-soft);
-    background: rgba(0,0,0,.18);
+    background: rgba(0,0,0,.22);
   }
   .chat-form textarea {
-    flex: 1; min-height: 46px; max-height: 130px;
+    flex: 1; min-height: 46px; max-height: 128px;
     border-radius: 22px; padding: 12px 16px; resize: none;
   }
   .send-btn {
     flex: none; width: 46px; height: 46px; border-radius: 50%;
-    border: none; cursor: pointer; font-size: 1.15rem;
+    border: none; cursor: pointer; font-size: 1.1rem; color: #fff;
     background: linear-gradient(135deg, var(--pink), var(--violet));
     box-shadow: 0 8px 22px rgba(255,94,156,.35);
-    transition: transform .18s;
+    transition: transform .18s cubic-bezier(.2,.9,.3,1.4), opacity .2s;
+    display: grid; place-items: center;
   }
   .send-btn:hover { transform: scale(1.08); }
-  .send-btn:active { transform: scale(.94); }
-
-  .quick { display: flex; gap: 7px; padding: 0 16px 12px; flex-wrap: wrap; }
-  .quick button {
-    background: var(--glass); border: 1px solid var(--line);
-    border-radius: 999px; padding: 6px 12px; cursor: pointer;
-    font-size: .95rem; transition: transform .15s, background .15s;
+  .send-btn.empty { opacity: .45; }
+  .send-btn.launch { animation: launch .4s cubic-bezier(.3,.9,.4,1.3); }
+  @keyframes launch {
+    35% { transform: translate(6px, -6px) scale(1.16) rotate(-12deg); }
+    100% { transform: none; }
   }
-  .quick button:hover { transform: translateY(-2px); background: var(--glass-strong); }
 
   .empty-note { text-align: center; color: var(--text-faint); margin: auto; padding: 30px; line-height: 1.7; }
+
+  /* ============================================================
+     Телефон: чат становится приложением на весь экран.
+     Страница не скроллится, высота берётся из visualViewport —
+     иначе при открытой клавиатуре поле ввода уезжает под неё.
+     ============================================================ */
+  @media (max-width: 720px) {
+    html, body { height: 100%; overflow: hidden; }
+    .shell { padding: 0; }
+    .chat-page-head { display: none; }
+
+    .chat-wrap {
+      position: fixed;
+      left: 0; right: 0;
+      top: var(--head-h, 96px);
+      height: calc(var(--vvh, 100dvh) - var(--head-h, 96px));
+      margin: 0;
+      border-radius: 0;
+      border-left: 0; border-right: 0; border-bottom: 0;
+      z-index: 5;
+    }
+    .chat-log { padding: 14px 14px 4px; }
+    .bubble { max-width: 84%; }
+    /* одна прокручиваемая строка вместо двух — экономим высоту под клавиатурой */
+    .quick {
+      flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+      padding: 0 14px 8px;
+      mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+      -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+    }
+    .quick::-webkit-scrollbar { display: none; }
+    .quick button { flex: none; }
+    .jump { bottom: 88px; }
+    .chat-note { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -135,7 +246,7 @@
 
 <main class="shell">
   <section class="section" style="padding-top:34px">
-    <div class="section-head">
+    <div class="section-head chat-page-head">
       <h2>Наш чат</h2>
       <p>общая лента — то, что напишете, увидите оба</p>
       <span class="badge" id="cloud-badge" style="margin-left:auto"></span>
@@ -144,32 +255,31 @@
     <div class="card chat-wrap">
       <div class="chat-head">
         <div class="avatar" id="head-ava">💙</div>
-        <div style="flex:1">
+        <div style="flex:1; min-width:0">
           <div class="name" id="head-name">—</div>
           <div class="sub" id="head-sub">—</div>
         </div>
+        <span class="badge" id="cloud-badge-m" style="display:none"></span>
         <button class="btn ghost small" id="btn-hug" title="Отправить обнимашку">🫂</button>
       </div>
 
       <div class="chat-log" id="log">
-        <div class="empty-note" id="empty-note">
-          Здесь пока пусто.<br />Напишите первое сообщение 💜
-        </div>
+        <div class="empty-note">Здесь пока пусто.<br />Напишите первое сообщение 💜</div>
       </div>
+
+      <button class="jump hidden" id="jump">↓ <span class="n" id="jump-n"></span></button>
 
       <div class="quick" id="quick"></div>
 
       <form class="chat-form" id="form">
         <textarea id="input" rows="1" maxlength="1200" placeholder="Напишите что-нибудь тёплое…"></textarea>
-        <button class="send-btn" type="submit" title="Отправить">➤</button>
+        <button class="send-btn empty" type="submit" id="send" title="Отправить">➤</button>
       </form>
     </div>
 
-    <p class="muted mt">Enter — отправить, Shift+Enter — новая строка.</p>
+    <p class="muted mt chat-note">Enter — отправить, Shift+Enter — новая строка.</p>
   </section>
 </main>
-
-<div class="footer">сделано с 💜</div>
 
 <script src="assets/js/config.js"></script>
 <script src="assets/js/common.js"></script>
