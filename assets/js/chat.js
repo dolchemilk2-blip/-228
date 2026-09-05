@@ -16,20 +16,21 @@ $('head-name').textContent = other.name;
 
 document.addEventListener('me-changed', () => location.reload());
 
+const log = $('log');
+const input = $('input');
+
 /* ============================================================
    Высота под клавиатуру.
 
-   На телефоне окно чата закреплено на экране, а его высоту мы
-   берём из visualViewport — это единственное, что честно знает,
-   сколько места осталось после того, как вылезла клавиатура.
-   Иначе поле ввода уезжает вниз и остаёшься смотреть в пустоту.
+   iOS не ужимает страницу под клавиатуру, а опускает видимую
+   область. Поэтому берём у visualViewport и высоту, и смещение —
+   иначе окно чата остаётся висеть за краем экрана.
    ============================================================ */
 
 const vv = window.visualViewport;
 const root = document.documentElement;
 const topbar = document.querySelector('.topbar');
 
-// «Спокойная» высота экрана — без клавиатуры. По ней и понимаем, что она вылезла.
 let restHeight = vv ? vv.height : window.innerHeight;
 let keyboardOpen = false;
 
@@ -37,8 +38,7 @@ function fitViewport() {
   const h = vv ? vv.height : window.innerHeight;
   const top = vv ? vv.offsetTop : 0;
 
-  // экран мог стать выше: поворот, скрытие адресной строки
-  if (h > restHeight) restHeight = h;
+  if (h > restHeight) restHeight = h;      // поворот, скрытие адресной строки
 
   const open = (restHeight - h) > 120;
   if (open !== keyboardOpen) {
@@ -47,7 +47,6 @@ function fitViewport() {
   }
 
   const headH = (open || !topbar) ? 0 : topbar.getBoundingClientRect().height;
-
   root.style.setProperty('--vvh', Math.round(h) + 'px');
   root.style.setProperty('--vvtop', Math.round(top) + 'px');
   root.style.setProperty('--head-h', Math.round(headH) + 'px');
@@ -67,14 +66,13 @@ function scheduleFit(scrollDown) {
 fitViewport();
 window.addEventListener('resize', () => scheduleFit(true));
 window.addEventListener('orientationchange', () => {
-  restHeight = 0;                       // после поворота меряем заново
+  restHeight = 0;
   setTimeout(() => scheduleFit(true), 300);
 });
 if (vv) {
   vv.addEventListener('resize', () => scheduleFit(true));
   vv.addEventListener('scroll', () => scheduleFit(false));
 }
-
 
 /* ============================================================
    Быстрые эмодзи
@@ -92,19 +90,22 @@ $('quick').addEventListener('click', (e) => {
 });
 
 /* ============================================================
-   Отрисовка ленты
+   Данные ленты
    ============================================================ */
 
-const log = $('log');
-const input = $('input');
-
-let messages = [];   // то, что пришло из общей базы
-let pending = [];    // отправленные, но ещё не подтверждённые
-let stick = true;    // прилипать ли к низу
+let messages = [];   // пришедшее из общей базы
+let pending = [];    // отправленное, но ещё не подтверждённое
+let stick = true;
 let unseen = 0;
 
 const ONLY_EMOJI = /^(?:[\p{Extended_Pictographic}‍️\u{1f3fb}-\u{1f3ff}]|\s){1,3}$/u;
-const GROUP_GAP = 5 * 60 * 1000;   // сообщения ближе 5 минут — одной группой
+const GROUP_GAP = 5 * 60 * 1000;
+
+// Свой постоянный номер у каждого сообщения. Нужен, чтобы пузырь,
+// нарисованный сразу при отправке, и он же, вернувшийся из базы, —
+// были для страницы одним и тем же элементом, а не двумя разными.
+const newCid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const keyOf = (m) => m.cid || m.id;
 
 function dayLabel(ts) {
   const d = new Date(ts);
@@ -128,80 +129,185 @@ function toBottom(smooth) {
   updateJump();
 }
 
-/* Что показываем: пришедшее из базы плюс ещё не подтверждённое.
-   Отправленное убираем из «висящих», как только оно вернулось из базы. */
 function visibleMessages() {
-  const arrived = new Set(messages.map((m) => m.by + '\n' + m.text));
-  const waiting = pending.filter((p) => !arrived.has(p.by + '\n' + p.text));
-  return messages.concat(waiting).sort((x, y) => (x.at || 0) - (y.at || 0)).slice(-300);
+  const arrived = new Set(messages.map(keyOf));
+  const waiting = pending.filter((p) => !arrived.has(p.cid));
+  return messages.concat(waiting)
+    .sort((x, y) => (x.at || 0) - (y.at || 0))
+    .slice(-300);
 }
 
-function paint() {
-  const list = visibleMessages();
-  const wasAtBottom = stick;
+/* ============================================================
+   Точечная отрисовка.
 
+   Раньше лента стиралась и собиралась заново на каждое изменение —
+   поэтому все пузыри переигрывали анимацию появления и всё дёргалось.
+   Теперь у каждого сообщения свой элемент, который живёт до конца:
+   анимируется только по-настоящему новое.
+   ============================================================ */
+
+const nodes = new Map();   // ключ сообщения -> элемент
+
+function makeQuote(reply) {
+  const q = document.createElement('div');
+  q.className = 'quote';
+  q.dataset.to = reply.key || '';
+  const who = document.createElement('span');
+  who.className = 'q-who';
+  who.textContent = reply.who === meKey ? 'Вы' : App.person(reply.who).name;
+  const txt = document.createElement('span');
+  txt.className = 'q-text';
+  txt.textContent = reply.text || '';
+  q.append(who, txt);
+  return q;
+}
+
+function makeBubble(m) {
+  const el = document.createElement('div');
+  el.className = 'bubble';
+  el.dataset.key = keyOf(m);
+
+  if (m.replyTo) el.appendChild(makeQuote(m.replyTo));
+
+  const body = document.createElement('span');
+  body.className = 'body';
+  body.textContent = m.text || '';
+  el.appendChild(body);
+
+  const arrow = document.createElement('span');
+  arrow.className = 'swipe-arrow';
+  arrow.textContent = '↩';
+  el.appendChild(arrow);
+
+  if (!TOUCH) {
+    const rb = document.createElement('button');
+    rb.className = 'reply-btn';
+    rb.type = 'button';
+    rb.title = 'Ответить';
+    rb.textContent = '↩';
+    el.appendChild(rb);
+  }
+  return el;
+}
+
+function decorate(el, m, groupStart, groupEnd) {
+  const mine = m.by === meKey;
+  const wasPending = el.classList.contains('pending');
+
+  el.classList.toggle('mine', mine);
+  el.classList.toggle('theirs', !mine);
+  el.classList.toggle('group-start', groupStart);
+  el.classList.toggle('group-end', groupEnd);
+  el.classList.toggle('pending', Boolean(m.pending));
+  el.classList.toggle('big-emoji', ONLY_EMOJI.test(m.text || '') && !m.replyTo);
+
+  let meta = el.querySelector('.meta');
+  if (groupEnd) {
+    if (!meta) {
+      meta = document.createElement('span');
+      meta.className = 'meta';
+      el.appendChild(meta);
+    }
+    const time = hhmm(m.at || Date.now());
+    let timeEl = meta.querySelector('.time');
+    if (!timeEl) { timeEl = document.createElement('span'); timeEl.className = 'time'; meta.appendChild(timeEl); }
+    if (timeEl.textContent !== time) timeEl.textContent = time;
+
+    if (mine) {
+      let tick = meta.querySelector('.tick');
+      if (!tick) { tick = document.createElement('span'); tick.className = 'tick'; meta.appendChild(tick); }
+      const want = m.pending ? '🕐' : '✓';
+      if (tick.textContent !== want) {
+        tick.textContent = want;
+        // часики превращаются в галочку с хлопком, а не подменяются молча
+        if (wasPending && !m.pending) {
+          tick.classList.remove('pop');
+          void tick.offsetWidth;
+          tick.classList.add('pop');
+        }
+      }
+    } else {
+      const tick = meta.querySelector('.tick');
+      if (tick) tick.remove();
+    }
+  } else if (meta) {
+    meta.remove();
+  }
+}
+
+function render() {
+  const list = visibleMessages();
+
+  const empty = log.querySelector('.empty-note');
   if (!list.length) {
-    log.innerHTML = '<div class="empty-note">Здесь пока пусто.<br />Напишите первое сообщение 💜</div>';
+    nodes.forEach((el) => el.remove());
+    nodes.clear();
+    if (!empty) log.innerHTML = '<div class="empty-note">Здесь пока пусто.<br />Напишите первое сообщение 💜</div>';
     return;
   }
+  if (empty) empty.remove();
 
-  log.innerHTML = '';
+  // из чего должна состоять лента
+  const seq = [];
   let lastDay = null;
-
   list.forEach((m, i) => {
     const label = dayLabel(m.at || Date.now());
-    if (label !== lastDay) {
-      lastDay = label;
-      const sep = document.createElement('div');
-      sep.className = 'day-sep';
-      sep.textContent = label;
-      log.appendChild(sep);
-    }
+    if (label !== lastDay) { lastDay = label; seq.push({ day: label, key: 'day:' + label }); }
 
     const prev = list[i - 1];
     const next = list[i + 1];
-    const sameDayAs = (o) => o && dayLabel(o.at || 0) === label;
-    const groupStart = !prev || prev.by !== m.by || !sameDayAs(prev) ||
-                       (m.at - prev.at) > GROUP_GAP;
-    const groupEnd = !next || next.by !== m.by || !sameDayAs(next) ||
-                     (next.at - m.at) > GROUP_GAP;
+    const sameDay = (o) => o && dayLabel(o.at || 0) === label;
+    seq.push({
+      m, key: keyOf(m),
+      start: !prev || prev.by !== m.by || !sameDay(prev) || (m.at - prev.at) > GROUP_GAP,
+      end:   !next || next.by !== m.by || !sameDay(next) || (next.at - m.at) > GROUP_GAP
+    });
+  });
 
-    const mine = m.by === meKey;
-    const b = document.createElement('div');
-    b.className = 'bubble ' + (mine ? 'mine' : 'theirs') +
-                  (groupStart ? ' group-start' : '') +
-                  (groupEnd ? ' group-end' : '') +
-                  (m.pending ? ' pending' : '') +
-                  (ONLY_EMOJI.test(m.text || '') ? ' big-emoji' : '');
-    b.textContent = m.text || '';
+  // убираем то, чего больше нет
+  const wanted = new Set(seq.map((s) => s.key));
+  nodes.forEach((el, k) => {
+    if (!wanted.has(k)) { el.remove(); nodes.delete(k); }
+  });
 
-    // время ставим только у последнего в группе — лента дышит свободнее
-    if (groupEnd) {
-      const meta = document.createElement('span');
-      meta.className = 'meta';
-      meta.textContent = hhmm(m.at || Date.now());
-      if (mine) {
-        const tick = document.createElement('span');
-        tick.className = 'tick';
-        tick.textContent = m.pending ? '🕐' : '✓';
-        meta.appendChild(tick);
+  // расставляем по порядку, создавая только недостающее
+  let prevEl = null;
+  seq.forEach((s) => {
+    let el = nodes.get(s.key);
+    const fresh = !el;
+
+    if (!el) {
+      if (s.day) {
+        el = document.createElement('div');
+        el.className = 'day-sep';
+        el.textContent = s.day;
+      } else {
+        el = makeBubble(s.m);
       }
-      b.appendChild(meta);
+      nodes.set(s.key, el);
     }
-    log.appendChild(b);
+    if (s.m) decorate(el, s.m, s.start, s.end);
+
+    const shouldFollow = prevEl ? prevEl.nextSibling : log.firstChild;
+    if (shouldFollow !== el) log.insertBefore(el, shouldFollow);
+
+    if (fresh && s.m) {
+      el.classList.add('enter');
+      el.addEventListener('animationend', () => el.classList.remove('enter'), { once: true });
+    }
+    prevEl = el;
   });
 
   if (typingVisible) log.appendChild(typingEl);
-  if (wasAtBottom) log.scrollTop = log.scrollHeight;
+  if (stick) log.scrollTop = log.scrollHeight;
   updateJump();
 }
 
-/* ---------- кнопка «вниз» с числом непрочитанных ---------- */
+/* ---------- кнопка «вниз» ---------- */
 
 function updateJump() {
   const jump = $('jump');
-  const show = !stick;
-  jump.classList.toggle('hidden', !show);
+  jump.classList.toggle('hidden', stick);
   $('jump-n').textContent = unseen > 0 ? unseen : '';
   $('jump-n').style.display = unseen > 0 ? '' : 'none';
 }
@@ -230,6 +336,98 @@ function setTypingVisible(on) {
   $('head-sub').textContent = on ? 'печатает…' : lastSeenText;
   $('head-sub').classList.toggle('online', !on && lastSeenOnline);
 }
+
+/* ============================================================
+   Ответ на сообщение
+   ============================================================ */
+
+let replyTo = null;   // { key, who, text }
+
+function startReply(key) {
+  const m = visibleMessages().find((x) => keyOf(x) === key);
+  if (!m) return;
+  replyTo = { key, who: m.by, text: (m.text || '').slice(0, 140) };
+  $('rb-who').textContent = m.by === meKey ? 'Ваше сообщение' : App.person(m.by).name;
+  $('rb-text').textContent = replyTo.text;
+  $('reply-bar').classList.add('show');
+  input.focus();
+}
+
+function cancelReply() {
+  replyTo = null;
+  $('reply-bar').classList.remove('show');
+}
+
+$('rb-close').addEventListener('click', cancelReply);
+
+function jumpTo(key) {
+  const el = nodes.get(key);
+  if (!el) { App.toast('Это сообщение уже далеко вверху'); return; }
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.remove('flash');
+  void el.offsetWidth;
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 1200);
+}
+
+log.addEventListener('click', (e) => {
+  const q = e.target.closest('.quote');
+  if (q) { jumpTo(q.dataset.to); return; }
+  const rb = e.target.closest('.reply-btn');
+  if (rb) startReply(rb.closest('.bubble').dataset.key);
+});
+
+/* ---------- свайп вправо = ответить ---------- */
+
+let swipe = null;
+const SWIPE_TRIGGER = 52;
+
+log.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse') return;        // на мыши есть кнопка
+  const b = e.target.closest('.bubble');
+  if (!b) return;
+  swipe = { el: b, x: e.clientX, y: e.clientY, id: e.pointerId, on: false, d: 0 };
+});
+
+log.addEventListener('pointermove', (e) => {
+  if (!swipe || e.pointerId !== swipe.id) return;
+  const dx = e.clientX - swipe.x;
+  const dy = e.clientY - swipe.y;
+
+  if (!swipe.on) {
+    if (Math.abs(dy) > 10 && Math.abs(dy) >= Math.abs(dx)) { swipe = null; return; }  // это прокрутка
+    if (dx < 14) return;
+    swipe.on = true;
+    // анимация появления перебила бы наш сдвиг: в каскаде она сильнее inline-стиля
+    swipe.el.classList.remove('enter');
+    swipe.el.classList.add('swiping');
+  }
+  // сопротивление: чем дальше тянешь, тем туже
+  swipe.d = Math.min(72, Math.max(0, dx - 14) * 0.75);
+  swipe.el.style.transform = 'translateX(' + swipe.d.toFixed(1) + 'px)';
+  swipe.el.style.setProperty('--sw', Math.min(1, swipe.d / SWIPE_TRIGGER).toFixed(2));
+});
+
+function endSwipe() {
+  if (!swipe) return;
+  const { el, d, on } = swipe;
+  swipe = null;
+  if (!on) return;
+
+  el.classList.remove('swiping');
+  el.classList.add('releasing');
+  el.style.transform = '';
+  el.style.setProperty('--sw', '0');
+  setTimeout(() => el.classList.remove('releasing'), 360);
+
+  if (d >= SWIPE_TRIGGER) {
+    if (navigator.vibrate) navigator.vibrate(12);
+    startReply(el.dataset.key);
+  }
+}
+
+log.addEventListener('pointerup', endSwipe);
+log.addEventListener('pointercancel', endSwipe);
 
 /* ============================================================
    Отправка
@@ -264,20 +462,23 @@ input.addEventListener('input', () => {
   }
 });
 
-let tmpN = 0;
-
 async function send() {
   const text = input.value.trim();
   if (!text) return;
 
-  // Сообщение появляется сразу, ещё до ответа сервера — как в мессенджерах.
-  const local = { id: 'tmp' + (tmpN++), by: meKey, text, at: Date.now(), pending: true };
+  const cid = newCid();
+  const local = { cid, by: meKey, text, at: Date.now(), pending: true };
+  if (replyTo) local.replyTo = replyTo;
   pending.push(local);
+
+  const payload = { by: meKey, text, cid };
+  if (replyTo) payload.replyTo = replyTo;
 
   input.value = '';
   autoGrow();
   refreshSendBtn();
-  input.focus();          // клавиатуру не роняем
+  input.focus();
+  cancelReply();
 
   const btn = $('send');
   btn.classList.remove('launch');
@@ -285,20 +486,20 @@ async function send() {
   btn.classList.add('launch');
 
   stick = true;
-  paint();
+  render();
   toBottom(true);
 
-  await cloud.push('messages', { by: meKey, text, at: local.at });
-  pending = pending.filter((p) => p.id !== local.id);
+  await cloud.push('messages', payload);
+  pending = pending.filter((p) => p.cid !== cid);
   cloud.set('typing/' + meKey, { at: 0 });
-  paint();
+  render();
 }
 
 $('form').addEventListener('submit', (e) => { e.preventDefault(); send(); });
 
 input.addEventListener('keydown', (e) => {
-  // На телефоне Enter — это перенос строки, отправляет только кнопка.
-  if (TOUCH) return;
+  if (e.key === 'Escape' && replyTo) { cancelReply(); return; }
+  if (TOUCH) return;                              // на телефоне Enter — перенос строки
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 });
 
@@ -324,12 +525,11 @@ cloud.watch('messages', (data) => {
     .map(([id, m]) => ({ id, ...m }))
     .sort((x, y) => (x.at || 0) - (y.at || 0));
 
-  // чужие сообщения, пришедшие пока лента прокручена вверх, копим в счётчик
   if (!firstLoad && !stick) {
     const added = messages.slice(before).filter((m) => m.by !== meKey).length;
     unseen += Math.max(0, added);
   }
-  paint();
+  render();
   if (firstLoad) { toBottom(); firstLoad = false; }
 });
 

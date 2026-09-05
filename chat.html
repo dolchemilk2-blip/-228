@@ -70,8 +70,15 @@
     white-space: pre-wrap;
     position: relative;
     margin-top: 2px;
-    animation: bubble-in .32s cubic-bezier(.2, .9, .3, 1.2);
+    touch-action: pan-y;            /* вертикальная прокрутка остаётся живой */
+    /* Анимация висит на .enter, а не на самом пузыре: иначе она
+       переигрывалась бы у всей ленты при каждом обновлении — отсюда и дёрганье. */
   }
+  .bubble.enter { animation: bubble-in .42s cubic-bezier(.16, 1.1, .3, 1); }
+  .bubble.swiping { transition: none; }
+  .bubble.releasing { transition: transform .34s cubic-bezier(.16, 1.4, .3, 1); }
+  .bubble.flash { animation: flash 1.1s ease; }
+
   /* сообщения одного человека подряд — слитной группой, как в мессенджерах */
   .bubble.group-start { margin-top: 10px; }
 
@@ -94,8 +101,55 @@
   .bubble.theirs.group-end { border-bottom-left-radius: 6px; }
 
   @keyframes bubble-in {
-    from { opacity: 0; transform: translateY(14px) scale(.9); }
+    0%   { opacity: 0; transform: translateY(20px) scale(.82); }
+    55%  { opacity: 1; transform: translateY(-2px) scale(1.02); }
+    100% { opacity: 1; transform: none; }
   }
+  @keyframes flash {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 212, 121, 0); }
+    25%      { box-shadow: 0 0 0 4px rgba(255, 212, 121, .55); }
+  }
+
+  /* стрелка ответа, проявляется по мере свайпа */
+  .bubble .swipe-arrow {
+    position: absolute; top: 50%; left: -40px;
+    width: 30px; height: 30px; border-radius: 50%;
+    display: grid; place-items: center; font-size: .95rem;
+    background: rgba(255,255,255,.1); border: 1px solid var(--line);
+    pointer-events: none;
+    opacity: var(--sw, 0);
+    transform: translateY(-50%) scale(calc(.5 + var(--sw, 0) * .5));
+  }
+  .bubble.theirs .swipe-arrow { left: auto; right: -40px; }
+
+  /* кнопка ответа для мыши */
+  .bubble .reply-btn {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    left: -36px; width: 28px; height: 28px; border-radius: 50%;
+    display: grid; place-items: center; cursor: pointer;
+    background: var(--glass-strong); border: 1px solid var(--line);
+    color: var(--text-dim); font-size: .8rem;
+    opacity: 0; transition: opacity .18s, transform .18s;
+  }
+  .bubble.theirs .reply-btn { left: auto; right: -36px; }
+  .bubble:hover .reply-btn { opacity: 1; }
+  .bubble .reply-btn:hover { transform: translateY(-50%) scale(1.15); color: var(--text); }
+  @media (pointer: coarse) { .bubble .reply-btn { display: none; } }
+
+  /* цитата внутри пузыря */
+  .quote {
+    display: block; cursor: pointer;
+    margin: -1px 0 7px; padding: 5px 9px;
+    border-left: 3px solid currentColor;
+    border-radius: 7px;
+    background: rgba(0, 0, 0, .22);
+    font-size: .82rem; line-height: 1.35;
+    transition: background .18s;
+  }
+  .bubble.theirs .quote { background: rgba(255, 255, 255, .06); }
+  .quote:hover { background: rgba(0, 0, 0, .34); }
+  .quote .q-who { display: block; font-weight: 800; opacity: .95; margin-bottom: 1px; }
+  .quote .q-text { display: block; opacity: .75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .bubble .meta {
     display: flex; align-items: center; justify-content: flex-end; gap: 4px;
@@ -106,9 +160,13 @@
   .bubble .tick { font-size: .7rem; }
 
   /* отправляется — пузырь чуть бледнее, часики вместо галочки */
+  .bubble { transition: opacity .3s ease; }
   .bubble.pending { opacity: .62; }
-  .bubble.pending .tick { animation: tick-spin 1.4s linear infinite; display: inline-block; }
+  .bubble .tick { display: inline-block; transition: transform .3s cubic-bezier(.16,1.4,.3,1); }
+  .bubble.pending .tick { animation: tick-spin 1.4s linear infinite; }
+  .bubble .tick.pop { animation: tick-pop .42s cubic-bezier(.16,1.4,.3,1); }
   @keyframes tick-spin { to { transform: rotate(360deg); } }
+  @keyframes tick-pop { 0% { transform: scale(0) rotate(-90deg); } 60% { transform: scale(1.35); } 100% { transform: none; } }
 
   .bubble.big-emoji {
     font-size: 2.7rem; line-height: 1.15;
@@ -158,6 +216,32 @@
   }
   .quick button:hover { transform: translateY(-2px); background: var(--glass-strong); }
   .quick button:active { transform: scale(.9); }
+
+  /* панель «отвечаю на…» — выезжает над полем ввода */
+  .reply-bar {
+    flex: none; overflow: hidden;
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 16px;
+    max-height: 0; opacity: 0;
+    border-top: 0 solid var(--line-soft);
+    transition: max-height .28s cubic-bezier(.2,.9,.3,1), opacity .22s, padding .28s;
+  }
+  .reply-bar.show {
+    max-height: 64px; opacity: 1;
+    padding: 10px 16px;
+    border-top-width: 1px;
+  }
+  .reply-bar .rb-line { width: 3px; align-self: stretch; border-radius: 3px; background: var(--pink); flex: none; }
+  .reply-bar .rb-body { flex: 1; min-width: 0; }
+  .reply-bar .rb-who { font-size: .76rem; font-weight: 800; color: var(--pink-soft); }
+  .reply-bar .rb-text { font-size: .84rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .reply-bar .rb-close {
+    flex: none; width: 32px; height: 32px; border-radius: 50%;
+    background: none; border: none; cursor: pointer; color: var(--text-faint);
+    display: grid; place-items: center; font-size: .95rem;
+    transition: background .15s, color .15s, transform .15s;
+  }
+  .reply-bar .rb-close:hover { background: rgba(255,255,255,.09); color: var(--text); transform: rotate(90deg); }
 
   .chat-form {
     flex: none;
@@ -282,6 +366,15 @@
       <button class="jump hidden" id="jump">↓ <span class="n" id="jump-n"></span></button>
 
       <div class="quick" id="quick"></div>
+
+      <div class="reply-bar" id="reply-bar">
+        <div class="rb-line"></div>
+        <div class="rb-body">
+          <div class="rb-who" id="rb-who"></div>
+          <div class="rb-text" id="rb-text"></div>
+        </div>
+        <button class="rb-close" id="rb-close" type="button" title="Отменить ответ">✕</button>
+      </div>
 
       <form class="chat-form" id="form">
         <textarea id="input" rows="1" maxlength="1200" placeholder="Напишите что-нибудь тёплое…"></textarea>
