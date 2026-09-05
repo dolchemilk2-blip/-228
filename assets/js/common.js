@@ -255,13 +255,102 @@ window.App = (function () {
     document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
   }
 
+  var LS_LAST_TAB = 'oursite:lastTab';
+
+  function currentPage() {
+    return location.pathname.split('/').pop() || 'index.html';
+  }
+
+  /* Подсветка активной вкладки — отдельный элемент, поэтому она может
+     переехать с прошлой вкладки на нынешнюю, пока грузится страница. */
   function markActiveNav() {
-    var here = location.pathname.split('/').pop() || 'index.html';
-    document.querySelectorAll('.nav a').forEach(function (a) {
+    var here = currentPage();
+    var nav = document.querySelector('.nav');
+    if (!nav) return;
+
+    var links = [].slice.call(nav.querySelectorAll('a'));
+    var active = null;
+
+    links.forEach(function (a) {
       var target = a.getAttribute('href');
-      if (target === here || (here === '' && target === 'index.html')) a.classList.add('active');
+      if (target === here || (here === '' && target === 'index.html')) {
+        a.classList.add('active');
+        active = a;
+      }
+    });
+    if (!active) return;
+
+    var pill = nav.querySelector('.nav-pill');
+    if (!pill) return;
+
+    function place(el, glide) {
+      pill.classList.toggle('glide', Boolean(glide));
+      pill.style.setProperty('--pill-x', el.offsetLeft + 'px');
+      pill.style.setProperty('--pill-w', el.offsetWidth + 'px');
+      pill.classList.add('on');
+    }
+
+    var from = null;
+    try { from = sessionStorage.getItem(LS_LAST_TAB); } catch (e) {}
+
+    var prev = from && from !== here
+      ? links.filter(function (a) { return a.getAttribute('href') === from; })[0]
+      : null;
+
+    // на телефоне «Главная» скрыта: ехать «оттуда» некорректно — ширины нет
+    if (prev && !prev.offsetWidth) prev = null;
+
+    if (prev && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      // ставим подсветку туда, откуда пришли, и отпускаем её к новой вкладке
+      place(prev, false);
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () { place(active, true); });
+      });
+    } else {
+      place(active, false);
+      requestAnimationFrame(function () { pill.classList.add('glide'); });
+    }
+
+    try { sessionStorage.setItem(LS_LAST_TAB, here); } catch (e) {}
+
+    // на узком экране подводим активную вкладку в видимую часть
+    if (nav.scrollWidth > nav.clientWidth) {
+      nav.scrollTo({
+        left: Math.max(0, active.offsetLeft - (nav.clientWidth - active.offsetWidth) / 2),
+        behavior: 'smooth'
+      });
+    }
+
+    window.addEventListener('resize', function () { place(active, false); });
+  }
+
+  /* Плавная смена страниц: уходящая гаснет, новая проявляется.
+     Ссылки остаются обычными — без скрипта всё просто работает как есть. */
+  function pageTransitions() {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    document.addEventListener('click', function (e) {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+
+      var a = e.target.closest('a[href]');
+      if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
+
+      var href = a.getAttribute('href');
+      if (!href || href.charAt(0) === '#' || /^[a-z]+:/i.test(href)) return;
+      if (href === currentPage()) { e.preventDefault(); return; }
+
+      e.preventDefault();
+      document.documentElement.classList.add('leaving');
+      setTimeout(function () { location.href = href; }, 170);
+    });
+
+    // Возврат «назад» отдаёт страницу из кэша как есть — снимаем затухание,
+    // иначе человек увидит пустой экран.
+    window.addEventListener('pageshow', function () {
+      document.documentElement.classList.remove('leaving');
     });
   }
+
 
   /* ---------------- запуск ---------------- */
 
@@ -274,6 +363,7 @@ window.App = (function () {
     var chip = document.getElementById('who-chip');
     if (chip) chip.addEventListener('click', function () { askWhoAmI(true); });
 
+    pageTransitions();
     if (opts.reveal) revealOnScroll();
     if (opts.requireIdentity !== false) askWhoAmI(false);
 
