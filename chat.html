@@ -75,6 +75,7 @@
        переигрывалась бы у всей ленты при каждом обновлении — отсюда и дёрганье. */
   }
   .bubble.enter { animation: bubble-in .42s cubic-bezier(.16, 1.1, .3, 1); }
+  .bubble.press { transform: scale(.975); transition: transform .12s ease; }
   .bubble.swiping { transition: none; }
   .bubble.releasing { transition: transform .34s cubic-bezier(.16, 1.4, .3, 1); }
   .bubble.flash { animation: flash 1.1s ease; }
@@ -229,7 +230,12 @@
   @keyframes emoji-pop { from { opacity: 0; transform: scale(.3) rotate(-12deg); } }
 
   /* ---------- «печатает» ---------- */
-  .typing { align-self: flex-start; display: flex; gap: 5px; padding: 13px 16px; margin-top: 6px; }
+  .typing {
+    align-self: flex-start; display: flex; gap: 5px;
+    padding: 13px 16px; margin-top: 6px;
+    animation: typing-in .3s cubic-bezier(.16, 1.1, .3, 1);
+  }
+  @keyframes typing-in { from { opacity: 0; transform: translateY(8px) scale(.8); } }
   .typing i {
     width: 7px; height: 7px; border-radius: 50%; background: var(--pink-soft);
     animation: dot 1.2s infinite ease-in-out;
@@ -247,8 +253,11 @@
     border: 1px solid var(--line);
     color: var(--text); font-size: .82rem; font-weight: 700;
     box-shadow: 0 8px 24px rgba(0,0,0,.5);
-    animation: bubble-in .3s ease;
+    animation: jump-in .34s cubic-bezier(.16, 1.3, .3, 1);
+    transition: transform .16s;
   }
+  .jump:active { transform: scale(.9); }
+  @keyframes jump-in { from { opacity: 0; transform: translateY(16px) scale(.7); } }
   .jump:hover { background: rgba(48, 22, 84, .98); }
   .jump .n {
     background: linear-gradient(135deg, var(--pink), var(--violet));
@@ -307,6 +316,7 @@
   .chat-form textarea {
     flex: 1; min-height: 46px; max-height: 128px;
     border-radius: 22px; padding: 12px 16px; resize: none;
+    transition: height .18s cubic-bezier(.2,.8,.2,1), border-color .2s, background .2s;
   }
   .send-btn {
     flex: none; width: 46px; height: 46px; border-radius: 50%;
@@ -318,11 +328,14 @@
   }
   .send-btn:hover { transform: scale(1.08); }
   .send-btn.empty { opacity: .45; }
-  .send-btn.launch { animation: launch .4s cubic-bezier(.3,.9,.4,1.3); }
+  .send-btn.launch { animation: launch .46s cubic-bezier(.24,.9,.3,1.25); }
   @keyframes launch {
-    35% { transform: translate(6px, -6px) scale(1.16) rotate(-12deg); }
+    0%   { transform: none; }
+    28%  { transform: translate(-3px, 3px) scale(.88) rotate(8deg); }
+    58%  { transform: translate(8px, -8px) scale(1.2) rotate(-16deg); }
     100% { transform: none; }
   }
+  .send-btn:active { transform: scale(.9); }
 
   .empty-note { text-align: center; color: var(--text-faint); margin: auto; padding: 30px; line-height: 1.7; }
 
@@ -336,33 +349,43 @@
     .shell { padding: 0; }
     .chat-page-head { display: none; }
 
-    /* Сдвигаем всё на --vvtop: iOS не ужимает страницу под клавиатуру,
-       а опускает видимую область, и закреплённые элементы иначе
-       остаются висеть за краем экрана. */
-    .topbar {
-      position: fixed; top: 0; left: 0; right: 0;
-      transform: translateY(var(--vvtop, 0px));
+    /* Ключевое: высота окна чата постоянна, под клавиатуру мы его
+       СДВИГАЕМ. Раньше менялась высота — а это пересчёт всей раскладки
+       на каждое событие, отсюда и рывки. Сдвиг же считает видеокарта. */
+    .topbar,
+    .chat-wrap {
+      transform: translateY(var(--shift, 0px));
+      transition: transform .34s cubic-bezier(.22, .8, .24, 1);
+      will-change: transform;
     }
+    .topbar { position: fixed; top: 0; left: 0; right: 0; }
     .chat-wrap {
       position: fixed;
-      left: 0; right: 0; top: 0;
-      transform: translateY(calc(var(--vvtop, 0px) + var(--head-h, 96px)));
-      height: calc(var(--vvh, 100dvh) - var(--head-h, 96px));
+      left: 0; right: 0;
+      top: var(--bar-h, 92px);
+      height: calc(var(--app-h, 100dvh) - var(--bar-h, 92px));
       margin: 0;
       border-radius: 0;
       border-left: 0; border-right: 0; border-bottom: 0;
       z-index: 5;
     }
 
-    /* Пока печатаешь, меню сайта прячется — на 430 точках высоты
-       каждая строка на счету, а вернётся оно сразу после клавиатуры. */
-    body.kb-open .topbar { transform: translateY(calc(var(--vvtop, 0px) - 100%)); }
-    body.kb-open .quick { display: none; }
+    /* Шапка с именем уезжает вместе с окном — пока печатаешь, экран
+       отдан сообщениям, а как клавиатура уйдёт, она приедет обратно. */
+    .chat-head { transition: opacity .24s ease; }
+    body.kb-open .chat-head { opacity: 0; }
+
+    /* Панель эмодзи плавно схлопывается, а не пропадает рывком */
+    .quick {
+      max-height: 62px; overflow: hidden;
+      transition: max-height .3s cubic-bezier(.22,.8,.24,1), opacity .22s, padding .3s;
+    }
+    body.kb-open .quick { max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; }
     .chat-log { padding: 14px 14px 4px; }
     .bubble { max-width: 84%; }
     /* одна прокручиваемая строка вместо двух — экономим высоту под клавиатурой */
     .quick {
-      flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+      flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
       padding: 0 14px 8px;
       mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
       -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);

@@ -31,25 +31,34 @@ const vv = window.visualViewport;
 const root = document.documentElement;
 const topbar = document.querySelector('.topbar');
 
-let restHeight = vv ? vv.height : window.innerHeight;
+let appH = window.innerHeight;   // высота страницы БЕЗ клавиатуры
+let barH = 0;
 let keyboardOpen = false;
 
-function fitViewport() {
+/* Меряем «спокойные» величины — только когда клавиатуры нет.
+   Пока она открыта, эти значения должны оставаться прежними,
+   иначе окно начнёт прыгать вслед за пересчётом. */
+function measure() {
+  appH = window.innerHeight;
+  barH = topbar ? Math.round(topbar.getBoundingClientRect().height) : 0;
+  root.style.setProperty('--app-h', appH + 'px');
+  root.style.setProperty('--bar-h', barH + 'px');
+}
+
+/* Клавиатура двигает не высоту, а положение: считаем, на сколько
+   поднять окно, чтобы поле ввода встало ровно над ней. */
+function updateShift() {
   const h = vv ? vv.height : window.innerHeight;
   const top = vv ? vv.offsetTop : 0;
+  const shift = Math.min(0, Math.round(top + h - appH));
 
-  if (h > restHeight) restHeight = h;      // поворот, скрытие адресной строки
+  root.style.setProperty('--shift', shift + 'px');
 
-  const open = (restHeight - h) > 120;
+  const open = shift < -80;
   if (open !== keyboardOpen) {
     keyboardOpen = open;
     document.body.classList.toggle('kb-open', open);
   }
-
-  const headH = (open || !topbar) ? 0 : topbar.getBoundingClientRect().height;
-  root.style.setProperty('--vvh', Math.round(h) + 'px');
-  root.style.setProperty('--vvtop', Math.round(top) + 'px');
-  root.style.setProperty('--head-h', Math.round(headH) + 'px');
 }
 
 let queued = false;
@@ -58,17 +67,27 @@ function scheduleFit(scrollDown) {
   queued = true;
   requestAnimationFrame(() => {
     queued = false;
-    fitViewport();
+    updateShift();
     if (scrollDown && stick) toBottom();
   });
 }
 
-fitViewport();
-window.addEventListener('resize', () => scheduleFit(true));
-window.addEventListener('orientationchange', () => {
-  restHeight = 0;
-  setTimeout(() => scheduleFit(true), 300);
+measure();
+updateShift();
+
+// Пересчитываем «спокойные» величины только при закрытой клавиатуре.
+// Отличить одно от другого можно так: пока её нет, видимая высота
+// почти совпадает с высотой страницы.
+window.addEventListener('resize', () => {
+  const h = vv ? vv.height : window.innerHeight;
+  if (Math.abs(window.innerHeight - h) < 60) measure();
+  scheduleFit(true);
 });
+
+window.addEventListener('orientationchange', () => {
+  setTimeout(() => { measure(); scheduleFit(true); }, 320);
+});
+
 if (vv) {
   vv.addEventListener('resize', () => scheduleFit(true));
   vv.addEventListener('scroll', () => scheduleFit(false));
@@ -443,9 +462,13 @@ function openMenu(bubble, x, y) {
   // держим меню в пределах экрана
   const r = menu.getBoundingClientRect();
   const pad = 10;
-  const vh = (vv ? vv.height : innerHeight) + (vv ? vv.offsetTop : 0);
+  // clientY отсчитывается от видимой области, а position:fixed — от страницы;
+  // на iOS при поднятой клавиатуре это разные системы координат
+  const off = vv ? vv.offsetTop : 0;
+  const top0 = off + pad;
+  const bottom0 = off + (vv ? vv.height : innerHeight) - pad;
   menu.style.left = Math.round(Math.min(Math.max(pad, x - r.width / 2), innerWidth - r.width - pad)) + 'px';
-  menu.style.top = Math.round(Math.min(Math.max(pad, y - r.height - 12), vh - r.height - pad)) + 'px';
+  menu.style.top = Math.round(Math.min(Math.max(top0, y + off - r.height - 12), bottom0 - r.height)) + 'px';
 
   veil.addEventListener('pointerdown', closeMenu);
 
@@ -529,6 +552,7 @@ log.addEventListener('pointerdown', (e) => {
   const b = e.target.closest('.bubble');
   if (!b) return;
   swipe = { el: b, x: e.clientX, y: e.clientY, id: e.pointerId, on: false, d: 0 };
+  b.classList.add('press');
 
   // подержать палец — откроется меню; любое заметное движение это отменит
   clearPress();
@@ -536,6 +560,7 @@ log.addEventListener('pointerdown', (e) => {
     pressTimer = null;
     swipe = null;
     if (navigator.vibrate) navigator.vibrate(14);
+    b.classList.remove('press');
     openMenu(b, e.clientX, e.clientY);
   }, 460);
 });
@@ -545,14 +570,17 @@ log.addEventListener('pointermove', (e) => {
   const dx = e.clientX - swipe.x;
   const dy = e.clientY - swipe.y;
 
-  if (pressTimer && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) clearPress();
+  if (pressTimer && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) {
+    clearPress();
+    swipe.el.classList.remove('press');
+  }
 
   if (!swipe.on) {
     if (Math.abs(dy) > 10 && Math.abs(dy) >= Math.abs(dx)) { swipe = null; return; }  // это прокрутка
     if (dx < 14) return;
     swipe.on = true;
     // анимация появления перебила бы наш сдвиг: в каскаде она сильнее inline-стиля
-    swipe.el.classList.remove('enter');
+    swipe.el.classList.remove('enter', 'press');
     swipe.el.classList.add('swiping');
   }
   // сопротивление: чем дальше тянешь, тем туже
@@ -563,6 +591,7 @@ log.addEventListener('pointermove', (e) => {
 
 function endSwipe() {
   clearPress();
+  log.querySelectorAll('.bubble.press').forEach((el) => el.classList.remove('press'));
   if (!swipe) return;
   const { el, d, on } = swipe;
   swipe = null;

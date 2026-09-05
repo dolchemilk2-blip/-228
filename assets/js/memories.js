@@ -5,7 +5,7 @@ import { cloud, renderCloudBadge } from './cloud.js';
 const CFG = window.SITE_CONFIG;
 const $ = (id) => document.getElementById(id);
 
-App.init();
+App.init({ reveal: true });
 renderCloudBadge();
 
 const meKey = App.getMe() || 'a';
@@ -112,34 +112,92 @@ function move(id, delta) {
 
 /* ---------- перетаскивание ---------- */
 
+/* Перетаскивание.
+
+   Карточка не прыгает по списку, а поднимается и едет за пальцем;
+   соседи в это время расступаются. В конце она плавно опускается
+   в новое место приёмом FLIP: замеряем, где она была и где стала,
+   и проигрываем путь между этими точками. */
 function startDrag(e, item) {
   e.preventDefault();
   const box = $('story');
+  const items = [...box.querySelectorAll('.story-item')];
+  const from = items.indexOf(item);
+  if (from < 0) return;
+
+  const rects = items.map((el) => el.getBoundingClientRect());
+  const startY = e.clientY;
+  let to = from;
+
   dragging = true;
-  item.classList.add('dragging');
+  item.classList.add('lifted');
+  try { e.target.setPointerCapture(e.pointerId); } catch (err) {}
+
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
   const onMove = (ev) => {
-    const y = ev.clientY;
-    const others = [...box.querySelectorAll('.story-item:not(.dragging)')];
-    const after = others.find((el) => {
-      const r = el.getBoundingClientRect();
-      return y < r.top + r.height / 2;
+    const dy = ev.clientY - startY;
+    // наклон зависит от скорости движения — карточка будто живая
+    item.style.transform = 'translateY(' + dy.toFixed(1) + 'px)';
+    item.style.setProperty('--tilt', clamp(dy * 0.03, -2.5, 2.5).toFixed(2) + 'deg');
+
+    // куда метим: сравниваем центр поднятой карточки с серединами остальных
+    const center = rects[from].top + rects[from].height / 2 + dy;
+    let next = from;
+    items.forEach((_, i) => {
+      if (i === from) return;
+      const mid = rects[i].top + rects[i].height / 2;
+      if (i < from && center < mid) next = Math.min(next, i);
+      else if (i > from && center > mid) next = Math.max(next, i);
     });
-    if (after) box.insertBefore(item, after);
-    else box.insertBefore(item, $('story-add'));
+
+    if (next !== to) {
+      to = next;
+      const h = rects[from].height + 12;      // высота карточки плюс отступ
+      items.forEach((el, i) => {
+        if (i === from) return;
+        let shift = 0;
+        if (to > from && i > from && i <= to) shift = -h;
+        else if (to < from && i >= to && i < from) shift = h;
+        el.style.transform = shift ? 'translateY(' + shift + 'px)' : '';
+      });
+    }
   };
 
   const onUp = () => {
     document.removeEventListener('pointermove', onMove);
     document.removeEventListener('pointerup', onUp);
     document.removeEventListener('pointercancel', onUp);
-    item.classList.remove('dragging');
-    dragging = false;
 
-    const ids = [...box.querySelectorAll('.story-item')].map((el) => el.dataset.id);
-    story = ids.map((id) => story.find((m) => m.id === id)).filter(Boolean);
-    paintStory();
-    saveOrder(ids);
+    const wasAt = item.getBoundingClientRect().top;      // где карточка сейчас
+
+    items.forEach((el) => { el.style.transform = ''; });
+    item.classList.remove('lifted');
+    item.style.removeProperty('--tilt');
+
+    if (to !== from) {
+      const list = story.slice();
+      list.splice(to, 0, list.splice(from, 1)[0]);
+      story = list;
+      paintStory();
+    }
+
+    // FLIP: карточка появляется там, где её отпустили, и едет на место
+    const settled = box.querySelector('[data-id="' + item.dataset.id + '"]') || item;
+    const nowAt = settled.getBoundingClientRect().top;
+    const delta = wasAt - nowAt;
+    if (Math.abs(delta) > 1) {
+      settled.style.transition = 'none';
+      settled.style.transform = 'translateY(' + delta.toFixed(1) + 'px)';
+      requestAnimationFrame(() => {
+        settled.style.transition = 'transform .38s cubic-bezier(.2, .9, .28, 1.1)';
+        settled.style.transform = '';
+        setTimeout(() => { settled.style.transition = ''; }, 400);
+      });
+    }
+
+    dragging = false;
+    if (to !== from) saveOrder(story.map((m) => m.id));
   };
 
   document.addEventListener('pointermove', onMove);

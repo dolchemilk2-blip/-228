@@ -228,6 +228,33 @@ window.App = (function () {
     return item;
   }
 
+  /* Карточки проявляются, когда доезжают до экрана. Класс ставим
+     скриптом: если он не выполнится, страница просто будет видна вся. */
+  function revealOnScroll() {
+    if (!('IntersectionObserver' in window)) return;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    var targets = [].slice.call(document.querySelectorAll('.section > .card, .section > .grid > .card'));
+    if (!targets.length) return;
+
+    targets.forEach(function (el, i) {
+      // первый экран показываем сразу, без задержки
+      if (el.getBoundingClientRect().top < window.innerHeight * 0.9) return;
+      el.classList.add('reveal');
+      el.style.transitionDelay = ((i % 3) * 60) + 'ms';
+    });
+
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        e.target.classList.add('in');
+        io.unobserve(e.target);
+      });
+    }, { rootMargin: '0px 0px -40px 0px', threshold: 0.05 });
+
+    document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
+  }
+
   function markActiveNav() {
     var here = location.pathname.split('/').pop() || 'index.html';
     document.querySelectorAll('.nav a').forEach(function (a) {
@@ -247,6 +274,7 @@ window.App = (function () {
     var chip = document.getElementById('who-chip');
     if (chip) chip.addEventListener('click', function () { askWhoAmI(true); });
 
+    if (opts.reveal) revealOnScroll();
     if (opts.requireIdentity !== false) askWhoAmI(false);
 
     document.addEventListener('me-changed', renderWhoChip);

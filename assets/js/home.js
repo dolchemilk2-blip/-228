@@ -6,7 +6,7 @@ const CFG = window.SITE_CONFIG;
 const $ = (id) => document.getElementById(id);
 const PAGE_LOADED = Date.now();
 
-App.init();
+App.init({ reveal: true });
 renderCloudBadge();
 
 const A = App.person('a');

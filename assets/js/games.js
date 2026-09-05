@@ -5,7 +5,7 @@ import { cloud, renderCloudBadge } from './cloud.js';
 const CFG = window.SITE_CONFIG;
 const $ = (id) => document.getElementById(id);
 
-App.init();
+App.init({ reveal: true });
 renderCloudBadge();
 
 const meKey = App.getMe() || 'a';
