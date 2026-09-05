@@ -136,6 +136,57 @@
   .bubble .reply-btn:hover { transform: translateY(-50%) scale(1.15); color: var(--text); }
   @media (pointer: coarse) { .bubble .reply-btn { display: none; } }
 
+  /* ---------- меню сообщения ---------- */
+  /* Шторка приглушённая, без размытия: поднять сам пузырь над ней мешает
+     контекст наложения окна чата, поэтому важнее, чтобы сообщение
+     под меню осталось читаемым. */
+  .menu-veil {
+    position: fixed; inset: 0; z-index: 69;
+    background: rgba(6, 1, 18, .32);
+    animation: fade .18s ease;
+  }
+  .msg-menu {
+    position: fixed; z-index: 70;
+    min-width: 196px; padding: 6px;
+    background: linear-gradient(180deg, #271246, #170830);
+    border: 1px solid rgba(255, 255, 255, .16);
+    border-radius: 15px;
+    box-shadow: 0 22px 55px rgba(0, 0, 0, .65);
+    animation: menu-in .24s cubic-bezier(.16, 1.2, .3, 1);
+  }
+  @keyframes menu-in { from { opacity: 0; transform: scale(.86) translateY(6px); } }
+  .msg-menu button {
+    display: flex; align-items: center; gap: 11px;
+    width: 100%; padding: 11px 13px;
+    background: none; border: none; border-radius: 10px;
+    color: var(--text); font-size: .92rem; font-weight: 600;
+    cursor: pointer; text-align: left;
+    transition: background .14s;
+  }
+  .msg-menu button:hover { background: rgba(255, 255, 255, .09); }
+  .msg-menu button:active { background: rgba(255, 255, 255, .15); }
+  .msg-menu button .ic { font-size: 1rem; width: 20px; text-align: center; }
+  .msg-menu button.danger { color: #ff8098; }
+  .msg-menu button.danger.armed { background: rgba(255, 60, 90, .22); color: #ffb3c1; }
+  .msg-menu hr { border: 0; height: 1px; background: var(--line-soft); margin: 4px 8px; }
+
+  /* пузырь, у которого открыто меню, слегка приподнят */
+  .bubble.menu-open { z-index: 71; transform: scale(1.03); transition: transform .2s cubic-bezier(.16,1.3,.3,1); }
+  .bubble.edited-flash { animation: edited 1s ease; }
+  @keyframes edited {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(110, 231, 199, 0); }
+    30%      { box-shadow: 0 0 0 3px rgba(110, 231, 199, .5); }
+  }
+
+  /* на телефоне гасим системное выделение — оно спорит с долгим нажатием.
+     Скопировать текст можно из того же меню. */
+  @media (pointer: coarse) {
+    .bubble { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+  }
+
+  /* пометка «изменено» */
+  .bubble .edited { opacity: .8; font-style: italic; margin-right: 2px; }
+
   /* цитата внутри пузыря */
   .quote {
     display: block; cursor: pointer;
@@ -231,7 +282,9 @@
     padding: 10px 16px;
     border-top-width: 1px;
   }
-  .reply-bar .rb-line { width: 3px; align-self: stretch; border-radius: 3px; background: var(--pink); flex: none; }
+  .reply-bar .rb-line { width: 3px; align-self: stretch; border-radius: 3px; background: var(--pink); flex: none; transition: background .2s; }
+  .reply-bar.editing .rb-line { background: var(--mint); }
+  .reply-bar.editing .rb-who { color: var(--mint); }
   .reply-bar .rb-body { flex: 1; min-width: 0; }
   .reply-bar .rb-who { font-size: .76rem; font-weight: 800; color: var(--pink-soft); }
   .reply-bar .rb-text { font-size: .84rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

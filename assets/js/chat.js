@@ -194,6 +194,17 @@ function decorate(el, m, groupStart, groupEnd) {
   const mine = m.by === meKey;
   const wasPending = el.classList.contains('pending');
 
+  // текст мог измениться — правка приезжает в тот же пузырь
+  const body = el.querySelector('.body');
+  if (body && body.textContent !== (m.text || '')) {
+    body.textContent = m.text || '';
+    el.classList.remove('edited-flash');
+    void el.offsetWidth;
+    el.classList.add('edited-flash');
+  }
+  el.dataset.id = m.id || '';
+  el.dataset.mine = mine ? '1' : '';
+
   el.classList.toggle('mine', mine);
   el.classList.toggle('theirs', !mine);
   el.classList.toggle('group-start', groupStart);
@@ -208,6 +219,11 @@ function decorate(el, m, groupStart, groupEnd) {
       meta.className = 'meta';
       el.appendChild(meta);
     }
+    let mark = meta.querySelector('.edited');
+    if (m.editedAt) {
+      if (!mark) { mark = document.createElement('span'); mark.className = 'edited'; mark.textContent = 'изм.'; meta.prepend(mark); }
+    } else if (mark) mark.remove();
+
     const time = hhmm(m.at || Date.now());
     let timeEl = meta.querySelector('.time');
     if (!timeEl) { timeEl = document.createElement('span'); timeEl.className = 'time'; meta.appendChild(timeEl); }
@@ -346,6 +362,7 @@ let replyTo = null;   // { key, who, text }
 function startReply(key) {
   const m = visibleMessages().find((x) => keyOf(x) === key);
   if (!m) return;
+  cancelEdit(true);
   replyTo = { key, who: m.by, text: (m.text || '').slice(0, 140) };
   $('rb-who').textContent = m.by === meKey ? 'Ваше сообщение' : App.person(m.by).name;
   $('rb-text').textContent = replyTo.text;
@@ -355,10 +372,13 @@ function startReply(key) {
 
 function cancelReply() {
   replyTo = null;
-  $('reply-bar').classList.remove('show');
+  if (!editing) $('reply-bar').classList.remove('show', 'editing');
 }
 
-$('rb-close').addEventListener('click', cancelReply);
+$('rb-close').addEventListener('click', () => {
+  if (editing) cancelEdit(true);
+  else cancelReply();
+});
 
 function jumpTo(key) {
   const el = nodes.get(key);
@@ -377,22 +397,155 @@ log.addEventListener('click', (e) => {
   if (rb) startReply(rb.closest('.bubble').dataset.key);
 });
 
+/* ============================================================
+   Меню сообщения: долгое нажатие на телефоне, правый клик на мыши
+   ============================================================ */
+
+let menuEls = null;
+
+function closeMenu() {
+  if (!menuEls) return;
+  const { veil, menu, bubble } = menuEls;
+  menuEls = null;
+  bubble.classList.remove('menu-open');
+  menu.style.transition = 'opacity .14s, transform .14s';
+  menu.style.opacity = '0';
+  menu.style.transform = 'scale(.92)';
+  veil.style.opacity = '0';
+  setTimeout(() => { veil.remove(); menu.remove(); }, 150);
+}
+
+function openMenu(bubble, x, y) {
+  closeMenu();
+
+  const key = bubble.dataset.key;
+  const m = visibleMessages().find((v) => keyOf(v) === key);
+  if (!m) return;
+
+  const mine = m.by === meKey;
+  const saved = Boolean(m.id) && !m.pending;   // править и удалять можно только записанное
+
+  const veil = document.createElement('div');
+  veil.className = 'menu-veil';
+
+  const menu = document.createElement('div');
+  menu.className = 'msg-menu';
+  menu.innerHTML =
+    '<button data-do="reply"><span class="ic">↩</span>Ответить</button>' +
+    (mine && saved ? '<button data-do="edit"><span class="ic">✏️</span>Изменить</button>' : '') +
+    '<button data-do="copy"><span class="ic">📋</span>Копировать</button>' +
+    (mine && saved ? '<hr /><button class="danger" data-do="delete"><span class="ic">🗑</span>Удалить</button>' : '');
+
+  document.body.append(veil, menu);
+  bubble.classList.add('menu-open');
+  menuEls = { veil, menu, bubble };
+
+  // держим меню в пределах экрана
+  const r = menu.getBoundingClientRect();
+  const pad = 10;
+  const vh = (vv ? vv.height : innerHeight) + (vv ? vv.offsetTop : 0);
+  menu.style.left = Math.round(Math.min(Math.max(pad, x - r.width / 2), innerWidth - r.width - pad)) + 'px';
+  menu.style.top = Math.round(Math.min(Math.max(pad, y - r.height - 12), vh - r.height - pad)) + 'px';
+
+  veil.addEventListener('pointerdown', closeMenu);
+
+  menu.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-do]');
+    if (!btn) return;
+    const act = btn.getAttribute('data-do');
+
+    if (act === 'delete') {
+      // подтверждение прямо в меню, без системного окна
+      if (!btn.classList.contains('armed')) {
+        btn.classList.add('armed');
+        btn.lastChild.textContent = 'Точно удалить?';
+        return;
+      }
+      closeMenu();
+      cloud.remove('messages/' + m.id);
+      App.toast('Удалено');
+      return;
+    }
+
+    closeMenu();
+    if (act === 'reply') startReply(key);
+    else if (act === 'edit') startEdit(m);
+    else if (act === 'copy') {
+      navigator.clipboard?.writeText(m.text || '')
+        .then(() => App.toast('Скопировано'))
+        .catch(() => App.toast('Не вышло скопировать'));
+    }
+  });
+}
+
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+log.addEventListener('scroll', closeMenu);
+
+// правый клик на компьютере
+log.addEventListener('contextmenu', (e) => {
+  const b = e.target.closest('.bubble');
+  if (!b) return;
+  e.preventDefault();
+  openMenu(b, e.clientX, e.clientY);
+});
+
+/* ============================================================
+   Правка своего сообщения
+   ============================================================ */
+
+let editing = null;   // { id, key, original }
+
+function startEdit(m) {
+  cancelReply();
+  editing = { id: m.id, key: keyOf(m), original: m.text || '' };
+  input.value = m.text || '';
+  autoGrow();
+  refreshSendBtn();
+  $('rb-who').textContent = 'Изменить сообщение';
+  $('rb-text').textContent = m.text || '';
+  $('reply-bar').classList.add('show', 'editing');
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
+function cancelEdit(clearField) {
+  if (!editing) return;
+  editing = null;
+  if (clearField) { input.value = ''; autoGrow(); refreshSendBtn(); }
+  $('reply-bar').classList.remove('show', 'editing');
+}
+
 /* ---------- свайп вправо = ответить ---------- */
 
 let swipe = null;
 const SWIPE_TRIGGER = 52;
 
+let pressTimer = null;
+
+function clearPress() { clearTimeout(pressTimer); pressTimer = null; }
+
 log.addEventListener('pointerdown', (e) => {
-  if (e.pointerType === 'mouse') return;        // на мыши есть кнопка
+  if (e.pointerType === 'mouse') return;        // на мыши есть кнопка и правый клик
   const b = e.target.closest('.bubble');
   if (!b) return;
   swipe = { el: b, x: e.clientX, y: e.clientY, id: e.pointerId, on: false, d: 0 };
+
+  // подержать палец — откроется меню; любое заметное движение это отменит
+  clearPress();
+  pressTimer = setTimeout(() => {
+    pressTimer = null;
+    swipe = null;
+    if (navigator.vibrate) navigator.vibrate(14);
+    openMenu(b, e.clientX, e.clientY);
+  }, 460);
 });
 
 log.addEventListener('pointermove', (e) => {
   if (!swipe || e.pointerId !== swipe.id) return;
   const dx = e.clientX - swipe.x;
   const dy = e.clientY - swipe.y;
+
+  if (pressTimer && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) clearPress();
 
   if (!swipe.on) {
     if (Math.abs(dy) > 10 && Math.abs(dy) >= Math.abs(dx)) { swipe = null; return; }  // это прокрутка
@@ -409,6 +562,7 @@ log.addEventListener('pointermove', (e) => {
 });
 
 function endSwipe() {
+  clearPress();
   if (!swipe) return;
   const { el, d, on } = swipe;
   swipe = null;
@@ -464,6 +618,18 @@ input.addEventListener('input', () => {
 
 async function send() {
   const text = input.value.trim();
+
+  // режим правки: не создаём новое сообщение, а меняем существующее
+  if (editing) {
+    const { id, original } = editing;
+    cancelEdit(true);
+    if (!text) { App.toast('Пустое сообщение лучше удалить'); return; }
+    if (text === original) return;
+    await cloud.update('messages/' + id, { text, editedAt: Date.now() });
+    App.toast('Изменено');
+    return;
+  }
+
   if (!text) return;
 
   const cid = newCid();
@@ -498,7 +664,10 @@ async function send() {
 $('form').addEventListener('submit', (e) => { e.preventDefault(); send(); });
 
 input.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && replyTo) { cancelReply(); return; }
+  if (e.key === 'Escape') {
+    if (editing) { cancelEdit(true); return; }
+    if (replyTo) { cancelReply(); return; }
+  }
   if (TOUCH) return;                              // на телефоне Enter — перенос строки
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 });
