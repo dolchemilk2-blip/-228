@@ -13,11 +13,20 @@
 <style>
   /* --- мост между городами --- */
   .bridge { position: relative; }
-  .bridge svg { width: 100%; height: 150px; display: block; overflow: visible; }
+  /* Раньше рисунок растягивался под ширину без оглядки на пропорции:
+     на телефоне дуга сплющивалась, на широком экране расползалась,
+     а точки городов превращались в овалы. Теперь пропорции держатся,
+     а ширина ограничена — иначе на мониторе мост становится огромным. */
+  .bridge-inner { max-width: 620px; margin: 0 auto; }
+  .bridge svg {
+    display: block; width: 100%; height: auto;
+    aspect-ratio: 600 / 150;
+    overflow: visible;
+  }
   .bridge .dash { stroke-dasharray: 7 9; animation: dash 22s linear infinite; }
   @keyframes dash { to { stroke-dashoffset: -320; } }
   .plane { font-size: 22px; }
-  .bridge-cities { display: flex; justify-content: space-between; margin-top: 6px; }
+  .bridge-cities { display: flex; justify-content: space-between; margin-top: 6px; padding: 0 2px; }
   .bridge-cities div { text-align: center; }
   .bridge-cities .c { font-weight: 800; }
   .bridge-cities .t { font-size: .78rem; color: var(--text-faint); }
@@ -168,9 +177,53 @@
   .lightbox img { max-height: 82vh; width: auto; border-radius: var(--r-md); box-shadow: var(--shadow); }
   .lightbox p { margin-top: 14px; font-family: 'Caveat', cursive; font-size: 1.5rem; }
 
-  .photo-hint {
-    border: 1px dashed var(--line); border-radius: var(--r-md);
-    padding: 26px; text-align: center; color: var(--text-faint); line-height: 1.7;
+  /* плитка «добавить фото» стоит прямо в галерее — её видно сразу */
+  .photo-add {
+    aspect-ratio: 1; border-radius: var(--r-md); cursor: pointer;
+    border: 1px dashed var(--line); background: none; color: var(--text-dim);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    font-weight: 700; font-size: .84rem; text-align: center; padding: 10px;
+    transition: border-color .2s, color .2s, background .2s, transform .18s;
+  }
+  .photo-add:hover { border-color: rgba(255,94,156,.55); color: var(--text); background: rgba(255,255,255,.03); }
+  .photo-add:active { transform: scale(.96); }
+  .photo-add .plus {
+    width: 34px; height: 34px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 1.3rem; color: #fff;
+    background: linear-gradient(135deg, var(--pink), var(--violet));
+  }
+  .photo .who {
+    position: absolute; top: 7px; left: 8px;
+    font-size: .68rem; font-weight: 800; padding: 3px 7px; border-radius: 999px;
+    background: rgba(0,0,0,.55); backdrop-filter: blur(4px);
+  }
+  .photo.busy { opacity: .45; }
+
+  /* окно открытого фото */
+  .lightbox { width: min(560px, 100%); }
+  .lightbox .lb-tools { display: flex; gap: 8px; align-items: center; margin-top: 14px; }
+  .lightbox .lb-tools input { flex: 1; }
+
+  /* --- список желаний: пункты редактируются --- */
+  .wish .tools { display: flex; gap: 2px; flex: none; margin-left: 4px; }
+  .wish .tools button {
+    background: none; border: none; cursor: pointer; color: var(--text-faint);
+    width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center;
+    font-size: .92rem; transition: background .15s, color .15s;
+  }
+  .wish .tools button:hover { background: rgba(255,255,255,.09); color: var(--text); }
+  .wish-add {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    background: none; cursor: pointer; color: var(--text-dim);
+    border: 1px dashed var(--line); border-radius: var(--r-sm);
+    padding: 13px 15px; font-weight: 700; font-size: .9rem;
+    transition: border-color .2s, color .2s, background .2s;
+  }
+  .wish-add:hover { border-color: rgba(255,94,156,.55); color: var(--text); background: rgba(255,255,255,.03); }
+  .wish-add .plus {
+    width: 23px; height: 23px; border-radius: 50%; flex: none;
+    display: grid; place-items: center; font-size: 1rem; color: #fff;
+    background: linear-gradient(135deg, var(--pink), var(--violet));
   }
 
   /* --- список желаний --- */
@@ -226,7 +279,8 @@
       <span class="badge" id="cloud-badge" style="margin-left:auto"></span>
     </div>
     <div class="card bridge">
-      <svg viewBox="0 0 600 150" preserveAspectRatio="none" aria-hidden="true">
+     <div class="bridge-inner">
+      <svg viewBox="0 0 600 150" aria-hidden="true">
         <path id="arc" d="M 40 118 Q 300 -18 560 118" fill="none"
               stroke="rgba(255,94,156,.55)" stroke-width="2" class="dash" />
         <circle cx="40" cy="118" r="8" fill="#ff5e9c" />
@@ -241,6 +295,7 @@
         <div><div class="c" id="bridge-a-city">—</div><div class="t" id="bridge-a-time">--:--</div></div>
         <div><div class="c" id="bridge-b-city">—</div><div class="t" id="bridge-b-time">--:--</div></div>
       </div>
+     </div>
     </div>
   </section>
 
@@ -263,15 +318,12 @@
   <section class="section">
     <div class="section-head">
       <h2>Воспоминания в кадрах</h2>
-      <p>нажмите на фото, чтобы открыть</p>
+      <p>добавляйте оба — нажмите на фото, чтобы открыть</p>
     </div>
     <div class="card">
       <div class="gallery" id="gallery"></div>
-      <div class="photo-hint hidden" id="photo-hint">
-        📷 Здесь пока пусто.<br />
-        Положите снимки в папку <code>assets/img/</code> и впишите их в <code>config.js</code>,
-        в раздел <code>photos</code>.
-      </div>
+      <input type="file" id="photo-input" accept="image/*" multiple hidden />
+      <p class="muted mt" id="photo-note">Снимки сжимаются прямо в браузере и попадают в общую комнату — второй увидит их сразу.</p>
     </div>
   </section>
 
@@ -279,7 +331,7 @@
   <section class="section">
     <div class="section-head">
       <h2>Когда встретимся</h2>
-      <p>галочки видно обоим</p>
+      <p>список общий — добавляйте и правьте оба</p>
     </div>
     <div class="card">
       <div class="row between" style="margin-bottom:12px">

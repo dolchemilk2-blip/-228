@@ -319,76 +319,244 @@ $('story').addEventListener('click', (e) => {
 paintStory();
 
 /* ============================================================
-   Галерея
+   Галерея: фото добавляются прямо с телефона
    ============================================================ */
 
-const photos = CFG.photos || [];
-
-if (!photos.length) {
-  $('photo-hint').classList.remove('hidden');
-} else {
-  $('gallery').innerHTML = photos.map((p, i) =>
-    '<div class="photo" data-i="' + i + '">' +
-      '<img src="' + App.escapeHtml(p.src) + '" alt="' + App.escapeHtml(p.caption || 'Воспоминание') + '" loading="lazy" />' +
-      (p.caption ? '<div class="cap">' + App.escapeHtml(p.caption) + '</div>' : '') +
-    '</div>').join('');
+/* Снимок с телефона весит мегабайты — в общую базу такое класть нельзя.
+   Поэтому уменьшаем и пережимаем прямо в браузере, до отправки.
+   Если после сжатия всё ещё тяжело, заходим на второй круг построже. */
+function shrinkImage(file, maxSide, quality) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (!w || !h) { reject(new Error('пустой снимок')); return; }
+      const k = Math.min(1, maxSide / Math.max(w, h));
+      w = Math.round(w * k); h = Math.round(h * k);
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('не удалось прочитать')); };
+    img.src = url;
+  });
 }
 
-$('gallery').addEventListener('click', (e) => {
-  const cell = e.target.closest('[data-i]');
-  if (!cell) return;
-  const p = photos[+cell.getAttribute('data-i')];
-  const back = document.createElement('div');
-  back.className = 'modal-backdrop';
-  back.innerHTML = '<div class="lightbox center">' +
-    '<img src="' + App.escapeHtml(p.src) + '" alt="' + App.escapeHtml(p.caption || '') + '" />' +
-    (p.caption ? '<p>' + App.escapeHtml(p.caption) + '</p>' : '') + '</div>';
-  back.addEventListener('click', () => back.remove());
-  document.body.appendChild(back);
-});
-
-/* ============================================================
-   Список желаний
-   ============================================================ */
-
-const wishes = CFG.wishlist || [];
-let wishState = {};
-
-function paintWishes() {
-  const box = $('wishlist');
-  if (!wishes.length) {
-    box.innerHTML = '<p class="muted">Впишите свои пункты в <code>config.js</code>, раздел <code>wishlist</code>.</p>';
-    return;
+async function prepareImage(file) {
+  const steps = [[1400, 0.78], [1100, 0.68], [900, 0.58], [720, 0.5]];
+  let out = null;
+  for (const [side, q] of steps) {
+    out = await shrinkImage(file, side, q);
+    if (out.length < 700000) return out;      // ~500 КБ и меньше — годится
   }
+  return out;
+}
 
-  box.innerHTML = wishes.map((text, i) => {
-    const st = wishState['w' + i];
-    const done = Boolean(st && st.done);
-    const by = done && st.by ? 'отметил ' + App.person(st.by).name : '';
-    return '<div class="wish ' + (done ? 'done' : '') + '" data-i="' + i + '">' +
-      '<div class="box">' + (done ? '✓' : '') + '</div>' +
-      '<div class="label">' + App.escapeHtml(text) + '</div>' +
-      '<div class="by">' + App.escapeHtml(by) + '</div>' +
+let photos = [];
+
+function paintGallery() {
+  const box = $('gallery');
+  if (!box) return;
+
+  const tiles = photos.map((p) => {
+    const who = App.person(p.by || 'a');
+    return '<div class="photo" data-id="' + p.id + '">' +
+      '<img src="' + App.escapeHtml(p.src) + '" alt="' + App.escapeHtml(p.caption || 'Воспоминание') + '" loading="lazy" />' +
+      '<div class="who">' + App.escapeHtml(who.emoji) + '</div>' +
+      (p.caption ? '<div class="cap">' + App.escapeHtml(p.caption) + '</div>' : '') +
     '</div>';
   }).join('');
 
-  const done = wishes.filter((_, i) => wishState['w' + i] && wishState['w' + i].done).length;
+  box.innerHTML = tiles +
+    '<button class="photo-add" id="photo-add" type="button">' +
+      '<span class="plus">+</span>Добавить фото' +
+    '</button>';
+
+  const note = $('photo-note');
+  if (note) note.textContent = photos.length
+    ? 'Снимки сжимаются прямо в браузере и попадают в общую комнату — второй увидит их сразу.'
+    : 'Пока ни одного снимка. Нажмите «Добавить фото» — они сжимаются прямо в браузере и появятся у обоих.';
+}
+
+$('gallery').addEventListener('click', (e) => {
+  if (e.target.closest('#photo-add')) { $('photo-input').click(); return; }
+  const cell = e.target.closest('[data-id]');
+  if (!cell) return;
+  const p = photos.find((x) => x.id === cell.dataset.id);
+  if (p) openPhoto(p);
+});
+
+$('photo-input').addEventListener('change', async (e) => {
+  const files = [...e.target.files];
+  e.target.value = '';                       // чтобы тот же файл можно было выбрать снова
+  if (!files.length) return;
+
+  App.toast(files.length > 1 ? 'Готовлю ' + files.length + ' снимка…' : 'Готовлю снимок…');
+
+  let added = 0;
+  for (const file of files) {
+    try {
+      const src = await prepareImage(file);
+      await cloud.push('photos', { src, caption: '', by: meKey, at: Date.now() });
+      added++;
+    } catch (err) {
+      console.warn('снимок не прошёл:', err);
+    }
+  }
+
+  if (added) { App.toast(added > 1 ? 'Добавлено ' + added + ' 📷' : 'Добавлено 📷'); App.rainHearts(2); }
+  else App.toast('Не получилось прочитать снимок 😔');
+});
+
+function openPhoto(p) {
+  const back = document.createElement('div');
+  back.className = 'modal-backdrop';
+  back.innerHTML =
+    '<div class="card lightbox center">' +
+      '<img src="' + App.escapeHtml(p.src) + '" alt="' + App.escapeHtml(p.caption || '') + '" />' +
+      '<div class="lb-tools">' +
+        '<input type="text" id="lb-cap" maxlength="90" placeholder="Подпись к снимку…" />' +
+        '<button class="btn small" id="lb-save">Сохранить</button>' +
+        '<button class="btn ghost small" id="lb-del" title="Удалить">🗑</button>' +
+      '</div>' +
+      '<p class="muted mt">Добавил(а) ' + App.escapeHtml(App.person(p.by || 'a').name) + ' · ' + App.formatWhen(p.at) + '</p>' +
+    '</div>';
+  document.body.appendChild(back);
+  back.querySelector('#lb-cap').value = p.caption || '';
+
+  back.addEventListener('click', (e) => { if (e.target === back) back.remove(); });
+
+  back.querySelector('#lb-save').addEventListener('click', async () => {
+    const caption = back.querySelector('#lb-cap').value.trim();
+    back.remove();
+    await cloud.update('photos/' + p.id, { caption });
+    App.toast('Подпись сохранена');
+  });
+
+  back.querySelector('#lb-del').addEventListener('click', async () => {
+    if (!confirm('Удалить этот снимок?')) return;
+    back.remove();
+    await cloud.remove('photos/' + p.id);
+    App.toast('Снимок удалён');
+  });
+}
+
+paintGallery();
+
+/* ============================================================
+   Список желаний: пункты общие и редактируемые
+   ============================================================ */
+
+let wishes = [];      // [{ id, text, done, by, at, order }]
+
+const byWishOrder = (x, y) => (x.order ?? 0) - (y.order ?? 0) || (x.at ?? 0) - (y.at ?? 0);
+
+function paintWishes() {
+  const box = $('wishlist');
+  if (!box) return;
+
+  const rows = wishes.map((w) => {
+    const done = Boolean(w.done);
+    const by = done && w.doneBy ? 'отметил ' + App.person(w.doneBy).name : '';
+    return '<div class="wish ' + (done ? 'done' : '') + '" data-id="' + w.id + '">' +
+      '<div class="box" data-act="toggle">' + (done ? '✓' : '') + '</div>' +
+      '<div class="label" data-act="toggle">' + App.escapeHtml(w.text || '') + '</div>' +
+      '<div class="by">' + App.escapeHtml(by) + '</div>' +
+      '<div class="tools">' +
+        '<button data-act="edit" title="Изменить">✏️</button>' +
+        '<button data-act="del" title="Удалить">🗑</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  box.innerHTML = rows +
+    '<button class="wish-add" id="wish-add" type="button"><span class="plus">+</span>Добавить пункт</button>';
+
+  const done = wishes.filter((w) => w.done).length;
   const pct = wishes.length ? Math.round(done / wishes.length * 100) : 0;
   $('wish-progress').style.width = pct + '%';
-  $('wish-progress-text').textContent = 'Сделано ' + done + ' из ' + wishes.length + ' · ' + pct + '%';
+  $('wish-progress-text').textContent = wishes.length
+    ? 'Сделано ' + done + ' из ' + wishes.length + ' · ' + pct + '%'
+    : 'Список пуст — добавьте, чего ждёте от встречи';
+}
+
+function askWish(current, onSave) {
+  const back = document.createElement('div');
+  back.className = 'modal-backdrop';
+  back.innerHTML =
+    '<div class="card story-editor">' +
+      '<h2>' + (current ? 'Изменить пункт' : 'Новый пункт') + '</h2>' +
+      '<div class="field mt-lg">' +
+        '<label for="w-text">Что хотим сделать</label>' +
+        '<input type="text" id="w-text" maxlength="90" placeholder="Дойти до моря" />' +
+      '</div>' +
+      '<div class="row mt-lg">' +
+        '<button class="btn" id="w-ok">Сохранить</button>' +
+        '<button class="btn ghost" id="w-cancel">Отмена</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(back);
+
+  const field = back.querySelector('#w-text');
+  field.value = current || '';
+  setTimeout(() => field.focus(), 60);
+
+  const close = () => back.remove();
+  back.addEventListener('click', (e) => { if (e.target === back) close(); });
+  back.querySelector('#w-cancel').addEventListener('click', close);
+
+  const save = () => {
+    const text = field.value.trim();
+    if (!text) { App.toast('Пункт получился пустым 🙂'); return; }
+    close();
+    onSave(text);
+  };
+  back.querySelector('#w-ok').addEventListener('click', save);
+  field.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); });
 }
 
 $('wishlist').addEventListener('click', async (e) => {
-  const row = e.target.closest('[data-i]');
-  if (!row) return;
-  const i = row.getAttribute('data-i');
-  const cur = wishState['w' + i];
-  const next = !(cur && cur.done);
+  if (e.target.closest('#wish-add')) {
+    askWish('', async (text) => {
+      const last = wishes.length ? (wishes[wishes.length - 1].order ?? 0) : 0;
+      await cloud.push('wishlist', { text, done: false, by: meKey, order: last + 100, at: Date.now() });
+      App.toast('Добавлено ✨');
+    });
+    return;
+  }
 
-  wishState['w' + i] = { done: next, by: meKey, at: Date.now() };
+  const row = e.target.closest('[data-id]');
+  if (!row) return;
+  const w = wishes.find((x) => x.id === row.dataset.id);
+  if (!w) return;
+  const act = (e.target.closest('[data-act]') || {}).dataset;
+
+  if (act && act.act === 'edit') {
+    askWish(w.text, async (text) => {
+      await cloud.update('wishlist/' + w.id, { text });
+      App.toast('Изменено');
+    });
+    return;
+  }
+
+  if (act && act.act === 'del') {
+    if (!confirm('Убрать «' + (w.text || '') + '» из списка?')) return;
+    await cloud.remove('wishlist/' + w.id);
+    App.toast('Убрано');
+    return;
+  }
+
+  // отклик мгновенный, не дожидаясь общей базы
+  const next = !w.done;
+  w.done = next;
+  w.doneBy = meKey;
   paintWishes();
 
-  await cloud.set('wishlist/w' + i, { done: next, by: meKey, at: Date.now() });
+  await cloud.update('wishlist/' + w.id, { done: next, doneBy: meKey, doneAt: Date.now() });
   if (next) {
     const r = row.getBoundingClientRect();
     App.burst(r.left + 20, r.top + r.height / 2, ['✅', '✨', '💜']);
@@ -404,8 +572,37 @@ paintWishes();
 await cloud.ready();
 cloud.presence(meKey);
 
+cloud.watch('photos', (data) => {
+  photos = Object.entries(data || {})
+    .map(([id, p]) => ({ id, ...p }))
+    .sort((x, y) => (y.at || 0) - (x.at || 0));      // свежие впереди
+  paintGallery();
+});
+
+let wishLoaded = false;
+let wishSeeded = null;
+
+/* Перенос списка из config.js — один раз за всю жизнь комнаты.
+   Ключи те же (w0, w1…), что были у галочек раньше, поэтому уже
+   отмеченные пункты сохраняют отметку: мы лишь дописываем текст. */
+function seedWishesOnce() {
+  if (!wishLoaded || wishSeeded !== false) return;
+  if (wishes.length || !(CFG.wishlist || []).length) return;
+
+  wishSeeded = true;
+  cloud.set('meta/wishSeeded', true);
+  CFG.wishlist.forEach((text, i) => {
+    cloud.update('wishlist/w' + i, { text, order: i * 100, by: 'a', at: Date.now() + i });
+  });
+}
+
 cloud.watch('wishlist', (data) => {
-  wishState = data || {};
+  wishes = Object.entries(data || {})
+    .map(([id, w]) => ({ id, ...w }))
+    .filter((w) => typeof w.text === 'string' && w.text.length)   // старые записи без текста пропускаем
+    .sort(byWishOrder);
+  wishLoaded = true;
+  seedWishesOnce();
   paintWishes();
 });
 
@@ -413,13 +610,13 @@ cloud.watch('wishlist', (data) => {
    комнаты. Отметку держим в базе, а не в переменной: иначе стоило бы
    удалить всю историю и перезагрузить страницу, как она бы вернулась. */
 let storyLoaded = false;
-let alreadySeeded = null;   // null — ещё не знаем
+let storySeeded = null;   // null — ещё не знаем
 
 function seedStoryOnce() {
-  if (!storyLoaded || alreadySeeded !== false) return;
+  if (!storyLoaded || storySeeded !== false) return;
   if (story.length || !(CFG.timeline || []).length) return;
 
-  alreadySeeded = true;
+  storySeeded = true;
   cloud.set('meta/storySeeded', true);
   // Ключи фиксированные (seed0, seed1…): если оба откроют сайт в одну
   // секунду, записи перезапишут друг друга, а не задвоятся.
@@ -431,9 +628,13 @@ function seedStoryOnce() {
   });
 }
 
+/* У истории и списка отметки РАЗНЫЕ. С одной общей выходила гонка:
+   кто первым загрузился и поставил её, второму перенос уже не доставался. */
 cloud.watch('meta', (m) => {
-  alreadySeeded = Boolean((m || {}).storySeeded);
+  storySeeded = Boolean((m || {}).storySeeded);
+  wishSeeded = Boolean((m || {}).wishSeeded);
   seedStoryOnce();
+  seedWishesOnce();
 });
 
 cloud.watch('story', (data) => {
