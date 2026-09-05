@@ -35,6 +35,44 @@ let appH = window.innerHeight;   // высота страницы БЕЗ кла�
 let barH = 0;
 let keyboardOpen = false;
 
+/* Диагностика: откройте страницу с ?debug в адресе, и сверху появится
+   табличка с тем, что браузер сообщает про клавиатуру. Нужна, чтобы
+   ловить особенности Safari, которые не воспроизводятся на компьютере. */
+const DEBUG = /[?&]debug\b/.test(location.search);
+let dbgBox = null;
+let dbgEvents = 0;
+let dbgWindowStart = 0;
+let dbgRate = 0;
+
+function paintDebug(h, top, shift, streaming) {
+  if (!dbgBox) {
+    dbgBox = document.createElement('div');
+    dbgBox.style.cssText =
+      'position:fixed;left:6px;top:6px;z-index:200;padding:7px 9px;border-radius:9px;' +
+      'background:rgba(0,0,0,.82);color:#8fffc9;font:11px/1.45 ui-monospace,monospace;' +
+      'white-space:pre;pointer-events:none;max-width:62vw';
+    document.body.appendChild(dbgBox);
+  }
+
+  const now = performance.now();
+  dbgEvents++;
+  if (now - dbgWindowStart > 1000) {
+    dbgRate = dbgEvents;
+    dbgEvents = 0;
+    dbgWindowStart = now;
+  }
+
+  dbgBox.textContent =
+    'innerH   ' + window.innerHeight + '\n' +
+    'vv.h     ' + Math.round(h) + '\n' +
+    'vv.top   ' + Math.round(top) + '\n' +
+    'scrollY  ' + Math.round(window.scrollY) + '\n' +
+    'appH     ' + appH + '\n' +
+    'сдвиг    ' + shift + '\n' +
+    'событий/с ' + dbgRate + (streaming ? '  (поток)' : '  (одиночное)') +
+    '\nклавиатура ' + (keyboardOpen ? 'открыта' : 'закрыта');
+}
+
 /* Меряем «спокойные» величины — только когда клавиатуры нет.
    Пока она открыта, эти значения должны оставаться прежними,
    иначе окно начнёт прыгать вслед за пересчётом. */
@@ -47,33 +85,49 @@ function measure() {
 
 /* Клавиатура двигает не высоту, а положение: считаем, на сколько
    поднять окно, чтобы поле ввода встало ровно над ней. */
+let curShift = 0;
+let lastEventAt = 0;
+
 function updateShift() {
   const h = vv ? vv.height : window.innerHeight;
   const top = vv ? vv.offsetTop : 0;
   const shift = Math.min(0, Math.round(top + h - appH));
+  if (shift === curShift) return;
 
+  const now = performance.now();
+  const streaming = (now - lastEventAt) < 240;
+  lastEventAt = now;
+
+  /* Если события идут потоком — значит браузер сам анимирует клавиатуру,
+     и нам надо просто идти за ним кадр в кадр. Плавный переход тут только
+     добавил бы отставание. Он нужен в обратном случае: когда прилетело
+     одно большое изменение разом. */
+  const jump = !streaming && Math.abs(shift - curShift) > 40;
+  document.body.classList.toggle('kb-anim', jump);
+
+  curShift = shift;
   root.style.setProperty('--shift', shift + 'px');
 
   const open = shift < -80;
   if (open !== keyboardOpen) {
     keyboardOpen = open;
     document.body.classList.toggle('kb-open', open);
+    // к низу прокручиваем только на смену состояния, а не каждый кадр:
+    // трогать прокрутку в каждом кадре — это принудительный пересчёт
+    if (stick) requestAnimationFrame(() => toBottom());
   }
+  if (DEBUG) paintDebug(h, top, shift, streaming);
 }
 
-let queued = false;
-function scheduleFit(scrollDown) {
-  if (queued) return;
-  queued = true;
-  requestAnimationFrame(() => {
-    queued = false;
-    updateShift();
-    if (scrollDown && stick) toBottom();
-  });
-}
+/* Считаем сдвиг сразу в обработчике, без ожидания кадра: чтение
+   visualViewport и запись переменной стиля не требуют пересчёта
+   раскладки, зато лишний кадр ожидания — это отставание от клавиатуры
+   на два десятка пикселей, которое и видно как рывок. */
+const scheduleFit = updateShift;
 
 measure();
 updateShift();
+if (DEBUG) paintDebug(vv ? vv.height : innerHeight, vv ? vv.offsetTop : 0, curShift, false);
 
 // Пересчитываем «спокойные» величины только при закрытой клавиатуре.
 // Отличить одно от другого можно так: пока её нет, видимая высота
@@ -81,16 +135,16 @@ updateShift();
 window.addEventListener('resize', () => {
   const h = vv ? vv.height : window.innerHeight;
   if (Math.abs(window.innerHeight - h) < 60) measure();
-  scheduleFit(true);
+  scheduleFit();
 });
 
 window.addEventListener('orientationchange', () => {
-  setTimeout(() => { measure(); scheduleFit(true); }, 320);
+  setTimeout(() => { measure(); scheduleFit(); }, 320);
 });
 
 if (vv) {
-  vv.addEventListener('resize', () => scheduleFit(true));
-  vv.addEventListener('scroll', () => scheduleFit(false));
+  vv.addEventListener('resize', scheduleFit);
+  vv.addEventListener('scroll', scheduleFit);
 }
 
 /* ============================================================
@@ -625,14 +679,13 @@ function refreshSendBtn() {
   $('send').classList.toggle('empty', !input.value.trim());
 }
 
-// Пока фокус в поле, iOS норовит подскроллить страницу под себя —
-// возвращаем её на место и пересчитываем раскладку.
-input.addEventListener('focus', () => {
-  for (const d of [50, 200, 450, 800]) {
-    setTimeout(() => { window.scrollTo(0, 0); scheduleFit(true); }, d);
-  }
-});
-input.addEventListener('blur', () => setTimeout(() => scheduleFit(false), 250));
+/* Раньше здесь страница четыре раза принудительно возвращалась наверх
+   (window.scrollTo) — прямо поверх того, как Safari анимирует клавиатуру.
+   Именно эта борьба и давала рывки. Страница и так закреплена
+   (overflow: hidden), прокручивать нечего, так что просто дожидаемся
+   событий от браузера и один раз проверяемся, когда всё улеглось. */
+input.addEventListener('focus', () => setTimeout(scheduleFit, 350));
+input.addEventListener('blur', () => setTimeout(scheduleFit, 350));
 
 let typingSentAt = 0;
 input.addEventListener('input', () => {

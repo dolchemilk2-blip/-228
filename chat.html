@@ -352,11 +352,19 @@
     /* Ключевое: высота окна чата постоянна, под клавиатуру мы его
        СДВИГАЕМ. Раньше менялась высота — а это пересчёт всей раскладки
        на каждое событие, отсюда и рывки. Сдвиг же считает видеокарта. */
+    /* По умолчанию БЕЗ перехода: пока Safari анимирует клавиатуру,
+       он шлёт события каждый кадр, и окно должно идти ровно за ней.
+       Плавный переход тут только мешал бы — окно вечно догоняло бы
+       клавиатуру и продолжало ехать, когда та уже остановилась.
+       Класс kb-anim включает доводку для одиночного скачка. */
     .topbar,
     .chat-wrap {
       transform: translateY(var(--shift, 0px));
-      transition: transform .34s cubic-bezier(.22, .8, .24, 1);
       will-change: transform;
+    }
+    body.kb-anim .topbar,
+    body.kb-anim .chat-wrap {
+      transition: transform .3s cubic-bezier(.22, .8, .24, 1);
     }
     .topbar { position: fixed; top: 0; left: 0; right: 0; }
     .chat-wrap {
@@ -375,12 +383,10 @@
     .chat-head { transition: opacity .24s ease; }
     body.kb-open .chat-head { opacity: 0; }
 
-    /* Панель эмодзи плавно схлопывается, а не пропадает рывком */
-    .quick {
-      max-height: 62px; overflow: hidden;
-      transition: max-height .3s cubic-bezier(.22,.8,.24,1), opacity .22s, padding .3s;
-    }
-    body.kb-open .quick { max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; }
+    /* Панель эмодзи убирается сразу, без анимации высоты: такая анимация
+       заставляет пересчитывать раскладку каждый кадр — прямо поверх
+       движения клавиатуры, отчего оно и рвётся. */
+    body.kb-open .quick { display: none; }
     .chat-log { padding: 14px 14px 4px; }
     .bubble { max-width: 84%; }
     /* одна прокручиваемая строка вместо двух — экономим высоту под клавиатурой */
