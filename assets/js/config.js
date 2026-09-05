@@ -31,11 +31,11 @@ window.SITE_CONFIG = {
      (данные только в вашем браузере). Как включить общий чат
      на двоих — читайте SETUP.md, это минут десять.               */
   firebase: {
-    apiKey: "",
-    authDomain: "",
-    databaseURL: "",
-    projectId: "",
-    appId: ""
+    apiKey:      "AIzaSyCy3p5Af12PnGAu0Wwp1chsduDUJjFRt9M",
+    authDomain:  "my-lybimost.firebaseapp.com",
+    databaseURL: "https://my-lybimost-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId:   "my-lybimost",
+    appId:       "1:476896177509:web:0893a32e8299cd4daf058c"
   },
   // Секретное слово — «адрес» вашей общей комнаты.
   // Латиницей, без пробелов. Файл один на весь сайт, так что
