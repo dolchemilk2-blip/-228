@@ -13,6 +13,7 @@
   --violet-soft: #d9a6ff;
   --gold: #ffd479;
   --mint: #6ee7c7;
+  --blue: #5aa9ff;
 
   --text: #f6ecff;
   --text-dim: #c9b3e6;
@@ -344,6 +345,14 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
   width: min(430px, 100%);
   text-align: center;
   animation: pop .35s cubic-bezier(.2, .9, .3, 1.25);
+}
+
+/* Карточки внутри модалок — непрозрачные. Полупрозрачное «стекло» поверх
+   затемнённой страницы читается плохо, а вложенный backdrop-filter
+   срабатывает не во всех браузерах. */
+.modal-backdrop .card {
+  background: linear-gradient(180deg, #241041, #150629);
+  border-color: rgba(255, 255, 255, .16);
 }
 @keyframes pop { from { opacity: 0; transform: translateY(22px) scale(.95); } }
 
