@@ -124,9 +124,9 @@ cloud.watch('messages', (data) => {
 let lastSeenText = '—';
 cloud.watch('presence', (data) => {
   const info = (data || {})[App.partnerKey()];
-  if (!info) lastSeenText = 'ещё не заходил(а) сюда';
+  if (!info) lastSeenText = 'ещё не заходил сюда';
   else if (info.online) lastSeenText = '● сейчас на сайте';
-  else lastSeenText = 'был(а) ' + App.formatWhen(info.at);
+  else lastSeenText = 'был ' + App.formatWhen(info.at);
   if (!typingVisible) $('head-sub').textContent = lastSeenText;
 });
 
@@ -178,7 +178,7 @@ $('btn-hug').addEventListener('click', async (e) => {
   const r = e.currentTarget.getBoundingClientRect();
   App.burst(r.left + r.width / 2, r.top + r.height / 2, ['🫂', '💜', '✨']);
   await cloud.push('pings', { by: meKey, kind: 'hug', at: Date.now() });
-  App.toast('Обнял(а) 🫂');
+  App.toast('Обнял 🫂');
 });
 
 input.focus();

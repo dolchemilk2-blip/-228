@@ -124,11 +124,11 @@ cloud.watch('presence', (data) => {
   ['a', 'b'].forEach((key) => {
     const info = data[key];
     const el = $('pres-' + key + '-status');
-    if (!info) { el.textContent = 'ещё ни разу не заходил(а)'; return; }
+    if (!info) { el.textContent = 'ещё ни разу не заходил'; return; }
     if (info.online) {
       el.innerHTML = '<span style="color:var(--mint);font-weight:700">● сейчас на сайте</span>';
     } else {
-      el.textContent = 'был(а) ' + App.formatWhen(info.at);
+      el.textContent = 'был ' + App.formatWhen(info.at);
     }
   });
 });

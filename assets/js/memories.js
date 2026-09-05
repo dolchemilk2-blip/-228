@@ -81,7 +81,7 @@ function paintWishes() {
   box.innerHTML = wishes.map((text, i) => {
     const st = wishState['w' + i];
     const done = Boolean(st && st.done);
-    const by = done && st.by ? 'отметил(а) ' + App.person(st.by).name : '';
+    const by = done && st.by ? 'отметил ' + App.person(st.by).name : '';
     return '<div class="wish ' + (done ? 'done' : '') + '" data-i="' + i + '">' +
       '<div class="box">' + (done ? '✓' : '') + '</div>' +
       '<div class="label">' + App.escapeHtml(text) + '</div>' +
