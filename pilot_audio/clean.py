@@ -44,6 +44,9 @@ ENGINES = {
                    "about": "шум тракта и фон, на эхо не влияет"},
     "speech":     {"kind": "clearvoice", "model": "MossFormer2_SE_48K",
                    "about": "речевая модель 48 кГц: шум, гул, часть комнаты; быстрая"},
+    "restore":    {"kind": "resemble", "model": "resemble-enhance",
+                   "about": "пересобирает речь заново (flow matching), 44.1 кГц: сильнее всех "
+                            "давит комнату, но меняет тембр и медленный — 4x от длины записи"},
 }
 DEFAULT_CHAIN = "deecho,speech"
 STEM_OK = re.compile(r"\(\s*(no[_ ]?reverb|noreverb|no[_ ]?echo|noecho|no[_ ]?noise|nonoise|"
@@ -141,9 +144,37 @@ def run_clearvoice(model, inp, workdir):
         raise RuntimeError(f"{model}: файл не создан")
     return out
 
+def run_resemble(model, inp, workdir, nfe=32, lambd=0.9, tau=0.5):
+    """
+    resemble-enhance. Модель качается сама, но через git-lfs — если его нет, положите
+    чекпойнт руками (см. CLEAN.md) и укажите путь в переменной среды RESEMBLE_RUN_DIR.
+    Модель пересобирает сигнал и может сдвинуть его на сотню миллисекунд — сдвиг снимается
+    дальше по коду, как и у остальных движков.
+    """
+    py = python_for("resemble_enhance")
+    if not py:
+        raise RuntimeError("не найден resemble-enhance (pip install resemble-enhance)")
+    out = workdir / "re.wav"
+    code = ("import os, sys, torch, torchaudio\n"
+            "from pathlib import Path\n"
+            "from resemble_enhance.enhancer.inference import enhance\n"
+            "rd = os.environ.get('RESEMBLE_RUN_DIR')\n"
+            "w, sr = torchaudio.load(sys.argv[1])\n"
+            "y, nsr = enhance(w.mean(0), sr, 'cpu', nfe=int(sys.argv[3]), solver='midpoint',\n"
+            "                 lambd=float(sys.argv[4]), tau=float(sys.argv[5]),\n"
+            "                 run_dir=Path(rd) if rd else None)\n"
+            "torchaudio.save(sys.argv[2], y.unsqueeze(0).cpu(), nsr)\n")
+    subprocess.run([py, "-c", code, str(inp), str(out), str(nfe), str(lambd), str(tau)],
+                   check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if not out.exists():
+        raise RuntimeError(f"{model}: файл не создан")
+    return out
+
 def engine_available(name):
     kind = ENGINES[name]["kind"]
-    return bool(separator_cmd()) if kind == "separator" else bool(python_for("clearvoice"))
+    if kind == "separator": return bool(separator_cmd())
+    if kind == "resemble": return bool(python_for("resemble_enhance"))
+    return bool(python_for("clearvoice"))
 
 # ------------------------------------------------------------------ доводка
 def highpass(y, fc=65.0, sr=SR):
@@ -359,6 +390,8 @@ def clean_file(path, chain, args, report):
             print(f"  {name} ({eng['model']}) …", end="", flush=True)
             if eng["kind"] == "separator":
                 res = run_separator(eng["model"], cur, step_dir)
+            elif eng["kind"] == "resemble":
+                res = run_resemble(eng["model"], cur, step_dir, args.nfe)
             else:
                 res = run_clearvoice(eng["model"], cur, step_dir)
             cur = res
@@ -454,6 +487,8 @@ def main():
     ap.add_argument("--hpf", type=float, default=65.0, help="частота среза низов, Гц")
     ap.add_argument("--tone", type=float, default=1.0,
                     help="снятие гулкости в низах: 0 — не трогать, 1 — до ровной речевой кривой")
+    ap.add_argument("--nfe", type=int, default=32,
+                    help="шагов у движка restore: меньше — быстрее и грубее (8-64)")
     ap.add_argument("--dry", type=float, default=0.0,
                     help="дожать хвосты после слогов (объём комнаты): 0.3-0.6 обычно хватает")
     ap.add_argument("--match", default=None, metavar="ФАЙЛ",
@@ -473,6 +508,7 @@ def main():
             print(f"  {k:10s} {v['model']:30s} [{ok}]\n             {v['about']}")
         print(f"\nпо умолчанию: --chain {DEFAULT_CHAIN}")
         print("ставится так:  pip install \"audio-separator[cpu]\"   и   pip install clearvoice")
+        print("движок restore:  pip install resemble-enhance  (см. CLEAN.md про чекпойнт)")
         return
 
     if not have_ffmpeg(): sys.exit("нужен ffmpeg")
@@ -489,9 +525,11 @@ def main():
               (",".join(chain) if chain else "(пусто)"))
         missing = [] if chain else missing
     if missing or (not chain and args.chain != "none"):
-        sys.exit("нужно поставить: " + " и ".join(sorted({
-            "pip install \"audio-separator[cpu]\"" if ENGINES[c]["kind"] == "separator"
-            else "pip install clearvoice" for c in (missing or chain)})))
+        need = {"separator": "pip install \"audio-separator[cpu]\"",
+                "clearvoice": "pip install clearvoice",
+                "resemble": "pip install resemble-enhance"}
+        sys.exit("нужно поставить: "
+                 + " и ".join(sorted({need[ENGINES[c]["kind"]] for c in (missing or chain)})))
 
     if args.files:
         files = [Path(f) for f in args.files]
