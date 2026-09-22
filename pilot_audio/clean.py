@@ -258,6 +258,78 @@ def deboom(y, strength=1.0, max_db=8.0, sr=SR):
     if not sos: return y, {}
     return sosfiltfilt(np.array(sos), y).astype(np.float32), cuts
 
+def dry_up(y, amount=0.0, sr=SR, max_db=12.0):
+    """
+    Дожимает спад после каждого слога — то, что и слышно как «объём комнаты»: прямой звук
+    остаётся, а расползающийся хвост уходит. Пики не трогаются, работает только вниз.
+    """
+    if amount <= 0: return y, 0.0
+    h = int(0.005 * sr)                                   # шаг огибающей, 5 мс
+    n = len(y) // h
+    if n < 10: return y, 0.0
+    env = 10 * np.log10(np.mean(y[:n * h].reshape(n, h) ** 2, axis=1) + 1e-14)
+    ref = env.copy()                                      # быстрый вверх, медленный вниз
+    a_rl = np.exp(-h / (0.35 * sr))
+    v = env[0]
+    for i, t in enumerate(env):
+        v = t if t > v else t + a_rl * (v - t)
+        ref[i] = v
+    g = np.clip(amount * (env - ref), -max_db, 0.0)       # ниже локального пика — тише
+    a_at = np.exp(-h / (0.008 * sr)); a_rl2 = np.exp(-h / (0.05 * sr))
+    sm = np.empty_like(g); v = g[0]
+    for i, t in enumerate(g):
+        c = a_rl2 if t > v else a_at
+        v = t + c * (v - t); sm[i] = v
+    lin = 10 ** (sm / 20)
+    curve = np.interp(np.arange(len(y)), np.arange(n) * h + h // 2, lin,
+                      left=lin[0], right=lin[-1]).astype(np.float32)
+    return (y * curve).astype(np.float32), float(-sm.mean())
+
+# ---------------------------------------------------------------- подгон под другой голос
+THIRDS = [50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600,
+          2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000]
+
+def ltas(y, sr=SR, w=1920, h=480):
+    """Спектр речи по третьоктавам, дБ. Нормирован по речевому ядру 300-3000 Гц."""
+    k = max(0, (len(y) - w) // h)
+    if k < 8: return {}
+    f_ = y[np.arange(w)[None, :] + h * np.arange(k)[:, None]]
+    e = 10 * np.log10((f_ ** 2).mean(1) + 1e-14)
+    sel = f_[e > np.percentile(e, 90) - 12]
+    if len(sel) < 8: return {}
+    S = (np.abs(np.fft.rfft(sel * np.hanning(w))) ** 2).mean(0)
+    f = np.fft.rfftfreq(w, 1 / sr)
+    out = {}
+    for fc in THIRDS:
+        b = (f >= fc / 2 ** (1 / 6)) & (f < fc * 2 ** (1 / 6))
+        out[fc] = 10 * np.log10(S[b].sum() + 1e-20) if b.any() else -200.0
+    core = [v for fc, v in out.items() if 300 <= fc <= 3000 and v > -150]
+    anchor = float(np.mean(core)) if core else 0.0
+    return {fc: v - anchor for fc, v in out.items()}
+
+def match_tone(y, ref_path, strength=1.0, max_db=18.0, sr=SR):
+    """
+    Подгоняет тембр под другую запись: меряет спектр речи у обеих, разницу по третьоктавам
+    приводит к нулю линейно-фазовым фильтром. Задержка фильтра снимается, длина не меняется.
+    """
+    try:
+        from scipy.signal import firwin2, fftconvolve
+    except Exception:
+        print("  (нет scipy — подгон тембра пропущен)")
+        return y, {}
+    a, b = ltas(y, sr), ltas(decode(ref_path, sr), sr)
+    if not a or not b: return y, {}
+    fcs = [fc for fc in THIRDS if fc < sr / 2 * 0.92 and a[fc] > -150 and b[fc] > -150]
+    d = np.array([float(np.clip((b[fc] - a[fc]) * strength, -max_db, max_db)) for fc in fcs])
+    d = np.convolve(np.pad(d, 1, mode="edge"), [0.25, 0.5, 0.25], "same")[1:-1]   # сгладить
+    d -= np.mean([v for fc, v in zip(fcs, d) if 300 <= fc <= 3000] or [0.0])      # без общего усиления
+    freq = [0.0] + [fc / (sr / 2) for fc in fcs] + [1.0]
+    gain = [10 ** (d[0] / 20)] + list(10 ** (d / 20)) + [10 ** (d[-1] / 20)]
+    taps = 4097
+    h = firwin2(taps, freq, gain, window="hann")
+    out = fftconvolve(y, h)[taps // 2: taps // 2 + len(y)]                        # снимаем задержку
+    return out.astype(np.float32), {fc: round(float(v), 1) for fc, v in zip(fcs, d)}
+
 def normalize(y, target=TARGET_LUFS, peak_ceiling_db=-1.5):
     L = lufs(y)
     g = 10 ** ((target - L) / 20) if np.isfinite(L) else 1.0
@@ -317,8 +389,16 @@ def clean_file(path, chain, args, report):
         y = highpass(y, args.hpf)
         y, cut = dehum(y)
         if cut: info["вырезан гул, Гц"] = cut
-        y, cuts = deboom(y, args.tone)
-        if cuts: info["снято гулкости, дБ"] = cuts
+        if args.match:
+            y, m = match_tone(y, args.match, args.match_strength)
+            if m:
+                info["подгон под"] = Path(args.match).name
+                info["подгон, дБ"] = m
+        else:
+            y, cuts = deboom(y, args.tone)
+            if cuts: info["снято гулкости, дБ"] = cuts
+        y, pulled = dry_up(y, args.dry)
+        if pulled: info["хвосты придавлены в среднем на, дБ"] = round(pulled, 1)
         y, quiet = gate_pauses(y, depth_db=args.gate)
         info["пауз в файле, %"] = round(quiet, 1)
         info["спектр после"] = {k: round(v, 1) for k, v in octave_speech_db(y).items()}
@@ -366,13 +446,20 @@ def make_sample(pairs, seconds, name="образец_до_после.mp3"):
 def main():
     ap = argparse.ArgumentParser(description="чистка голоса: эхо комнаты, гул, шум")
     ap.add_argument("files", nargs="*", help="файлы (по умолчанию — всё из sources/)")
-    ap.add_argument("--chain", default=DEFAULT_CHAIN, help=f"движки через запятую (по умолчанию {DEFAULT_CHAIN})")
+    ap.add_argument("--chain", default=DEFAULT_CHAIN,
+                    help=f"движки через запятую, none — только доводка (по умолчанию {DEFAULT_CHAIN})")
     ap.add_argument("--list", action="store_true", help="показать движки и выйти")
     ap.add_argument("--lufs", type=float, default=TARGET_LUFS, help="целевая громкость файла")
     ap.add_argument("--gate", type=float, default=14.0, help="на сколько дБ дожимать паузы (0 — не трогать)")
     ap.add_argument("--hpf", type=float, default=65.0, help="частота среза низов, Гц")
     ap.add_argument("--tone", type=float, default=1.0,
                     help="снятие гулкости в низах: 0 — не трогать, 1 — до ровной речевой кривой")
+    ap.add_argument("--dry", type=float, default=0.0,
+                    help="дожать хвосты после слогов (объём комнаты): 0.3-0.6 обычно хватает")
+    ap.add_argument("--match", default=None, metavar="ФАЙЛ",
+                    help="подогнать тембр под другую запись (вместо --tone)")
+    ap.add_argument("--match-strength", type=float, default=1.0,
+                    help="насколько подгонять: 1 — полностью, 0.6 — на две трети")
     ap.add_argument("--no-polish", action="store_true", help="без фильтров и работы с паузами")
     ap.add_argument("--sample", type=float, default=0, help="сделать образец до/после на N секунд")
     ap.add_argument("--keep-steps", action="store_true", help="сохранить промежуточные файлы в out/")
@@ -389,16 +476,19 @@ def main():
         return
 
     if not have_ffmpeg(): sys.exit("нужен ffmpeg")
-    chain = [c.strip() for c in args.chain.split(",") if c.strip()]
+    chain = [c.strip() for c in args.chain.split(",") if c.strip() and c.strip() != "none"]
     for c in chain:
         if c not in ENGINES: sys.exit(f"неизвестный движок {c}; см. python clean.py --list")
+    if not chain and args.chain.strip() in ("none", ""):     # только доводка, без моделей
+        print("без моделей: только фильтры, тембр и уровень")
+        args.chain = "none"
     missing = [c for c in chain if not engine_available(c)]
     if missing and args.chain == DEFAULT_CHAIN:      # цепочку не задавали руками — работаем тем, что есть
         chain = [c for c in chain if c not in missing]
         print("не установлено: " + ", ".join(missing) + " — работаю цепочкой " +
               (",".join(chain) if chain else "(пусто)"))
         missing = [] if chain else missing
-    if missing or not chain:
+    if missing or (not chain and args.chain != "none"):
         sys.exit("нужно поставить: " + " и ".join(sorted({
             "pip install \"audio-separator[cpu]\"" if ENGINES[c]["kind"] == "separator"
             else "pip install clearvoice" for c in (missing or chain)})))
@@ -430,6 +520,9 @@ def main():
         txt.append(f"  фон {r['фон до, дБ']} → {r['фон после, дБ']} дБ, "
                    f"речь над фоном стала чище на {r['фон тише на, дБ']:+} дБ")
         if r.get("вырезан гул, Гц"): txt.append(f"  вырезан гул: {r['вырезан гул, Гц']} Гц")
+        if r.get("подгон под"):
+            txt.append(f"  тембр подогнан под {r['подгон под']}:")
+            txt.append("   " + "  ".join(f"{f}:{v:+.0f}" for f, v in r["подгон, дБ"].items()))
         if r.get("снято гулкости, дБ"):
             txt.append("  снято гулкости: " + ", ".join(f"{f} Гц {d:+g} дБ"
                                                         for f, d in r["снято гулкости, дБ"].items()))
