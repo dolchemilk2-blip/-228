@@ -216,6 +216,48 @@ def gate_pauses(y, sr=SR, depth_db=14.0, margin_db=9.0, attack=0.006, release=0.
                     left=sm[0], right=sm[-1]).astype(np.float32)
     return (y * env).astype(np.float32), float(100.0 * (1.0 - held.mean()))
 
+# Ориентир для низа: спектр хорошо записанной речи по октавным полосам относительно 1 кГц.
+# Выше 500 Гц тембр не трогаем — там начинается характер голоса, а не комната.
+TONE_REF = {63: 0.5, 125: 8.0, 250: 11.0, 500: 10.5}
+
+def octave_speech_db(y, sr=SR):
+    """Уровни речи по октавным полосам относительно 1 кГц."""
+    fr = frames(y)
+    e = 10 * np.log10((fr ** 2).mean(1) + 1e-14)
+    fr = fr[e > np.percentile(e, 90) - 12]
+    if len(fr) < 8: return {}
+    S = (np.abs(np.fft.rfft(fr * np.hanning(fr.shape[1]))) ** 2).mean(0)
+    f = np.fft.rfftfreq(fr.shape[1], 1 / sr)
+    band = lambda fc: 10 * np.log10(S[(f >= fc / 2 ** 0.5) & (f < fc * 2 ** 0.5)].sum() + 1e-20)
+    ref = band(1000)
+    return {fc: band(fc) - ref for fc in list(TONE_REF) + [1000, 2000, 4000, 8000]}
+
+def deboom(y, strength=1.0, max_db=8.0, sr=SR):
+    """
+    Снимает гулкость: где низ торчит над спектром нормальной речи, там и режем.
+    Только вниз и только до 500 Гц — голос от этого не тускнеет, уходит именно «бочка».
+    """
+    if strength <= 0: return y, {}
+    try:
+        from scipy.signal import sosfilt, sosfiltfilt
+    except Exception:
+        return y, {}
+    got = octave_speech_db(y, sr)
+    if not got: return y, {}
+    cuts, sos = {}, []
+    for fc, ref in TONE_REF.items():
+        d = min(0.0, ref - got.get(fc, ref)) * strength
+        d = max(d, -max_db)
+        if d > -0.5: continue
+        cuts[fc] = round(d, 1)
+        # sosfiltfilt проходит фильтр дважды, поэтому проектируем на половину глубины
+        A = 10 ** (d / 2 / 40); w0 = 2 * np.pi * fc / sr; a = np.sin(w0) / (2 * 1.0)  # пик, Q=1
+        b = [1 + a * A, -2 * np.cos(w0), 1 - a * A]
+        aa = [1 + a / A, -2 * np.cos(w0), 1 - a / A]
+        sos.append(np.array(b + aa) / aa[0])
+    if not sos: return y, {}
+    return sosfiltfilt(np.array(sos), y).astype(np.float32), cuts
+
 def normalize(y, target=TARGET_LUFS, peak_ceiling_db=-1.5):
     L = lufs(y)
     g = 10 ** ((target - L) / 20) if np.isfinite(L) else 1.0
@@ -271,11 +313,15 @@ def clean_file(path, chain, args, report):
 
     # --- доводка
     if not args.no_polish:
+        info["спектр до"] = {k: round(v, 1) for k, v in octave_speech_db(orig).items()}
         y = highpass(y, args.hpf)
         y, cut = dehum(y)
         if cut: info["вырезан гул, Гц"] = cut
+        y, cuts = deboom(y, args.tone)
+        if cuts: info["снято гулкости, дБ"] = cuts
         y, quiet = gate_pauses(y, depth_db=args.gate)
         info["пауз в файле, %"] = round(quiet, 1)
+        info["спектр после"] = {k: round(v, 1) for k, v in octave_speech_db(y).items()}
     y, g = normalize(y, args.lufs)
     info["поправка уровня, дБ"] = round(g, 1)
     info["громкость после, LUFS"] = round(lufs(y), 1)
@@ -325,6 +371,8 @@ def main():
     ap.add_argument("--lufs", type=float, default=TARGET_LUFS, help="целевая громкость файла")
     ap.add_argument("--gate", type=float, default=14.0, help="на сколько дБ дожимать паузы (0 — не трогать)")
     ap.add_argument("--hpf", type=float, default=65.0, help="частота среза низов, Гц")
+    ap.add_argument("--tone", type=float, default=1.0,
+                    help="снятие гулкости в низах: 0 — не трогать, 1 — до ровной речевой кривой")
     ap.add_argument("--no-polish", action="store_true", help="без фильтров и работы с паузами")
     ap.add_argument("--sample", type=float, default=0, help="сделать образец до/после на N секунд")
     ap.add_argument("--keep-steps", action="store_true", help="сохранить промежуточные файлы в out/")
@@ -382,6 +430,13 @@ def main():
         txt.append(f"  фон {r['фон до, дБ']} → {r['фон после, дБ']} дБ, "
                    f"речь над фоном стала чище на {r['фон тише на, дБ']:+} дБ")
         if r.get("вырезан гул, Гц"): txt.append(f"  вырезан гул: {r['вырезан гул, Гц']} Гц")
+        if r.get("снято гулкости, дБ"):
+            txt.append("  снято гулкости: " + ", ".join(f"{f} Гц {d:+g} дБ"
+                                                        for f, d in r["снято гулкости, дБ"].items()))
+        if r.get("спектр до"):
+            txt.append("  спектр речи относительно 1 кГц (Гц: было → стало)")
+            txt.append("   " + "  ".join(f"{f}: {r['спектр до'][f]:+.1f} → {r['спектр после'][f]:+.1f}"
+                                         for f in sorted(r["спектр до"])))
         txt.append(f"  THR для build.py: {r['порог THR для build.py']}")
         txt.append("")
     (OUT / "чистка.txt").write_text("\n".join(txt), encoding="utf-8")
