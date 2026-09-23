@@ -2,19 +2,18 @@
 """
 Сборка аудиопилота по сценарию из отдельных записей актёров.
 
-    python build.py                 # берёт очищенные исходники, если они есть
-    python build.py --raw           # только оригиналы из sources/
-    python build.py --level 0       # не выравнивать реплики между собой
+    python build.py                 # как обычно
+    python build.py --level 0.5     # выравнивать реплики слабее (0 — только общий уровень голоса)
     python build.py --wav           # ещё и мастер без сжатия
+    python build.py --clean         # взять исходники, очищенные clean.py (sources/чисто/)
 
 Результат в out/:
     пилот_сведение.mp3   — готовая дорожка
     пилот_паузы.txt      — где стоят паузы под незаписанные реплики (с номерами)
-    разметка.csv         — каждая реплика: откуда взята, уровень, поправка, где стоит
-    громкость.txt        — что выровнялось и какие реплики поправлены сильнее всего
+    разметка.csv         — каждая реплика: откуда взята, её громкость, поправка, где стоит
+    громкость.txt        — насколько выровнялись голоса и какие реплики поправлены сильнее всего
 
-Чистка голоса (эхо комнаты, гул, шум) — отдельный шаг: python clean.py, см. CLEAN.md.
-Остальные подробности — в CLAUDE.md.
+Подробности — в CLAUDE.md.
 """
 import argparse, csv, json, re, subprocess, sys
 from pathlib import Path
@@ -31,31 +30,48 @@ SOURCES = {                       # файлы лежат в sources/
     "E": "энер.wav",
     "X": "энер_правки_и_последняя_сцена.wav",
     "K": "кэфи.mp3",
-    "F": "флур-enhanced-v2.wav",  # версия после Adobe Enhance; тайминги 1:1 с исходным флур.m4a
+    "F": "untitled.mp3",          # Флур: версия из FL Studio (на основе Adobe Enhance)
 }
+# Разметка MAP сделана по исходной записи флур.m4a. Если обработанная версия сдвинута
+# относительно неё, здесь указывается задержка в секундах (она отрезается от начала файла).
+# untitled.mp3 опаздывает на 108.4 мс (задержка экспорта FL Studio); флур-enhanced-v2.wav — 0.
+OFFSETS = {"F": 0.1084}
 CHAR = {"E": "ENER", "X": "ENER", "K": "KEFI", "F": "FLUR"}
-# порог (dBFS) для уточнения границ реплик по огибающей громкости.
-# для необработанного флур.m4a использовался -56
-THR = {"E": -58.0, "X": -58.0, "K": -60.0, "F": -66.0}
+# порог (dBFS) для уточнения границ реплик по огибающей громкости:
+# примерно на 30 дБ ниже типичной громкости речи в файле.
+# для флур.m4a был -56, для флур-enhanced-v2.wav -66, для untitled.mp3 (тише на 10 дБ) -72
+THR = {"E": -58.0, "X": -58.0, "K": -60.0, "F": -72.0}
 
 SCRIPT = ROOT / "script" / "пилот__2_.txt"
 SRC_DIR = ROOT / "sources"
-CLEAN_DIR = SRC_DIR / "чисто"          # сюда clean.py кладёт очищенные исходники
+CLEAN_DIR = SRC_DIR / "чисто"          # очищенные clean.py исходники (только с ключом --clean)
 EXTRA_DIR = ROOT / "extra"
 OUT = ROOT / "out"
 
 CHAR_LUFS = -20.0       # громкость каждого голоса до мастеринга
-MASTER_LUFS = -16.0     # итоговая громкость
-MP3_BITRATE = "160k"
+MASTER_LUFS = -18.0     # итоговая громкость (при -16 лимитеру пришлось бы сильно давить пики Флура)
+MP3_BITRATE = "256k"
+# Общий компрессор на миксе. Выключен с v5: он частично отменял обработку Флура из FL Studio
+# (там экспандер приглушает хвосты комнаты, а компрессор их снова поднимал) и чуть менял тембр.
+USE_COMPRESSOR = False
 
-# Выравнивание отдельных реплик внутри голоса: чтобы одна не перекрикивала другую,
-# но и не превратилась в ровный бубнёж. 0 — ничего не трогать, 1 — все реплики в один уровень.
-LEVEL_STRENGTH = 0.6
-LEVEL_MAX_UP = 6.0      # насколько максимум поднимать тихую реплику, дБ
-LEVEL_MAX_DOWN = 8.0    # насколько максимум придавливать громкую, дБ
-LEVEL_FILE = "громкость.txt"   # ручные поправки: "242 -3" или "Кэфи -1" (лежит в extra/)
-QUIET_RE = re.compile(r"шёпот|шепот|тихо", re.I)      # ремарки у имени: играть тихо
-LOUD_RE = re.compile(r"громк|крич|орёт|орет|вопит", re.I)
+# Выравнивание громкости реплик — вместо компрессора. Каждая реплика получает ОДНО постоянное
+# усиление на всю длину (как ручка громкости на клипе), поэтому звук внутри реплики не меняется:
+# ни тембр, ни хвосты комнаты, ни соотношение громкого и тихого слова.
+VOICE_MAX = 6.0         # голоса целиком сводятся к одному уровню, но не дальше чем на ±6 дБ
+LEVEL_STRENGTH = 0.75   # реплики к уровню своего голоса: 0 — не трогать, 1 — все под одну гребёнку
+LEVEL_MAX_UP = 6.0      # тихую реплику поднимаем максимум на 6 дБ
+LEVEL_MAX_DOWN = 8.0    # громкую опускаем максимум на 8 дБ
+LEVEL_FILE = "громкость.txt"   # ручные поправки в extra/: "242 -3" или "Кэфи -1"
+QUIET_RE = re.compile(r"шёпот|шепот|тихо", re.I)       # ремарка у имени: шёпот не тянем до крика
+LOUD_RE = re.compile(r"громк|крич|орёт|орет|вопит", re.I)  # а крик не глушим до разговора
+# реплика целиком из ремарки: «— (вздох)», «[смех]» — это не речь, её двигаем осторожно
+NONVERBAL_RE = re.compile(r"^[\s—–-]*[\[(][^\])]*[\])][\s.,…!?]*$")
+
+def is_shout(text):
+    """Крик, написанный капсом: «ЭТО НЕ ПРИЧИНА!»."""
+    letters = [c for c in re.sub(r"\([^)]*\)", "", text) if c.isalpha()]
+    return len(letters) >= 4 and sum(c.isupper() for c in letters) >= 0.6 * len(letters)
 AUDIO_EXT = {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".opus", ".aif", ".aiff"}
 
 NAME = {"KEFI": "Кэфи", "ENER": "Энер", "FLUR": "Флур", "ORG": "Организатор",
@@ -70,7 +86,7 @@ INNER = {"голос в голове кэфи": "KEFI", "голос в голо�
 LABEL_RE = re.compile(r"^(?P<name>[А-Яа-яЁё ]+?)\s*(\((?P<note>[^)]*)\))?\s*:?\s*$")
 
 def classify_label(s):
-    """Кто говорит и что написано в скобках рядом с именем («шёпотом», «слишком громко»)."""
+    """Кто говорит и что написано в скобках у имени («шёпотом», «слишком громко»)."""
     low = s.lower().rstrip(":").strip()
     if low in INNER:
         return INNER[low], ""
@@ -209,13 +225,20 @@ CONSUMED_DIR = {7, 9, 10, 11, 12, 19}
 
 
 # ------------------------------------------------------------------ аудио-утилиты
-def decode(path):
-    # берём первый канал (у стерео-исходников каналы одинаковые; простое сведение в моно
-    # у ffmpeg поднимает уровень на 3 дБ и сбивает пороги THR)
-    cmd = ["ffmpeg", "-v", "error", "-i", str(path), "-af", "pan=mono|c0=c0",
-           "-f", "f32le", "-ar", str(SR), "-"]
+def channels(path):
+    r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries",
+                        "stream=channels", "-of", "csv=p=0", str(path)], capture_output=True, text=True)
+    try: return int(r.stdout.strip().split()[0])
+    except Exception: return 1
+
+def decode(path, offset=0.0):
+    # моно: для стерео — среднее каналов (без повышения уровня), для моно — как есть
+    pan = "pan=mono|c0=0.5*c0+0.5*c1" if channels(path) >= 2 else "pan=mono|c0=c0"
+    cmd = ["ffmpeg", "-v", "error", "-i", str(path), "-af", pan, "-f", "f32le", "-ar", str(SR), "-"]
     raw = subprocess.run(cmd, check=True, capture_output=True).stdout
-    return np.frombuffer(raw, dtype=np.float32).copy()
+    x = np.frombuffer(raw, dtype=np.float32).copy()
+    n = int(round(offset * SR))
+    return x[n:] if n >= 0 else np.concatenate([np.zeros(-n, np.float32), x])
 
 HOP = 0.01
 
@@ -226,22 +249,41 @@ def envelope(x):
     st = np.arange(n) * h
     return 10 * np.log10((cs[st + w] - cs[st]) / w + 1e-14)
 
-def auto_thr(env):
-    """Порог для refine() по самому файлу: ниже речи, но заведомо выше фона."""
-    sp = float(np.percentile(env, 90))                       # типичный уровень речи
-    low = env[env < np.percentile(env, 30)]
-    fl = float(np.median(low)) if len(low) else sp - 40.0    # фон
-    return round(min(sp - 12.0, max(sp - 25.0, fl + 6.0)), 1)
+# K-фильтр из ITU-R BS.1770 для 48 кГц: так меряют громкость «на слух» (LUFS)
+_KB1 = [1.53512485958697, -2.69169618940638, 1.19839281085285]
+_KA1 = [1.0, -1.69065929318241, 0.73248077421585]
+_KB2 = [1.0, -2.0, 1.0]
+_KA2 = [1.0, -1.99004745483398, 0.99007225036621]
 
-def level_db(y):
-    """Насколько громко звучит реплика: уровень её речевой части, дБ."""
-    w = int(0.02 * SR)
-    n = len(y) // w
-    if n < 2:
-        return 20 * np.log10(np.sqrt(np.mean(y ** 2)) + 1e-9)
-    e = 10 * np.log10(np.mean(y[:n * w].reshape(n, w) ** 2, axis=1) + 1e-14)
-    sel = e > e.max() - 25
-    return float(np.percentile(e[sel], 60)) if sel.any() else float(e.max())
+def line_loudness(y):
+    """
+    Громкость реплики на слух, LUFS. Как у BS.1770 (K-фильтр, абсолютный порог −70 и
+    относительный −10 LU), только окна по 100 мс вместо 400 — реплики бывают короче секунды.
+    Паузы и цифровая тишина внутри реплики в счёт не идут.
+    """
+    from scipy.signal import lfilter
+    z = lfilter(_KB2, _KA2, lfilter(_KB1, _KA1, y.astype(np.float64)))
+    w, h = int(0.1 * SR), int(0.025 * SR)
+    if len(z) < w:
+        return float(10 * np.log10(np.mean(z ** 2) + 1e-14) - 0.691)
+    n = 1 + (len(z) - w) // h
+    cs = np.concatenate([[0.0], np.cumsum(z ** 2)])
+    st = np.arange(n) * h
+    p = (cs[st + w] - cs[st]) / w
+    lk = 10 * np.log10(p + 1e-14) - 0.691
+    p = p[lk > -70.0]
+    if not len(p):
+        return -70.0
+    rel = 10 * np.log10(p.mean()) - 0.691 - 10.0
+    p = p[10 * np.log10(p) - 0.691 > rel]
+    return float(10 * np.log10(p.mean()) - 0.691)
+
+def auto_thr(env):
+    """Порог для refine() по самому файлу: ниже речи, но заведомо выше фона (для --clean)."""
+    sp = float(np.percentile(env, 90))
+    low = env[env < np.percentile(env, 30)]
+    fl = float(np.median(low)) if len(low) else sp - 40.0
+    return round(min(sp - 12.0, max(sp - 25.0, fl + 6.0)), 1)
 
 def read_level_file(path):
     """extra/громкость.txt: ручные поправки по номеру реплики или по имени персонажа."""
@@ -251,17 +293,14 @@ def read_level_file(path):
     by_name = {v.lower(): k for k, v in NAME.items()}
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.split("#", 1)[0].strip()
-        if not line:
-            continue
         parts = line.replace("\t", " ").rsplit(None, 1)
         if len(parts) != 2:
             continue
         key, val = parts[0].strip(), parts[1].replace(",", ".").replace("дБ", "").strip()
         try:
-            db = float(val)
+            fixes[by_name.get(key.lower(), key)] = float(val)
         except ValueError:
             continue
-        fixes[by_name.get(key.lower(), key)] = db
     return fixes
 
 def refine(env, thr, a, b, total):
@@ -332,46 +371,31 @@ def ts(t):
     return f"{int(t // 60):02d}:{t % 60:04.1f}"
 
 # ------------------------------------------------------------------ сборка
-def resolve_sources(use_clean):
-    """Для каждого источника: очищенная версия из sources/чисто/, иначе оригинал."""
-    paths, cleaned = {}, {}
-    for k, f in SOURCES.items():
-        clean = CLEAN_DIR / (Path(f).stem + ".wav")
-        if use_clean and clean.exists():
-            paths[k], cleaned[k] = clean, True
-        else:
-            paths[k], cleaned[k] = SRC_DIR / f, False
-    return paths, cleaned
-
 def main():
     ap = argparse.ArgumentParser(description="сборка пилота по сценарию")
-    ap.add_argument("--raw", action="store_true", help="игнорировать sources/чисто/, брать оригиналы")
     ap.add_argument("--level", type=float, default=LEVEL_STRENGTH,
-                    help="выравнивание реплик между собой: 0 — выключить, 1 — под одну гребёнку")
+                    help=f"выравнивание реплик внутри голоса, 0..1 (по умолчанию {LEVEL_STRENGTH})")
     ap.add_argument("--wav", action="store_true", help="дополнительно сохранить мастер в WAV")
     ap.add_argument("--mp3", default=MP3_BITRATE, help=f"битрейт mp3 (по умолчанию {MP3_BITRATE})")
-    ap.add_argument("--thr", choices=("auto", "fixed"), default=None,
-                    help="пороги нарезки: auto — считать по файлу, fixed — из таблицы THR")
+    ap.add_argument("--clean", action="store_true",
+                    help="брать очищенные исходники из sources/чисто/ (меняет звук, не только громкость)")
     args = ap.parse_args()
 
-    paths, cleaned = resolve_sources(not args.raw)
-    missing = [str(p) for p in paths.values() if not p.exists()]
+    paths, cleaned = {}, {}
+    for k, f in SOURCES.items():
+        c = CLEAN_DIR / (Path(f).stem + ".wav")
+        paths[k], cleaned[k] = (c, True) if args.clean and c.exists() else (SRC_DIR / f, False)
+    missing = [str(p.relative_to(ROOT)) for p in paths.values() if not p.exists()]
     if missing:
         sys.exit("Нет исходников: " + ", ".join(missing))
     OUT.mkdir(exist_ok=True)
     print("декодирую исходники…")
-    src = {k: decode(p) for k, p in paths.items()}
+    src = {k: decode(p, OFFSETS.get(k, 0.0)) for k, p in paths.items()}
     env = {k: envelope(v) for k, v in src.items()}
-
-    # пороги нарезки: у очищенных файлов фон другой, поэтому для них порог считается сам
-    thr = {}
+    thr = {k: (auto_thr(env[k]) if cleaned[k] else THR[k]) for k in SOURCES}
     for k in SOURCES:
-        auto = auto_thr(env[k])
-        use_auto = (args.thr == "auto") or (args.thr is None and cleaned[k])
-        thr[k] = auto if use_auto else THR[k]
-        print(f"  {paths[k].name:42s} {'очищённый' if cleaned[k] else 'оригинал':10s} "
-              f"порог {thr[k]:+.1f} дБ {'(посчитан)' if use_auto else '(из таблицы)'}"
-              + ("" if use_auto else f", сам посчитал бы {auto:+.1f}"))
+        if cleaned[k]:
+            print(f"  {paths[k].name}: очищенная версия, порог нарезки {thr[k]:+.1f} дБ посчитан по файлу")
 
     cues = parse_script()
     items, k = [], 0
@@ -423,6 +447,7 @@ def main():
             it["source"] = " + ".join(f"{SOURCES[s]} {a:.2f}-{b:.2f}" for s, a, b in segs)
 
     # ---------------------------------------------------------- громкость
+    # Меняется только громкость: у каждой реплики одно постоянное усиление на всю длину.
     # шаг 1: общий уровень каждого голоса (интегральная громкость всех его реплик)
     meter = pyln.Meter(SR); gains = {}
     for ch in ("ENER", "KEFI", "FLUR"):
@@ -432,7 +457,7 @@ def main():
             L = meter.integrated_loudness(np.concatenate(buf))
             gains[ch] = 10 ** ((CHAR_LUFS - L) / 20)
 
-    # шаг 2: собираем звук каждой реплики и меряем, насколько громко она прочитана
+    # шаг 2: собираем каждую реплику и меряем, насколько громко она звучит на слух
     for it in items:
         if "audio" in it or not it.get("segs"):
             continue
@@ -445,43 +470,36 @@ def main():
         it["audio"] = np.concatenate(pieces)
     for it in items:
         if "audio" in it:
-            it["level"] = level_db(it["audio"])
+            it["level"] = line_loudness(it["audio"])
 
-    # шаг 3: подтягиваем голоса друг к другу и реплики внутри голоса — чтобы никто
-    # не перекрикивал соседа, но живая разница между шёпотом и криком осталась
+    # шаг 3: голоса — к одному уровню (никто никого не перекрикивает), реплики — к уровню
+    # своего голоса (громкая фраза не выстреливает, тихая не тонет). Смех и прочие звуки
+    # в квадратных скобках уровень голоса не задают и двигаются осторожнее.
+    voice_of = lambda it: it.get("char") or it["spk"]
+    verbal = lambda it: not NONVERBAL_RE.match(it["text"])
     by_voice = {}
     for it in items:
-        if "level" in it:
-            by_voice.setdefault(it.get("char") or it["spk"], []).append(it["level"])
+        if "level" in it and verbal(it):
+            by_voice.setdefault(voice_of(it), []).append(it["level"])
     med = {k: float(np.median(v)) for k, v in by_voice.items()}
-    # общий ориентир — медиана по голосам, а не по всем репликам: голос с сотней реплик
-    # не должен перетягивать на себя тот уровень, к которому подтягиваются остальные
     common = float(np.median(list(med.values()))) if med else CHAR_LUFS
-    voice_fix = {k: float(np.clip(args.level * (common - m), -4.0, 4.0)) for k, m in med.items()}
+    voice_fix = {k: float(np.clip(common - m, -VOICE_MAX, VOICE_MAX)) for k, m in med.items()}
     manual = read_level_file(EXTRA_DIR / LEVEL_FILE)
     if manual:
-        print("ручные поправки из extra/" + LEVEL_FILE + ": "
-              + ", ".join(f"{k} {v:+g} дБ" for k, v in manual.items()))
+        print(f"ручные поправки из extra/{LEVEL_FILE}: "
+              + ", ".join(f"{NAME.get(k, k)} {v:+g} дБ" for k, v in manual.items()))
     for it in items:
         if "level" not in it:
             continue
-        who = it.get("char") or it["spk"]
-        note = it.get("note", "")
-        up = 2.0 if QUIET_RE.search(note) else LEVEL_MAX_UP      # шёпот не вытягиваем до крика
-        down = 3.0 if LOUD_RE.search(note) else LEVEL_MAX_DOWN   # крик оставляем криком
+        who, note = voice_of(it), it.get("note", "")
+        up = 2.0 if QUIET_RE.search(note) else LEVEL_MAX_UP
+        down = 3.0 if (LOUD_RE.search(note) or is_shout(it["text"])) else LEVEL_MAX_DOWN
+        if not verbal(it):
+            up = down = 3.0
         line_fix = float(np.clip(args.level * (med.get(who, common) - it["level"]), -down, up))
-        fix = voice_fix.get(who, 0.0) + line_fix + manual.get(it["id"], 0.0) + manual.get(who, 0.0)
-        it["fix"] = fix
-        if abs(fix) > 0.01:
-            it["audio"] = (it["audio"] * 10 ** (fix / 20)).astype(np.float32)
-        it["level_after"] = it["level"] + fix
-    for k in sorted(by_voice):
-        before = np.array(by_voice[k])
-        after = np.array([it["level_after"] for it in items
-                          if "level_after" in it and (it.get("char") or it["spk"]) == k])
-        print(f"  {NAME.get(k, k):16s} реплик {len(before):3d}   разброс "
-              f"{before.max() - before.min():4.1f} → {after.max() - after.min():4.1f} дБ   "
-              f"поправка голоса {voice_fix.get(k, 0.0):+.1f} дБ")
+        it["fix"] = voice_fix.get(who, 0.0) + line_fix + manual.get(it["id"], 0.0) + manual.get(who, 0.0)
+        it["audio"] = (it["audio"] * 10 ** (it["fix"] / 20)).astype(np.float32)
+        it["level_after"] = it["level"] + it["fix"]
 
     # раскладка по времени
     placed, rows, sheet = [], [], []
@@ -496,7 +514,7 @@ def main():
         t += gap
         y = it.get("audio")
         if y is not None:
-            placed.append((t, y)); dur = len(y) / SR
+            placed.append((t, y, it)); dur = len(y) / SR
         else:
             dur = est_duration(it["text"])
             who = it["text"].split(": ", 1)[0].capitalize() if it["spk"] == "EXTRA" else NAME[it["spk"]]
@@ -504,37 +522,67 @@ def main():
             tag = "НЕТ ЗАПИСИ — " if it["spk"] in ("ENER", "KEFI", "FLUR") else ""
             sheet.append((it["id"], f"  {ts(t)}  [{it['id']}] {tag}{who}: {txt}  ({dur:.1f} с)"))
             it["source"] = "— пауза —"
-        rows.append([it["id"], scene, NAME.get(it["spk"], it["spk"]), it["text"],
-                     it.get("source", ""), ts(t), f"{dur:.2f}",
-                     f"{it['level']:.1f}" if "level" in it else "",
-                     f"{it['fix']:+.1f}" if it.get("fix") else ""])
+        rows.append((it, [it["id"], scene, NAME.get(it["spk"], it["spk"]), it["text"],
+                          it.get("source", ""), ts(t), f"{dur:.2f}"]))
         t += dur; prev = it["text"]
     t += 1.5
     mix = np.zeros(int(t * SR) + SR, np.float32)
-    for st, y in placed:
+    for st, y, _ in placed:
         i = int(st * SR); mix[i:i + len(y)] += y
     mix = mix[:int(t * SR)]
+
+    # подъём тихих реплик не должен упираться в лимитер: считаем, сколько даст мастеринг,
+    # и если поднятая реплика вылезает за потолок больше чем на 1 дБ — забираем лишнее назад
+    g0 = MASTER_LUFS - pyln.Meter(SR).integrated_loudness(mix)
+    held = 0
+    for st, y, it in placed:
+        over = 20 * np.log10(np.abs(y).max() * 10 ** (g0 / 20) / 0.84 + 1e-12)
+        if over > 1.0 and it.get("fix", 0.0) > 0:
+            back = min(over - 1.0, it["fix"]); k = 10 ** (-back / 20); i = int(st * SR)
+            mix[i:i + len(y)] -= y * (1 - k); y *= k
+            it["fix"] -= back; it["level_after"] -= back; held += 1
+    if held:
+        print(f"подъём придержан у {held} реплик, чтобы они не упирались в лимитер")
+
+    spread = {}
+    for k in sorted(by_voice, key=lambda k: NAME.get(k, k)):
+        lv = [(it["level"], it["level_after"]) for it in items
+              if "level_after" in it and verbal(it) and voice_of(it) == k]
+        b = np.array([x for x, _ in lv]); a = np.array([y for _, y in lv])
+        spread[k] = (len(lv), np.percentile(b, 90) - np.percentile(b, 10),
+                     np.percentile(a, 90) - np.percentile(a, 10), float(np.median(a)))
+        print(f"  {NAME.get(k, k):16s} реплик {len(lv):3d}   средний уровень {med[k]:6.1f} → "
+              f"{np.median(a):6.1f} LUFS   разброс {spread[k][1]:4.1f} → {spread[k][2]:4.1f} дБ")
 
     # мастеринг
     raw, comp = OUT / "_mix_raw.wav", OUT / "_mix_comp.wav"
     mp3 = OUT / "пилот_сведение.mp3"
     sf.write(raw, mix, SR, subtype="FLOAT")
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(raw), "-af",
-                    "acompressor=threshold=0.1:ratio=2:attack=10:release=250:knee=4",
-                    "-c:a", "pcm_f32le", str(comp)], check=True)
+    if USE_COMPRESSOR:
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(raw), "-af",
+                        "acompressor=threshold=0.1:ratio=2:attack=10:release=250:knee=4",
+                        "-c:a", "pcm_f32le", str(comp)], check=True)
+    else:
+        comp = raw
     x, _ = sf.read(comp, dtype="float32")
     g = MASTER_LUFS - pyln.Meter(SR).integrated_loudness(x)
-    master_af = (f"volume={g:.2f}dB,alimiter=limit=0.84:level=false:attack=5:release=60,"
-                 "aresample=44100")
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(comp), "-af", master_af,
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(comp), "-af",
+                    f"volume={g:.2f}dB,alimiter=limit=0.84:level=false:attack=5:release=60,aresample=44100",
                     "-ac", "2", "-c:a", "libmp3lame", "-b:a", args.mp3, "-id3v2_version", "3",
                     "-metadata", "title=Пилот — сведение", str(mp3)], check=True)
     if args.wav:
-        wav = OUT / "пилот_сведение.wav"
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(comp), "-af", master_af,
-                        "-ac", "2", "-c:a", "pcm_s24le", str(wav)], check=True)
-        print(f"мастер без сжатия: {wav.relative_to(ROOT)}")
-    raw.unlink(); comp.unlink()
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(comp), "-af",
+                        f"volume={g:.2f}dB,alimiter=limit=0.84:level=false:attack=5:release=60",
+                        "-ac", "2", "-c:a", "pcm_s24le", str(OUT / "пилот_сведение.wav")], check=True)
+    pk = 20 * np.log10(np.abs(x).max() * 10 ** (g / 20) + 1e-12)
+    print(f"пик перед лимитером {pk:+.1f} dBFS (лимитер срезает всё выше -1.5)")
+    limited = []                                   # реплики, где лимитер режет заметно
+    for _, y, it in placed:
+        over = 20 * np.log10(np.abs(y).max() * 10 ** (g / 20) / 0.84 + 1e-12)
+        if over > 1.2:
+            limited.append((over, it))
+    if not __import__("os").environ.get("KEEP_RAW"): raw.unlink()
+    if comp != raw: comp.unlink()
 
     # отчёты
     head = ["Пилот — паузы под реплики, которых нет в записях",
@@ -549,32 +597,32 @@ def main():
     with open(OUT / "разметка.csv", "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
         w.writerow(["номер", "сцена", "кто", "текст", "откуда взято", "позиция в сведении",
-                    "длительность, с", "уровень, дБ", "поправка, дБ"])
-        w.writerows(rows)
+                    "длительность, с", "громкость до, LUFS", "поправка, дБ"])
+        w.writerows(r + [f"{it['level']:.1f}" if "level" in it else "",
+                         f"{it['fix']:+.1f}" if abs(it.get("fix", 0.0)) >= 0.05 else ""]
+                    for it, r in rows)
 
-    # отчёт по громкости: что подтянули и какие реплики стоит послушать
     lv = ["Громкость — что выровнялось",
-          f"Сила выравнивания: {args.level:g} (0 — выключено, 1 — все реплики под одну гребёнку).",
-          f"Поправку можно задать руками в extra/{LEVEL_FILE}: строка «242 -3» — тише реплику 242",
-          "на 3 дБ, строка «Кэфи -1» — весь голос на 1 дБ. Плюс громче, минус тише.", ""]
-    for k in sorted(by_voice):
-        before = np.array(by_voice[k])
-        after = np.array([it["level_after"] for it in items
-                          if "level_after" in it and (it.get("char") or it["spk"]) == k])
-        lv.append(f"{NAME.get(k, k)}: реплик {len(before)}, разброс "
-                  f"{before.max() - before.min():.1f} → {after.max() - after.min():.1f} дБ, "
-                  f"весь голос {voice_fix.get(k, 0.0):+.1f} дБ")
-    lv += ["", "Сильнее всего поправлено (проверить на слух):"]
-    strong = sorted((it for it in items if abs(it.get("fix", 0.0)) > 0.05),
-                    key=lambda it: -abs(it["fix"]))[:15]
-    for it in strong:
-        short = re.sub(r"\s+", " ", it["text"])[:58]
-        lv.append(f"  [{it['id']}] {NAME.get(it['spk'], it['spk'])}: {short}  {it['fix']:+.1f} дБ"
-                  + ("  (была громче остальных)" if it["fix"] < 0 else "  (была тише остальных)"))
+          "Меняется только громкость: у каждой реплики одно усиление на всю её длину, звук не трогается.",
+          f"Голоса сведены к общему уровню, реплики подтянуты к уровню своего голоса с силой {args.level:g}",
+          "(0 — не трогать, 1 — все под одну гребёнку). Шёпот поднимается не больше чем на 2 дБ,",
+          "крик опускается не больше чем на 3 дБ — по ремарке у имени в сценарии.",
+          f"Руками: строка в extra/{LEVEL_FILE} — «242 -3» (реплика тише на 3 дБ) или «Кэфи -1» (весь голос).",
+          "", "Голос: средний уровень реплики и разброс (между 10-й и 90-й процентилью), до → после"]
+    for k, (n, b, a, m) in spread.items():
+        lv.append(f"  {NAME.get(k, k):16s} {med[k]:6.1f} → {m:6.1f} LUFS   разброс {b:4.1f} → {a:4.1f} дБ   ({n} реплик)")
+    lv += ["", "Сильнее всего поправлено — послушать:"]
+    for it in sorted((i for i in items if abs(i.get("fix", 0)) >= 0.05), key=lambda i: -abs(i["fix"]))[:20]:
+        short = re.sub(r"\s+", " ", it["text"])[:56]
+        lv.append(f"  [{it['id']}] {NAME.get(it['spk'], it['spk'])}: {short}  {it['fix']:+.1f} дБ")
+    if limited:
+        lv += ["", "Лимитер режет больше 1 дБ (если слышно — опустить эти реплики в extra/громкость.txt):"]
+        for over, it in sorted(limited, key=lambda x: -x[0])[:15]:
+            lv.append(f"  [{it['id']}] {NAME.get(it['spk'], it['spk'])}: −{over:.1f} дБ")
     (OUT / "громкость.txt").write_text("\n".join(lv) + "\n", encoding="utf-8")
     n_p = sum(1 for i, _ in sheet if i)
     print(f"готово: {mp3.relative_to(ROOT)} — {t / 60:.1f} мин, {len(placed)} реплик, {n_p} пауз")
-    print("отчёты: out/разметка.csv, out/пилот_паузы.txt, out/громкость.txt")
+    print("отчёт о громкости: out/громкость.txt")
 
 if __name__ == "__main__":
     main()

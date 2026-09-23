@@ -36,7 +36,7 @@ def ensure_models():
     return vad, asr
 
 def decode16(path):
-    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-af", "pan=mono|c0=c0",
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-ac", "1",
                           "-f", "f32le", "-ar", str(SR), "-"], check=True, capture_output=True).stdout
     return np.frombuffer(raw, dtype=np.float32).copy()
 

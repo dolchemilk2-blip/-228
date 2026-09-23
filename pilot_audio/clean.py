@@ -573,7 +573,7 @@ def main():
     (OUT / "чистка.txt").write_text("\n".join(txt), encoding="utf-8")
     (OUT / "чистка.json").write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"\nотчёт: out/чистка.txt   очищенные файлы: {CLEAN_DIR.relative_to(ROOT)}/")
-    print("дальше: python build.py  (он сам возьмёт очищенные версии)")
+    print("дальше: python build.py --clean  (сборка из очищенных версий)")
 
 if __name__ == "__main__":
     main()
