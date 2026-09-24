@@ -152,7 +152,7 @@ export function transients(x, { attack = 1.5, sustain = 0 } = {}) {
   const aF = 1 - Math.exp(-1 / (0.0005 * SR)), rF = 1 - Math.exp(-1 / (0.02 * SR)), aS = 1 - Math.exp(-1 / (0.008 * SR)), rS = 1 - Math.exp(-1 / (0.2 * SR));
   let ef = 0, es = 0;
   for (let i = 0; i < n; i++) {
-    const a = Math.abs(x[i]); ef += (a - ef) * (a > ef ? aF : rF); es += (a - es) * (a > es ? aS : rS);
+    const a = Math.abs(x[i]) + 1e-12; ef += (a - ef) * (a > ef ? aF : rF); es += (a - es) * (a > es ? aS : rS);
     if (i % hop === 0) { const d = 20 * Math.log10((ef + 1e-7) / (es + 1e-7)); gd[i / hop] = d > 0 ? attack * clamp(d / 6, 0, 1) : sustain * clamp(-d / 6, 0, 1); }
   }
   const y = new Float32Array(n);
@@ -186,7 +186,7 @@ export function exciter(x, { amount = 0.5, from = 'auto', mode = 'tape' } = {}, 
   const src = cascade(x, [biquad('hp', bot, 0.7), biquad('hp', bot, 0.7), biquad('lp', top, 0.7), biquad('lp', top, 0.7)]);
   const aA = 1 - Math.exp(-1 / (0.002 * SR)), aR = 1 - Math.exp(-1 / (0.03 * SR)), floor = rms(src) * 0.05 + 1e-6;
   const gen = new Float32Array(x.length); let env = 0;
-  for (let i = 0; i < x.length; i++) { const v = src[i], a = Math.abs(v); env += (a - env) * (a > env ? aA : aR); gen[i] = v * v / (env + floor); }   // v² — только чётные: вторая гармоника и суммарные тоны, ничего в своей полосе
+  for (let i = 0; i < x.length; i++) { const v = src[i], a = Math.abs(v) + 1e-12; env += (a - env) * (a > env ? aA : aR); gen[i] = v * v / (env + floor); }   // v² — только чётные: вторая гармоника и суммарные тоны, ничего в своей полосе
   const g0 = cascade(gen, [biquad('hp', f0, 0.7), biquad('hp', f0, 0.7)]);
   // спектр сгенерированного выравнивается FIR под цель: на стыке = последняя треть октавы под срезом − 12…3 дБ,
   // дальше спад «лента» −12 дБ/окт, «лампа» −6 дБ/окт; ниже среза — глухо

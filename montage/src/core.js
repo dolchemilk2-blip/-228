@@ -577,22 +577,23 @@ export const tameLoop = t => String(t).replace(/(.)\1{3,}/g, '$1$1').replace(/((
 // ------------------------------------------------------------------ громкость (ITU-R BS.1770)
 const KB1 = [1.53512485958697, -2.69169618940638, 1.19839281085285], KA1 = [1, -1.69065929318241, 0.73248077421585];
 const KB2 = [1, -2, 1], KA2 = [1, -1.99004745483398, 0.99007225036621];
-function kfilt(x, b, a) {
-  const y = new Float64Array(x.length); let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
-  for (let i = 0; i < x.length; i++) {
-    const v = b[0] * x[i] + b[1] * x1 + b[2] * x2 - a[1] * y1 - a[2] * y2;
-    x2 = x1; x1 = x[i]; y2 = y1; y1 = v; y[i] = v;
-  }
-  return y;
-}
+/** Оба звена K-фильтра и энергии подблоков за один проход, без временных массивов размером с сигнал. */
 function gatedLoudness(x, block, hop) {
-  const z = kfilt(kfilt(x, KB1, KA1), KB2, KA2);
-  const w = Math.round(block * SR), h = Math.round(hop * SR);
-  if (z.length < w) { let s = 0; for (const v of z) s += v * v; return 10 * Math.log10(s / Math.max(1, z.length) + 1e-14) - 0.691; }
-  const cs = new Float64Array(z.length + 1);
-  for (let i = 0; i < z.length; i++) cs[i + 1] = cs[i] + z[i] * z[i];
-  const n = 1 + Math.floor((z.length - w) / h), p = [];
-  for (let k = 0; k < n; k++) { const e = (cs[k * h + w] - cs[k * h]) / w; if (10 * Math.log10(e + 1e-14) - 0.691 > -70) p.push(e); }
+  const w = Math.round(block * SR), h = Math.round(hop * SR), n = x.length;
+  const b10 = KB1[0], b11 = KB1[1], b12 = KB1[2], a11 = KA1[1], a12 = KA1[2], b20 = KB2[0], b21 = KB2[1], b22 = KB2[2], a21 = KA2[1], a22 = KA2[2];
+  let x1 = 0, x2 = 0, y1 = 0, y2 = 0, u1 = 0, u2 = 0, z1 = 0, z2 = 0;
+  const nSub = Math.floor(n / h), sub = new Float64Array(Math.max(1, nSub)); let acc = 0, cnt = 0, k = 0, all = 0;
+  for (let i = 0; i < n; i++) {
+    // +1e-18: в паузах из чистых нулей состояние фильтра иначе уходит в денормализованные числа, на которых процессор в сто раз медленнее
+    const xi = x[i], y = b10 * xi + b11 * x1 + b12 * x2 - a11 * y1 - a12 * y2 + 1e-18; x2 = x1; x1 = xi; y2 = y1; y1 = y;
+    const z = b20 * y + b21 * u1 + b22 * u2 - a21 * z1 - a22 * z2 + 1e-18; u2 = u1; u1 = y; z2 = z1; z1 = z;
+    const e = z * z; all += e; acc += e;
+    if (++cnt === h) { if (k < nSub) sub[k++] = acc; acc = 0; cnt = 0; }
+  }
+  if (n < w) return 10 * Math.log10(all / Math.max(1, n) + 1e-14) - 0.691;
+  const m = Math.round(w / h), nb = nSub - m + 1, p = []; let run = 0;
+  for (let j = 0; j < m; j++) run += sub[j];
+  for (let q = 0; q < nb; q++) { if (q) run += sub[q + m - 1] - sub[q - 1]; const e = run / w; if (10 * Math.log10(e + 1e-14) - 0.691 > -70) p.push(e); }
   if (!p.length) return -70;
   const rel = 10 * Math.log10(p.reduce((s, v) => s + v, 0) / p.length) - 0.691 - 10;
   const g = p.filter(e => 10 * Math.log10(e) - 0.691 > rel);
@@ -700,23 +701,20 @@ export function layout(cues, audioOf, isVoiced, bedOf = null) {
 }
 
 /** Пиковый лимитер с заглядыванием вперёд (5 мс) и восстановлением 60 мс. */
-export function limit(x, ceil = 0.84) {
-  const la = Math.round(0.005 * SR), n = x.length, need = new Float32Array(n);
-  for (let i = 0; i < n; i++) { const a = Math.abs(x[i]); need[i] = a > ceil ? ceil / a : 1; }
-  const minAhead = new Float32Array(n), dq = new Int32Array(n); let h = 0, tl = 0;
-  for (let i = n - 1; i >= 0; i--) {                 // минимум на окне [i, i+la]
-    while (tl > h && need[dq[tl - 1]] >= need[i]) tl--;
-    dq[tl++] = i;
-    while (dq[h] > i + la) h++;
-    minAhead[i] = need[dq[h]];
-  }
+export function limit(x, ceil = 0.84, inPlace = false) {
+  const la = Math.round(0.005 * SR), n = x.length, cap = la + 2, qi = new Int32Array(cap), qv = new Float32Array(cap);
+  const need = i => { const a = Math.abs(x[i]); return a > ceil ? ceil / a : 1; };
+  const push = j => { const nj = need(j); while (tl > h && qv[(tl - 1) % cap] >= nj) tl--; qi[tl % cap] = j; qv[tl % cap] = nj; tl++; };
+  let h = 0, tl = 0; for (let j = 0; j < Math.min(la, n); j++) push(j);   // скользящий минимум на окне [i, i+la] — один проход, без массивов на весь сигнал
   const aAtt = 1 - Math.exp(-1 / (0.0015 * SR)), aRel = 1 - Math.exp(-1 / (0.06 * SR));
-  const y = new Float32Array(n); let env = 1, hits = 0;
+  const y = inPlace ? x : new Float32Array(n); let env = 1;
   for (let i = 0; i < n; i++) {
-    const tg = minAhead[i];
+    if (i + la < n) push(i + la);
+    while (qi[h % cap] < i) h++;
+    const tg = qv[h % cap];
     env += (tg - env) * (tg < env ? aAtt : aRel);
     let v = x[i] * env;
-    if (v > ceil) { v = ceil; hits++; } else if (v < -ceil) { v = -ceil; hits++; }
+    if (v > ceil) v = ceil; else if (v < -ceil) v = -ceil;
     y[i] = v;
   }
   return y;
@@ -730,15 +728,16 @@ export function master(mix, placed, { targetLufs = -18, ceil = 0.84 } = {}) {
     const over = 20 * Math.log10(pk * g / ceil + 1e-12);
     const fix = p.item ? p.item.fix : 0;
     if (over > 1 && fix > 0) {
-      const back = Math.min(over - 1, fix), k = Math.pow(10, -back / 20), i0 = Math.round(p.at * SR);
-      for (let i = 0; i < p.audio.length; i++) { mix[i0 + i] -= p.audio[i] * (1 - k); p.audio[i] *= k; }
+      const back = Math.min(over - 1, fix), k = Math.pow(10, -back / 20), i0 = Math.round(p.at * SR), heldAudio = new Float32Array(p.audio.length);
+      for (let i = 0; i < p.audio.length; i++) { mix[i0 + i] -= p.audio[i] * (1 - k); heldAudio[i] = p.audio[i] * k; }
+      p.audio = heldAudio;                             // исходный массив реплики не трогается — сведение можно пересчитать
       p.item.fix -= back; p.item.levelAfter -= back; held++;
     }
   }
-  L = integratedLufs(mix); g = Math.pow(10, (targetLufs - L) / 20);
+  if (held) { L = integratedLufs(mix); g = Math.pow(10, (targetLufs - L) / 20); }   // без придержанных реплик громкость не менялась
   let pk = 0; for (const v of mix) pk = Math.max(pk, Math.abs(v));
-  const scaled = new Float32Array(mix.length); for (let i = 0; i < mix.length; i++) scaled[i] = mix[i] * g;
-  return { out: limit(scaled, ceil), gainDb: 20 * Math.log10(g), peakBefore: 20 * Math.log10(pk * g + 1e-12), held };
+  for (let i = 0; i < mix.length; i++) mix[i] *= g;   // на месте: mix — временный массив сведения
+  return { out: limit(mix, ceil, true), gainDb: 20 * Math.log10(g), peakBefore: 20 * Math.log10(pk * g + 1e-12), held };
 }
 
 // ------------------------------------------------------------------ файлы

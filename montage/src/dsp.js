@@ -58,7 +58,7 @@ export function filt(x, c, out = null) {
   const y = out || new Float32Array(x.length); const [b0, b1, b2, a1, a2] = c;
   let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
   for (let i = 0; i < x.length; i++) {
-    const xi = x[i], v = b0 * xi + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+    const xi = x[i], v = b0 * xi + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2 + 1e-20;   // против денормализованных чисел в паузах
     x2 = x1; x1 = xi; y2 = y1; y1 = v; y[i] = v;
   }
   return y;
