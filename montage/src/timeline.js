@@ -297,7 +297,12 @@ function tlMenuFromKeys() {
   if (clips.length) { const c = clips[0], ti = (S.tlTracks || []).findIndex(t => t.clips.includes(c)); tlMenuOpen(r.left + Math.max(TL.HEAD, tlX(st, c.row.at)) + 10, r.top + TL.RULER + ti * st.row + st.row, { ids: new Set(st.sel), t: c.row.at }); }
   else tlMenuOpen(r.left + TL.HEAD + 20, r.top + TL.RULER + 10, { ids: new Set(), t: st.scroll });
 }
-function tlZoom(k, cx = null) { const st = tlState(), W = st.W || 800, mx = cx ?? (TL.HEAD + (W - TL.HEAD) / 2), t = tlT(st, mx); st.zoom = Math.max((W - TL.HEAD) / S.result.lay.total, Math.min(TL.MAX_ZOOM, st.zoom * k)); st.scroll = t - (mx - TL.HEAD) / st.zoom; drawTimeline(); }
+function tlZoom(k, cx = null, smooth = false) {
+  const st = tlState(), W = st.W || 800, mx = cx ?? (TL.HEAD + (W - TL.HEAD) / 2), t = tlT(st, mx);
+  const zoom = Math.max((W - TL.HEAD) / S.result.lay.total, Math.min(TL.MAX_ZOOM, st.zoom * k)), scroll = t - (mx - TL.HEAD) / zoom;
+  if (smooth && typeof motionView === 'function') motionView(st, zoom, scroll, drawTimeline); else { st.zoom = zoom; st.scroll = scroll; drawTimeline(); }
+}
+function tlFit() { const st = tlState(), W = st.W || 800, z = (W - TL.HEAD) / S.result.lay.total; if (typeof motionView === 'function') motionView(st, z, 0, drawTimeline); else { st.zoom = 0; st.scroll = 0; drawTimeline(); } }
 function bindTimeline() {
   const host = $('#mix-out');
   host.addEventListener('contextmenu', e => {
@@ -377,9 +382,9 @@ function bindTimeline() {
     if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); tlMenuFromKeys(); return; }
     if (e.key === 'Escape') { if (st.sel.size) tlSelect([]); else if (st.full) tlSetFull(false); return; }
     if (e.key === 'f' || e.key === 'F' || e.key === 'а' || e.key === 'А') { if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); tlSetFull(!st.full); return; } }
-    if (e.key === '+' || e.key === '=') { tlZoom(1.5); return; }
-    if (e.key === '-' || e.key === '_') { tlZoom(1 / 1.5); return; }
-    if (e.key === '0') { st.zoom = 0; st.scroll = 0; drawTimeline(); return; }
+    if (e.key === '+' || e.key === '=') { tlZoom(1.5, null, true); return; }
+    if (e.key === '-' || e.key === '_') { tlZoom(1 / 1.5, null, true); return; }
+    if (e.key === '0') { tlFit(); return; }
     if (e.key === 'Home') { tlSeek(0); st.scroll = 0; drawTimeline(); return; }
     if ((e.ctrlKey || e.metaKey) && e.code === 'KeyA') { e.preventDefault(); tlSelect(tlAllClips().filter(c => !c.fixed).map(c => c.row.cue.id)); return; }
     if (!st.sel.size || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return; e.preventDefault();
@@ -390,9 +395,9 @@ function bindTimeline() {
   host.addEventListener('click', e => {
     const mb = e.target.closest('#tl-menu button'); if (mb) { tlMenuAct(mb); return; }
     const b = e.target.closest('button'); if (!b || !b.dataset.act) return; const st = tlState(), a = b.dataset.act;
-    if (a === 'tl-fit') { st.zoom = 0; st.scroll = 0; drawTimeline(); }
-    else if (a === 'tl-zoom+') tlZoom(1.5);
-    else if (a === 'tl-zoom-') tlZoom(1 / 1.5);
+    if (a === 'tl-fit') tlFit();
+    else if (a === 'tl-zoom+') tlZoom(1.5, null, true);
+    else if (a === 'tl-zoom-') tlZoom(1 / 1.5, null, true);
     else if (a === 'tl-full') tlSetFull(!st.full);
     else if (a === 'tl-undo') histUndo();
     else if (a === 'tl-redo') histRedo();
@@ -411,5 +416,6 @@ function bindTimeline() {
 function tlOvSeek(e) {                                 // мини-карта: щелчок и протяжка — сюда вид
   const cv = $('#tl-ov'), st = tlState(), r = cv.getBoundingClientRect(), W = r.width, total = S.result.lay.total;
   const t = (e.clientX - r.left - TL.HEAD) / (W - TL.HEAD) * total, span = ((st.W || W) - TL.HEAD) / st.zoom;
-  st.scroll = Math.max(0, t - span / 2); drawTimeline();
+  const to = Math.max(0, t - span / 2);
+  if (e.type === 'pointerdown' && typeof motionView === 'function') motionView(st, st.zoom, to, drawTimeline); else { st.scroll = to; drawTimeline(); }
 }

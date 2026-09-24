@@ -328,14 +328,133 @@ footer { color: var(--muted); font-size: 13px; padding-block: 8px 0; }
 .specv-bar b { color: var(--ink); font-variant-numeric: tabular-nums; font-family: var(--mono); font-weight: 500; }
 footer a { color: inherit; }
 @media (prefers-reduced-motion: reduce) { #prog-b { transition: none; } }
+
+/* ===================== оформление 2026: токены движения, поверхности, шапка (design-dna.json) ===================== */
+:root {
+  --r-s: 8px; --r-m: 12px; --r-l: 18px;
+  --e-std: cubic-bezier(.2, 0, 0, 1); --e-emph: cubic-bezier(.05, .7, .1, 1); --e-exit: cubic-bezier(.3, 0, 1, 1);
+  --d-q: 120ms; --d-s: 280ms; --d-l: 480ms;
+  --sh-1: 0 1px 2px rgb(20 30 25 / 6%), 0 2px 8px rgb(20 30 25 / 4%);
+  --sh-2: 0 2px 6px rgb(20 30 25 / 7%), 0 14px 34px rgb(20 30 25 / 8%);
+  --glow: color-mix(in srgb, var(--accent) 28%, transparent);
+  --i-play: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 2.5v11l9-5.5z'/%3E%3C/svg%3E");
+  --i-pause: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='3.5' y='2.5' width='3' height='11' rx='1'/%3E%3Crect x='9.5' y='2.5' width='3' height='11' rx='1'/%3E%3C/svg%3E");
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --sh-1: 0 1px 0 rgb(255 255 255 / 3%) inset, 0 1px 3px rgb(0 0 0 / 40%); --sh-2: 0 1px 0 rgb(255 255 255 / 4%) inset, 0 16px 40px rgb(0 0 0 / 45%); --glow: color-mix(in srgb, var(--accent) 22%, transparent); } }
+:root[data-theme="dark"] { --sh-1: 0 1px 0 rgb(255 255 255 / 3%) inset, 0 1px 3px rgb(0 0 0 / 40%); --sh-2: 0 1px 0 rgb(255 255 255 / 4%) inset, 0 16px 40px rgb(0 0 0 / 45%); --glow: color-mix(in srgb, var(--accent) 22%, transparent); }
+body { background: radial-gradient(1100px 520px at 88% -8%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 62%), var(--bg); background-attachment: fixed; -webkit-font-smoothing: antialiased; }
+::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+/* шапка */
+header.top.hero { position: relative; isolation: isolate; overflow: hidden; overflow: clip; display: grid; align-items: center; margin-top: 18px; padding: 30px 30px 28px; min-height: 236px; border: 1px solid var(--line2); border-radius: 22px; background: var(--surface); box-shadow: var(--sh-1); }
+header.hero::before { content: ""; position: absolute; inset: -45%; z-index: -2; pointer-events: none; background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 16%, transparent), transparent 72%) 72% 42% / 58% 58% no-repeat, radial-gradient(closest-side, color-mix(in srgb, var(--c4) 11%, transparent), transparent 72%) 38% 72% / 46% 46% no-repeat; animation: hero-drift 18s ease-in-out infinite alternate; will-change: transform; }
+@keyframes hero-drift { to { transform: translate3d(5%, -4%, 0) rotate(9deg); } }
+.hero-wave { position: absolute; inset: 0 0 0 34%; z-index: -1; opacity: 0; transition: opacity 1.2s var(--e-std); -webkit-mask-image: linear-gradient(90deg, transparent, #000 34%, #000 88%, transparent); mask-image: linear-gradient(90deg, transparent, #000 34%, #000 88%, transparent); }
+.hero-wave.ready { opacity: 1; }
+.hero-wave canvas { width: 100%; height: 100%; display: block; }
+.hero-copy { display: grid; gap: 10px; max-width: 580px; }
+.eyebrow { display: flex; align-items: center; gap: 9px; margin: 0; font: 600 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+.eyebrow .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: on-air 2.6s ease-in-out infinite; }
+@keyframes on-air { 0%, 100% { box-shadow: 0 0 0 0 var(--glow); } 50% { box-shadow: 0 0 0 7px transparent; } }
+.mark { font: 600 clamp(36px, 5.4vw, 54px)/1.02 var(--display); letter-spacing: -0.025em; }
+.mark .ch { display: inline-block; color: var(--ink); }
+.mark .acc .ch, .mark .acc { color: var(--accent); }
+.hero-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.privacy { margin: 0; }
+.theme-b { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px 5px 8px; border: 1px solid var(--line); border-radius: 999px; background: color-mix(in srgb, var(--surface) 70%, transparent); color: var(--ink); font-size: 12.5px; cursor: pointer; transition: border-color var(--d-q) var(--e-std), transform var(--d-q) var(--e-std), background-color var(--d-s); }
+.theme-b:hover { border-color: var(--muted); } .theme-b:active { transform: scale(.96); }
+.theme-b svg > * { transition: opacity var(--d-s) var(--e-std), transform var(--d-l) var(--e-emph); transform-origin: 10px 10px; }
+.theme-b .t-sun, .theme-b .t-moon, .theme-b .t-auto { opacity: 0; transform: rotate(-60deg) scale(.6); }
+.theme-b[data-mode="light"] .t-sun, .theme-b[data-mode="dark"] .t-moon, .theme-b[data-mode="auto"] .t-auto { opacity: 1; transform: none; }
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+@media (max-width: 760px) { header.top.hero { padding: 24px 20px; min-height: 0; } .hero-wave { inset: auto 0 0 0; height: 44%; -webkit-mask-image: linear-gradient(180deg, transparent, #000 45%); mask-image: linear-gradient(180deg, transparent, #000 45%); } .hero-wave.ready { opacity: .36; } }
+/* вкладки: сегменты с едущей подложкой */
+.tabs { position: relative; justify-self: start; display: inline-flex; gap: 2px; padding: 4px; border: 1px solid var(--line2); border-radius: 999px; background: var(--surface); box-shadow: var(--sh-1); }
+.tabs button { position: relative; z-index: 1; margin: 0; padding: 8px 18px; border: 0; border-radius: 999px; color: var(--muted); transition: color var(--d-s) var(--e-std); }
+.tabs button:hover { color: var(--ink); }
+.tabs button.on { color: var(--accent-ink); border-bottom-color: transparent; }
+.tab-ind { position: absolute; z-index: 0; top: 4px; bottom: 4px; left: 0; width: 0; border-radius: 999px; background: var(--accent); box-shadow: 0 6px 18px -6px var(--glow); will-change: transform; }
+/* карточки и шаги */
+section.card { border-color: var(--line2); border-radius: var(--r-l); padding: 20px 22px; box-shadow: var(--sh-1); }
+.card.over { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft), var(--sh-2); }
+.step b { position: relative; display: inline-grid; place-items: center; min-width: 26px; height: 26px; padding: 0 7px; border-radius: 999px; font: 600 12px/1 var(--mono); transition: background-color var(--d-s) var(--e-std), color var(--d-s) var(--e-std), box-shadow var(--d-s); }
+.step b.done { background: var(--accent); color: transparent; box-shadow: 0 4px 12px -4px var(--glow); animation: step-pop .42s var(--e-emph) both; }
+.step b.done::after { content: ""; position: absolute; left: 50%; top: 46%; width: 5px; height: 10px; border: solid var(--accent-ink); border-width: 0 2px 2px 0; transform: translate(-50%, -50%) rotate(45deg); animation: step-tick .36s .08s var(--e-emph) both; }
+@keyframes step-pop { 0% { transform: scale(.7); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
+@keyframes step-tick { from { transform: translate(-50%, -50%) rotate(45deg) scale(0); } }
+/* кнопки: отклик на наведение и нажатие */
+.primary { position: relative; overflow: hidden; border-radius: 10px; box-shadow: 0 1px 0 rgb(255 255 255 / 16%) inset, 0 8px 18px -10px var(--glow); transition: transform var(--d-q) var(--e-std), box-shadow var(--d-s) var(--e-std), opacity var(--d-s); }
+.primary::after { content: ""; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 35%, rgb(255 255 255 / 26%) 50%, transparent 65%); transform: translateX(-120%); transition: transform .7s var(--e-std); pointer-events: none; }
+.primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 1px 0 rgb(255 255 255 / 16%) inset, 0 12px 24px -10px var(--glow); }
+.primary:hover:not(:disabled)::after { transform: translateX(120%); }
+.primary:active:not(:disabled) { transform: translateY(0) scale(.97); transition-duration: 60ms; }
+.ghost-b, .icon, .icon-b, .play, .filters button, .tog, .models label, .chip.as-btn, .m-fx button, .m-row button, .ftab { transition: background-color var(--d-q) var(--e-std), border-color var(--d-q) var(--e-std), color var(--d-q) var(--e-std), transform var(--d-q) var(--e-std), box-shadow var(--d-s) var(--e-std); }
+.ghost-b:hover:not(:disabled) { background: color-mix(in srgb, var(--bg) 70%, transparent); }
+.ghost-b:active:not(:disabled), .icon:active:not(:disabled), .icon-b:active:not(:disabled), .play:active:not(:disabled), .filters button:active, .tog:active, .chip.as-btn:active, .m-fx button:active, .m-row button:active { transform: scale(.95); transition-duration: 60ms; }
+.play:hover:not(:disabled):not(.on) { background: var(--accent-soft); }
+.play.on { box-shadow: 0 0 0 4px var(--glow); }
+.play:not(.ab):not(.big):not(.tp-play-btn) { display: inline-grid; place-items: center; font-size: 0; }
+.play:not(.ab):not(.big):not(.tp-play-btn)::before { content: ""; width: 12px; height: 12px; background: currentColor; -webkit-mask: var(--i-play) center / contain no-repeat; mask: var(--i-play) center / contain no-repeat; }
+.play.on:not(.ab):not(.big):not(.tp-play-btn)::before { -webkit-mask-image: var(--i-pause); mask-image: var(--i-pause); animation: icon-in .22s var(--e-emph); }
+@keyframes icon-in { from { transform: scale(.4) rotate(-90deg); opacity: 0; } }
+.tp .play.big { box-shadow: 0 6px 16px -8px var(--glow); }
+.tp .play.big.on, .tp .play.big:hover { background: var(--accent); color: var(--accent-ink); }
+.filters button.on { box-shadow: var(--sh-1); }
+.models label { transition: border-color var(--d-q) var(--e-std), background-color var(--d-s) var(--e-std), transform var(--d-q) var(--e-std), box-shadow var(--d-s); }
+.models label:hover { transform: translateY(-1px); box-shadow: var(--sh-1); }
+.models label:has(input:checked) { box-shadow: 0 0 0 3px var(--accent-soft); }
+/* поля */
+textarea, select, input[type=number], input[type=search], .settings select { border-radius: 10px; transition: border-color var(--d-q) var(--e-std), box-shadow var(--d-s) var(--e-std); }
+textarea:focus-visible, select:focus-visible, input[type=number]:focus-visible, input[type=search]:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--glow); }
+input[type=range], input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
+:focus-visible { transition: outline-offset var(--d-q) var(--e-std); }
+/* зона файлов */
+.pick-files { border-radius: 14px; background: color-mix(in srgb, var(--bg) 55%, transparent); transition: border-color var(--d-q) var(--e-std), background-color var(--d-s) var(--e-std), transform var(--d-s) var(--e-emph); }
+.pick-files:hover, .card.over .pick-files { background: var(--accent-soft); border-color: var(--accent); }
+.card.over .pick-files { transform: scale(1.015); }
+.file { border-radius: 12px; background: color-mix(in srgb, var(--bg) 35%, transparent); transition: border-color var(--d-q) var(--e-std), box-shadow var(--d-s) var(--e-std); }
+.file:hover { border-color: var(--line); box-shadow: var(--sh-1); }
+/* списки */
+.row { transition: background-color var(--d-q) var(--e-std); }
+.row:hover { background: color-mix(in srgb, var(--accent-soft) 35%, transparent); }
+.row.st-check:hover { background: color-mix(in srgb, var(--warn-soft) 70%, transparent); }
+.srow, .arow { transition: background-color var(--d-q) var(--e-std); } .srow:hover, .arow:hover { background: color-mix(in srgb, var(--accent-soft) 30%, transparent); }
+.pill { display: inline-flex; gap: 5px; transition: transform var(--d-s) var(--e-emph); } .pill b { font-weight: 700; }
+.chip { transition: background-color var(--d-s) var(--e-std), color var(--d-s) var(--e-std); }
+.mod { border-radius: 14px; transition: opacity var(--d-s) var(--e-std), border-color var(--d-q) var(--e-std), box-shadow var(--d-s) var(--e-std); }
+.mod.on { box-shadow: var(--sh-1); }
+.mod:hover { border-color: var(--line); }
+/* сведение */
+.tp { box-shadow: var(--sh-1); }
+.tl { border-radius: 16px; box-shadow: var(--sh-1); }
+.tl.full { border-radius: 0; background: color-mix(in srgb, var(--bg) 92%, transparent); -webkit-backdrop-filter: blur(14px) saturate(1.3); backdrop-filter: blur(14px) saturate(1.3); }
+.vgains, .ambbox, .dbbox, .rerec { border-radius: 14px; }
+/* прогресс и сообщения */
+#prog { background: color-mix(in srgb, var(--surface) 84%, transparent); -webkit-backdrop-filter: blur(14px) saturate(1.3); backdrop-filter: blur(14px) saturate(1.3); border-top-color: var(--line2); box-shadow: 0 -8px 30px -18px rgb(0 0 0 / 30%); }
+#prog .bar { height: 6px; border-radius: 999px; overflow: hidden; background: var(--line2); }
+#prog-b { width: 100% !important; transform-origin: left; transform: scaleX(var(--p, 0)); transition: transform .35s var(--e-std); border-radius: 999px; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 60%, var(--c1)), var(--accent)); background-size: 200% 100%; animation: prog-shine 1.8s linear infinite; }
+@keyframes prog-shine { to { background-position: -200% 0; } }
+#msg { border-radius: 14px; box-shadow: 0 16px 40px -12px rgb(0 0 0 / 35%); }
+footer { text-align: center; font-size: 12.5px; color: var(--muted); padding-top: 8px; }
+/* без движения — по системной настройке */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  header.hero::before { animation: none; }
+}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header class="top">
-    <h1 class="mark">Монтаж<span>ка</span></h1>
-    <p class="lede">Сценарий и записи актёров — на входе, готовая дорожка — на выходе. Реплики находятся в записях сами, громкость выравнивается, паузы расставляются по ремаркам.</p>
-    <p class="privacy">Всё считается в этом браузере. Записи и сценарий никуда не отправляются.</p>
+  <header class="top hero">
+    <div class="hero-wave" aria-hidden="true"><canvas></canvas></div>
+    <div class="hero-copy">
+      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>Студия радиоспектакля в браузере</p>
+      <h1 class="mark">Монтаж<span>ка</span></h1>
+      <p class="lede">Сценарий и записи актёров — на входе, готовая дорожка — на выходе. Реплики находятся в записях сами, громкость выравнивается, паузы расставляются по ремаркам.</p>
+      <div class="hero-tools">
+        <p class="privacy">Всё считается в этом браузере. Записи и сценарий никуда не отправляются.</p>
+        <button class="theme-b" id="theme-b" type="button" aria-label="Тема оформления"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><g class="t-sun"><circle cx="10" cy="10" r="3.6" fill="currentColor"/><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M10 1.8v2M10 16.2v2M1.8 10h2M16.2 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4"/></g></g><path class="t-moon" d="M15.6 12.6A6.6 6.6 0 0 1 7.4 4.4a6.6 6.6 0 1 0 8.2 8.2z" fill="currentColor"/><g class="t-auto"><circle cx="10" cy="10" r="6.4" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 3.6a6.4 6.4 0 0 1 0 12.8z" fill="currentColor"/></g></svg><span class="theme-l">авто</span></button>
+      </div>
+    </div>
   </header>
 
   <nav class="tabs" role="tablist" aria-label="Разделы">
@@ -430,6 +549,7 @@ footer a { color: inherit; }
 </div>
 <div id="prog" hidden><div class="in"><div id="prog-t"></div><div class="bar"><div id="prog-b"></div></div></div></div>
 <div id="msg" role="status" hidden></div>
+<script>/*GSAP*/</script>
 <script type="module">
 /*BUNDLE*/
 </script>

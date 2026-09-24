@@ -38,11 +38,22 @@ function loadEdits() { const v = store.get(editsKey()); S.edits = v?.edits || {}
 // ------------------------------------------------------------------ звук
 let actx = null, playing = null;
 function audioCtx() { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); return actx; }
+/** Общий выход: всё, что звучит, проходит через анализатор — по нему дышит «эфир» в шапке. */
+let outNode = null, analyser = null, levelBuf = null;
+function audioOut() {
+  const ctx = audioCtx();
+  if (!outNode) { analyser = ctx.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.6; outNode = ctx.createGain(); outNode.connect(analyser); analyser.connect(ctx.destination); levelBuf = new Float32Array(analyser.fftSize); }
+  return outNode;
+}
+function audioLevel() {
+  if (!analyser || (!playing && !TP.playing && !(typeof ab !== 'undefined' && ab))) return 0;
+  analyser.getFloatTimeDomainData(levelBuf); let s = 0; for (const v of levelBuf) s += v * v; return Math.sqrt(s / levelBuf.length);
+}
 function play(samples, btn) {
   stop();
   const ctx = audioCtx(); ctx.resume();
   const b = ctx.createBuffer(1, samples.length, C.SR); b.copyToChannel(samples, 0);
-  const src = ctx.createBufferSource(); src.buffer = b; src.connect(ctx.destination); src.start();
+  const src = ctx.createBufferSource(); src.buffer = b; src.connect(audioOut()); src.start();
   playing = { src, btn }; if (btn) btn.classList.add('on');
   src.onended = () => { if (playing && playing.src === src) stop(); };
 }
@@ -446,7 +457,7 @@ function tpPlay(t = tpTime()) {
   if (TP.src) { TP.src.onended = null; try { TP.src.stop(); } catch {} }
   if (playing) { try { playing.src.stop(); } catch {} playing.btn?.classList.remove('on'); playing = null; }
   t = Math.max(0, Math.min(t, TP.len / C.SR - 0.01));
-  const src = ctx.createBufferSource(); src.buffer = TP.buf; src.connect(ctx.destination); src.start(0, t, TP.len / C.SR - t);
+  const src = ctx.createBufferSource(); src.buffer = TP.buf; src.connect(audioOut()); src.start(0, t, TP.len / C.SR - t);
   src.onended = () => { if (TP.src === src) { TP.playing = false; TP.offset = 0; tpUi(); } };
   TP.src = src; TP.startAt = ctx.currentTime - t; TP.playing = true; tpUi(); if (typeof tlFollow === 'function') tlFollow();
 }
@@ -609,15 +620,20 @@ async function uploadFor(id, file) {
 
 // ------------------------------------------------------------------ отрисовка
 let msgTimer = null;
-function notify(t) { const el = $('#msg'); el.textContent = t; el.hidden = !t; clearTimeout(msgTimer); if (t) msgTimer = setTimeout(() => { el.hidden = true; }, 9000); }
+function notify(t) { const el = $('#msg'); el.textContent = t; el.hidden = !t; clearTimeout(msgTimer); if (t) msgTimer = setTimeout(() => { typeof motionHide === 'function' ? motionHide(el) : (el.hidden = true); }, 9000); }
 function progress(t, p) {
   const el = $('#prog'); el.hidden = !t;
-  $('#prog-t').textContent = t; $('#prog-b').style.width = `${Math.round(100 * Math.max(0, Math.min(1, p || 0)))}%`;
+  $('#prog-t').textContent = t; $('#prog-b').style.setProperty('--p', Math.max(0, Math.min(1, p || 0)).toFixed(3));
 }
+let shownTab = null;
 function render() {
-  document.querySelectorAll('[data-tabpane]').forEach(el => { el.hidden = el.dataset.tabpane !== S.tab; });
+  if (shownTab && shownTab !== S.tab && typeof motionTab === 'function') motionTab(shownTab, S.tab);
   document.querySelectorAll('.tabs button').forEach(b => { b.classList.toggle('on', b.dataset.tab === S.tab); b.setAttribute('aria-selected', b.dataset.tab === S.tab); });
+  if (shownTab !== S.tab && typeof tabIndicator === 'function') tabIndicator(!shownTab);
+  document.querySelectorAll('[data-tabpane]').forEach(el => { el.hidden = el.dataset.tabpane !== S.tab; });
+  shownTab = S.tab;
   renderScript(); renderFiles(); renderRun(); renderReview(); renderMix(); renderCleanup(); renderSounds();
+  if (typeof motionSteps === 'function') motionSteps();
 }
 function renderScript() {
   const el = $('#script-sum');
@@ -665,10 +681,11 @@ function renderReview() {
   sec.hidden = !ready; if (!ready) return;
   const c = counts();
   $('#rv-sum').innerHTML = `
-    <span class="pill ok">найдено ${c.ok + c.own}</span>
-    <span class="pill check">проверить ${c.check}</span>
-    <span class="pill miss">нет записи ${c.miss}</span>
-    ${c.none ? `<span class="pill none">роли без записей ${c.none}</span>` : ''}`;
+    <span class="pill ok" data-n="${c.ok + c.own}">найдено <b>${c.ok + c.own}</b></span>
+    <span class="pill check" data-n="${c.check}">проверить <b>${c.check}</b></span>
+    <span class="pill miss" data-n="${c.miss}">нет записи <b>${c.miss}</b></span>
+    ${c.none ? `<span class="pill none" data-n="${c.none}">роли без записей <b>${c.none}</b></span>` : ''}`;
+  if (typeof motionCount === 'function') $('#rv-sum').querySelectorAll('.pill').forEach(p => motionCount(p, p.classList[1]));
   if ($('#rv-rerec')) $('#rv-rerec').innerHTML = typeof rerecHtml === 'function' ? rerecHtml() : '';
   document.querySelectorAll('#rv-filter button').forEach(b => b.classList.toggle('on', b.dataset.f === S.filter));
   $('#dirs-t').checked = S.showDirs;
@@ -689,6 +706,7 @@ function renderReview() {
     if (scene) { rows.push(`<div class="scene">${esc(scene.text)}</div>`); scene = null; }
     rows.push(rowHtml(cue, st, hasFile));
   }
+  $('#rv-list').dataset.v = `${S.filter}|${S.showDirs}|${S.matches.size}`;
   $('#rv-list').innerHTML = rows.join('') || '<p class="muted pad">Здесь пусто — под этот фильтр ничего не подходит.</p>';
 }
 function rowHtml(cue, st, hasFile) {
@@ -904,5 +922,8 @@ function bind() {
 }
 
 // для проверки из консоли и автотестов
-window.montage = { S, C, PRESETS, projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses };
+window.montage = { S, C, PRESETS, play: (y, btn) => play(y, btn), stop: () => stop(), HERO: typeof HERO !== 'undefined' ? HERO : null, MOTION: typeof MOTION !== 'undefined' ? MOTION : null, audioLevel: () => audioLevel(), projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses };
 bind(); render();
+if (typeof motionInit === 'function') motionInit();
+if (typeof initHero === 'function') initHero();
+if (typeof initTheme === 'function') initTheme();

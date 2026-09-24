@@ -209,7 +209,7 @@ function abPlay(f, which) {
   if (ab && ab.f === f) { if (ab.which === which) return abStop(); abSwitch(which); return; }
   abStop(); stop();
   const ctx = audioCtx(); ctx.resume();
-  const mk = buf => { const b = ctx.createBuffer(1, buf.length, C.SR); b.copyToChannel(buf, 0); const s = ctx.createBufferSource(); s.buffer = b; s.loop = true; const g = ctx.createGain(); g.gain.value = 0; s.connect(g); g.connect(ctx.destination); return { s, g }; };
+  const mk = buf => { const b = ctx.createBuffer(1, buf.length, C.SR); b.copyToChannel(buf, 0); const s = ctx.createBufferSource(); s.buffer = b; s.loop = true; const g = ctx.createGain(); g.gain.value = 0; s.connect(g); g.connect(audioOut()); return { s, g }; };
   const t0 = ctx.currentTime + 0.03, A = mk(c.before), B = mk(c.after && !c.dirty ? c.after : c.before);
   A.s.start(t0); B.s.start(t0);
   ab = { f, A, B, t0, len: c.before.length / C.SR, which: null };

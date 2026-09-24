@@ -1,0 +1,76 @@
+{
+  "meta": {
+    "name": "Монтажка — студия радиоспектакля",
+    "description": "Инструмент монтажа радиоспектакля в браузере: спокойная, точная студия с живым эфиром в шапке. Схема — zanwei/design-dna; движение — lottiefiles/motion-design-skill; анимации — greensock/gsap-skills; 3D — cloudai-x/threejs-skills; правила качества — AThevon/genjutsu.",
+    "source_references": ["собственные токены проекта (montage/src/page.html)", "описание от автора: «красиво, плавные анимации везде, приятно пользоваться»"],
+    "created_at": "2026-09-24"
+  },
+  "design_system": {
+    "color": {
+      "palette_type": "нейтральная база с одним бирюзовым акцентом и восемью цветами персонажей",
+      "primary": { "hex": "#0E7C6B", "role": "действия, выбранное, прогресс" },
+      "secondary": { "hex": "#2F5E9E", "role": "первый персонаж, вспомогательные графики" },
+      "accent": { "hex": "#0E7C6B", "role": "одна акцентная кнопка на экран — «Разобрать», «Свести», «Применить»" },
+      "neutral": { "scale": ["#FFFFFF", "#F2F4F1", "#E8ECE9", "#D9DFDB", "#5E6A65", "#18201D"], "usage": "фон, карточки, разделители, вторичный текст, основной текст" },
+      "surface": { "background": "#F2F4F1", "card": "#FFFFFF", "elevated": "#FFFFFF" },
+      "semantic": { "success": "#2E7D5B", "warning": "#93600F", "error": "#A63D2B", "info": "#2C7489" },
+      "dark": { "background": "#111614", "card": "#19201D", "accent": "#45C1A7", "text": "#E3E9E6" },
+      "contrast_strategy": "текст ≥ 4.5:1 в обеих темах; цвет персонажа — всегда вместе с именем, не единственный признак"
+    },
+    "typography": {
+      "font_families": { "heading": "Unbounded 600 — только логотип", "body": "Golos Text 400–700", "mono": "JetBrains Mono — время, номера, дБ" },
+      "type_scale": {
+        "display": { "size": "clamp(34px, 5vw, 52px)", "weight": 600, "line_height": 1.02, "tracking": "-0.02em" },
+        "heading_2": { "size": "17px", "weight": 600, "line_height": 1.3, "tracking": "0" },
+        "body": { "size": "15px", "weight": 400, "line_height": 1.5, "tracking": "0" },
+        "caption": { "size": "12.5px", "weight": 400, "line_height": 1.4, "tracking": "0" },
+        "overline": { "size": "11px", "weight": 600, "line_height": 1, "tracking": "0.08em" }
+      },
+      "font_style_notes": "цифры табличные; моно — только для чисел и кода"
+    },
+    "spacing": { "base_unit": "4px", "scale": [4, 8, 12, 16, 20, 24, 32, 48], "section_rhythm": "20px между карточками, 12px внутри", "content_density": "средняя: инструмент, не лендинг" },
+    "layout": { "grid_system": "одна колонка 1120px, на широком экране шаги 1–2 рядом", "columns": 2, "gutter": "20px", "max_content_width": "1120px", "breakpoints": [720, 860], "alignment_tendency": "левое выравнивание" },
+    "shape": { "border_radius": { "small": "8px", "medium": "12px", "large": "18px", "pill": "999px" }, "border_usage": "волосяная 1px на всех поверхностях", "divider_style": "1px, цвет line2" },
+    "elevation": { "shadow_style": "мягкие многослойные тени, в тёмной теме — почти без теней, глубина светом", "levels": { "low": "0 1px 2px rgb(20 30 25 / 6%), 0 2px 8px rgb(20 30 25 / 4%)", "medium": "0 2px 6px rgb(20 30 25 / 7%), 0 12px 32px rgb(20 30 25 / 7%)", "high": "0 10px 34px rgb(0 0 0 / 22%), 0 2px 6px rgb(0 0 0 / 12%)" }, "depth_cues": "поднятие на hover, тень растёт вместе с объектом" },
+    "iconography": { "style": "векторные, контурные", "stroke_weight": "1.75px", "preferred_set": "свои SVG; без эмодзи в роли значков", "size_scale": [14, 16, 20] },
+    "motion": {
+      "philosophy": "Corporate с оттенком Premium: движение объясняет, откуда что пришло, и не мешает работать",
+      "easing": { "standard": "cubic-bezier(0.2, 0, 0, 1)", "emphasized": "cubic-bezier(0.05, 0.7, 0.1, 1)", "exit": "cubic-bezier(0.3, 0, 1, 1)", "ambient": "sine.inOut" },
+      "duration_scale": { "micro": "120ms", "normal": "280ms", "macro": "480ms" },
+      "entrance_pattern": "подъём 16px + проявление, лесенка 40–60 мс, вся лесенка ≤ 400 мс",
+      "exit_pattern": "проявление назад и сдвиг 8px, 65–75 % длительности входа"
+    },
+    "components": {
+      "button_style": "основная — заливка акцентом, 10px радиус, лёгкий блик при наведении, нажатие 0.97; вторичная — контур",
+      "card_style": "белая карточка, радиус 18px, волосяная рамка, низкая тень; при перетаскивании файлов — акцентная обводка",
+      "navigation_pattern": "сегментированный переключатель вкладок с едущей подложкой",
+      "input_style": "поле на фоне страницы, радиус 10px, акцентная обводка при фокусе",
+      "list_style": "строки реплик с цветной полосой статуса слева",
+      "modal_style": "меню и полноэкранный таймлайн — рост из точки вызова",
+      "component_notes": "номер шага превращается в галочку, когда шаг выполнен"
+    }
+  },
+  "design_style": {
+    "aesthetic": { "mood": "спокойная сосредоточенная студия, тёплый нейтральный фон, живой эфир", "personality": ["точная", "дружелюбная", "тихая"], "genre": "профессиональный инструмент (DAW-lite)" },
+    "visual_language": { "whitespace_usage": "умеренная", "contrast_level": "средний, акцент — только на главном действии", "ornamentation": "минимум: одна живая волна в шапке" },
+    "composition": { "hierarchy_method": "шаги 1–5 с номерами, одна акцентная кнопка на шаг", "balance_type": "асимметрия в шапке (текст слева, волна справа), дальше — строгая сетка" },
+    "imagery": { "graphic_elements": "звуковая волна, спектры, таймлайн — вместо картинок" },
+    "interaction_feel": { "hover_behavior": "подъём на 1px и усиление тени за 100 мс", "microinteraction_density": "высокая, но тихая: каждое нажатие отвечает, ничего не мигает без причины" },
+    "brand_voice_in_ui": { "tone": "по делу, на «вы», без восклицаний" }
+  },
+  "visual_effects": {
+    "overview": { "effect_intensity": "низкая–средняя", "performance_tier": "medium (GSAP везде, Three.js только в шапке и лениво)" },
+    "background_effects": { "enabled": true, "type": "gradient-animation", "params": "едва заметный сдвиг градиента шапки, цикл 18 с" },
+    "particle_systems": { "enabled": false },
+    "3d_elements": { "enabled": true, "type": "поле точек-«эфир»: волна из ~7 тыс. точек, шейдер, реагирует на громкость того, что играет, и на мышь", "technology": "Three.js r186 через CDN, запасной вариант — Canvas 2D", "performance": "пиксельная плотность ≤ 1.5, пауза вне экрана и на скрытой вкладке, один кадр при reduced-motion" },
+    "shader_effects": { "enabled": true, "type": "смещение вершин суммой синусов + уровень звука; цвет по высоте" },
+    "scroll_effects": { "parallax": { "enabled": false }, "scroll_triggered_animations": { "enabled": true, "behavior": "triggered: карточки и появляющиеся секции въезжают один раз" }, "scroll_morphing": { "enabled": false } },
+    "text_effects": { "enabled": true, "type": "split-letter-animate на логотипе при загрузке" },
+    "cursor_effects": { "enabled": false, "notes": "только мягкий параллакс волны в шапке" },
+    "image_effects": { "enabled": false },
+    "glassmorphism_neumorphism": { "enabled": true, "type": "glass", "params": "только плеер на весь экран и прогресс-панель: blur 14px" },
+    "canvas_drawings": { "enabled": true, "notes": "таймлайн, спектрограммы, эквалайзер — существующие, с плавным масштабом" },
+    "svg_animations": { "enabled": true, "notes": "галочка шага рисуется штрихом, значки плеера меняются с поворотом" },
+    "composite_notes": "Все анимации выключаются при prefers-reduced-motion: остаются мгновенные смены состояний. Анимируются только transform и opacity; не больше ~20 элементов одновременно; длинные списки — только первые видимые строки."
+  }
+}
