@@ -4,8 +4,8 @@
 const MODULES = [
   { k: 'dehum', name: 'Гул сети', desc: '50 или 60 Гц и гармоники — только если они действительно торчат',
     params: [{ k: 'base', type: 'select', opts: [['auto', 'найти самому'], [50, '50 Гц'], [60, '60 Гц']] }] },
-  { k: 'hp', name: 'Низ', desc: 'срез ниже частоты: подгул, стук по столу, ветер',
-    params: [{ k: 'fc', min: 40, max: 160, step: 5, unit: 'Гц', label: 'срез' }] },
+  { k: 'hp', name: 'Низ', desc: 'срез ниже частоты: подгул, стук по столу, ветер; 24 дБ/окт — крутой срез инфраниза',
+    params: [{ k: 'fc', min: 20, max: 160, step: 5, unit: 'Гц', label: 'срез' }, { k: 'slope', type: 'select', label: 'крутизна', opts: [[12, '12 дБ/окт'], [24, '24 дБ/окт']] }] },
   { k: 'declip', name: 'Клиппинг', desc: 'срезанные пики достраиваются кубической кривой — когда микрофон перегрузили', params: [] },
   { k: 'declick', name: 'Щелчки', desc: 'одиночные щелчки, тики, потрескивание',
     params: [{ k: 'sens', min: 0.3, max: 2, step: 0.1, label: 'чувствительность' }] },
@@ -14,18 +14,29 @@ const MODULES = [
   { k: 'dereverb', name: 'Эхо и комната', desc: 'спектрально — сушит сильнее всего, при больших значениях голос «водянистый»; хвосты — тише спад после слогов; паузы — тише всё между фразами',
     params: [{ k: 'spectral', min: 0, max: 1, step: 0.05, pct: true, label: 'спектрально' }, { k: 't60', min: 0.2, max: 1.5, step: 0.05, unit: 'с', label: 'размер комнаты' },
              { k: 'tails', min: 0, max: 1, step: 0.05, pct: true, label: 'хвосты после слогов' }, { k: 'pauses', min: 0, max: 24, step: 1, unit: 'дБ', label: 'паузы и дыхание тише на' }] },
+  { k: 'tones', name: 'Призвуки', desc: 'стоячие свисты и звенящие гармоники (монитор, кодек, электрика) в 1,5–12 кГц находятся сами и вырезаются узко; голос так себя не ведёт',
+    params: [{ k: 'sens', min: 0.5, max: 2, step: 0.1, label: 'чувствительность' }] },
+  { k: 'soothe', name: 'Резонансы', desc: 'резкие пики верха придавливаются только там и тогда, где они торчат над остальным спектром (в духе Soothe): металл, песок, звон',
+    params: [{ k: 'lo', min: 2000, max: 8000, step: 250, unit: 'Гц', label: 'от' }, { k: 'hi', min: 8000, max: 16000, step: 250, unit: 'Гц', label: 'до' }, { k: 'depth', min: 1, max: 8, step: 0.5, unit: 'дБ', label: 'не глубже' }, { k: 'sens', min: 0.5, max: 2, step: 0.1, label: 'чувствительность' }] },
   { k: 'deplosive', name: 'Взрывные', desc: '«п» и «б» в микрофон: низ придавливается только там, где выстреливает',
     params: [{ k: 'amount', min: 0, max: 1, step: 0.05, pct: true, label: 'сила' }] },
-  { k: 'deess', name: 'Свист', desc: 'резкие «с», «ш», «ц»: полоса 4,5–9 кГц придавливается там, где громче обычного',
-    params: [{ k: 'amount', min: 0, max: 1, step: 0.05, pct: true, label: 'сила' }] },
+  { k: 'deess', name: 'Свист', desc: 'резкие «с», «ш», «ц»: полоса придавливается там, где громче обычного; 6–7,5 кГц — под «плавающий» неестественный верх',
+    params: [{ k: 'amount', min: 0, max: 1, step: 0.05, pct: true, label: 'сила' }, { k: 'band', type: 'select', label: 'полоса', opts: [['4500-9000', '4,5–9 кГц (обычно)'], ['6000-7500', '6–7,5 кГц'], ['3000-6000', '3–6 кГц']] }] },
   { k: 'eq5', name: 'Эквалайзер — пять полос', desc: 'простой: ползунки ±12 дБ, частоту можно поменять; работает вместе с графическим ниже', params: [] },
   { k: 'tone', name: 'Тембр', desc: 'снять гулкость (горб в низах) или подогнать спектр под другую запись, чтобы голоса звучали вместе',
     params: [{ k: 'mode', type: 'select', opts: [['auto', 'снять гулкость'], ['match', 'как у другой записи']] }, { k: 'ref', type: 'ref' }, { k: 'strength', min: 0, max: 1, step: 0.05, pct: true, label: 'насколько' }] },
+  { k: 'transient', name: 'Атаки', desc: 'транзиент-шейпер: атаки чётче (+) или мягче (−) — артикуляция, удары; хвосты короче (−) или длиннее (+)',
+    params: [{ k: 'attack', min: -6, max: 6, step: 0.5, unit: 'дБ', label: 'атаки' }, { k: 'sustain', min: -6, max: 6, step: 0.5, unit: 'дБ', label: 'хвосты' }] },
+  { k: 'exciter', name: 'Воздух', desc: 'верх выше среза кодека или микрофона достраивается гармониками октавы под срезом (эксайтер); срез находится сам',
+    params: [{ k: 'from', type: 'select', label: 'от', opts: [['auto', 'от среза (найти самому)'], [8000, '8 кГц'], [10000, '10 кГц'], [12000, '12 кГц'], [14000, '14 кГц'], [16000, '16 кГц']] }, { k: 'mode', type: 'select', label: 'характер', opts: [['tape', 'лента (мягче)'], ['tube', 'лампа (ярче)']] }, { k: 'amount', min: 0, max: 1, step: 0.05, pct: true, label: 'сколько' }] },
+  { k: 'tape', name: 'Лента', desc: 'мягкое ленточное насыщение с передискретизацией: скругляет жёсткие пики, чуть тепла; громкость речи не меняется',
+    params: [{ k: 'amount', min: 0, max: 1, step: 0.05, pct: true, label: 'сила' }] },
   { k: 'comp', name: 'Компрессор', desc: 'ровнее по громкости внутри реплик; поднимает и хвосты комнаты — включать после чистки',
     params: [{ k: 'amount', min: 0, max: 1, step: 0.05, pct: true, label: 'сила' }] },
-  { k: 'loud', name: 'Громкость', desc: 'привести файл к уровню', params: [{ k: 'lufs', type: 'select', opts: [[-16, '−16 LUFS'], [-18, '−18 LUFS'], [-20, '−20 LUFS'], [-23, '−23 LUFS']] }] },
+  { k: 'loud', name: 'Громкость', desc: 'привести файл к уровню; «лимитер» — максимайзер: громкость достигается, пики выше потолка прижимаются по true peak',
+    params: [{ k: 'lufs', type: 'select', label: 'уровень', opts: [[-14, '−14 LUFS'], [-16, '−16 LUFS'], [-18, '−18 LUFS'], [-20, '−20 LUFS'], [-23, '−23 LUFS']] }, { k: 'ceil', type: 'select', label: 'потолок', opts: [[-0.3, '−0,3 dBTP'], [-1, '−1 dBTP'], [-1.5, '−1,5 dBTP'], [-3, '−3 dBTP']] }, { k: 'mode', type: 'select', label: 'как', opts: [['gain', 'только уровень'], ['limit', 'лимитер']] }] },
 ];
-const PRESET_NAMES = { soft: 'Мягко', normal: 'Обычно', strong: 'Сильно', hum: 'Только гул и низ', none: 'Ничего' };
+const PRESET_NAMES = { soft: 'Мягко', normal: 'Обычно', strong: 'Сильно', hum: 'Только гул и низ', codec: 'После кодека', master: 'Мастеринг', none: 'Ничего' };
 const EXCERPT = 12;
 const BAND_TYPES = [['peak', 'колокол'], ['lowshelf', 'полка низ'], ['highshelf', 'полка верх'], ['hp', 'срез низа'], ['lp', 'срез верха'], ['notch', 'вырез']];
 const NO_GAIN = new Set(['hp', 'lp', 'notch']);
@@ -238,7 +249,8 @@ const fx = (f, W) => Math.log(f / 20) / Math.log(1000) * W, fInv = (x, W) => 20 
 const gy = (g, H) => H / 2 - g / EQ_RANGE * (H / 2), gInv = (y, H) => (H / 2 - y) / (H / 2) * EQ_RANGE;
 function otherCoefs(c) {
   const out = [], ch = c.chain;
-  if (ch.hp.on) out.push(C.biquad('hp', ch.hp.fc, 0.707));
+  if (ch.hp.on) { if (+ch.hp.slope === 24) out.push(C.biquad('hp', ch.hp.fc, 0.5412), C.biquad('hp', ch.hp.fc, 1.3066)); else out.push(C.biquad('hp', ch.hp.fc, 0.707)); }
+  if (ch.tones && ch.tones.on && c.A && c.A.tones) for (const t of c.A.tones) out.push(C.biquad('peak', t.f, Math.max(10, Math.min(120, t.f / Math.max(40, 2 * t.width))), -Math.max(10, Math.min(30, t.prom + 3))));
   if (ch.dehum.on && c.A && c.A.hum) for (const p of c.A.hum.peaks.slice(0, 6)) out.push(C.biquad('peak', p.f, 30, -Math.max(10, Math.min(30, p.prom + 3))));
   if (ch.eq5 && ch.eq5.on) for (const b of C.eq5Bands(ch.eq5)) { const co = C.bandCoefs(b); if (co) out.push(co); }
   if (ch.tone.on && ch.tone.mode === 'auto' && c.A && c.A.octaves) for (const [fc, ref] of Object.entries(C.TONE_REF)) { const d = Math.max(-8, Math.min(0, ref + 2 - c.A.octaves[fc]) * ch.tone.strength); if (d <= -0.5) out.push(C.biquad('peak', +fc, 1.0, d)); }
@@ -288,6 +300,8 @@ function hintChips(A) {
   if (A.boom >= 4) out.push(`<span class="hint bad">низ +${A.boom} дБ — гулко</span>`); else if (A.boom >= 2) out.push(`<span class="hint mid">низ +${A.boom} дБ</span>`);
   if (A.decay != null) out.push(`<span class="hint ${A.decay < 100 ? 'bad' : A.decay < 125 ? 'mid' : 'ok'}">спад ${A.decay} дБ/с — ${A.decay < 100 ? 'комната' : A.decay < 125 ? 'немного комнаты' : 'сухо'}</span>`);
   if (A.peakDb > -0.3) out.push('<span class="hint bad">пики у потолка — возможен клиппинг</span>');
+  if (A.cutoff) out.push(`<span class="hint mid">верх обрезан на ${(A.cutoff.f / 1000).toFixed(1)} кГц — сжатая запись</span>`);
+  if (A.tones && A.tones.length) out.push(`<span class="hint bad">призвук ${A.tones.slice(0, 3).map(t => t.f >= 1000 ? (t.f / 1000).toFixed(1) + ' кГц' : t.f + ' Гц').join(', ')}</span>`);
   out.push(`<span class="hint">${A.lufs.toFixed(1)} LUFS · пик ${A.peakDb.toFixed(1)} дБ</span>`);
   return out.join('');
 }
@@ -497,11 +511,11 @@ function bindCleanup() {
       c.eqSel = +x.dataset.b; drawEq($('#eq-canvas'), f); markDirty(f); return;
     }
     if (p === 'on') { c.chain[m].on = x.checked; x.closest('.mod').classList.toggle('on', x.checked); drawEq($('#eq-canvas'), f); markDirty(f); return; }
-    if (x.tagName === 'SELECT') { const v = x.value; c.chain[m][p] = v === '' ? null : (p === 'ref' || isNaN(+v)) ? v : +v; if (m === 'tone' && p === 'mode') renderCleanup(); markDirty(f); return; }
+    if (x.tagName === 'SELECT') { const v = x.value; c.chain[m][p] = v === '' ? null : (p === 'ref' || p === 'band' || isNaN(+v)) ? v : +v; if (m === 'tone' && p === 'mode') renderCleanup(); if (m === 'hp' || m === 'tones') drawEq($('#eq-canvas'), f); markDirty(f); return; }
     c.chain[m][p] = +x.value;
     const lbl = x.previousElementSibling && x.previousElementSibling.querySelector('b');
     if (lbl) { const spec = MODULES.find(q => q.k === m).params.find(q => q.k === p); lbl.textContent = spec.pct ? `${Math.round(x.value * 100)} %` : `${x.value}${spec.unit ? ' ' + spec.unit : ''}`; }
-    if (m === 'hp' || m === 'tone') drawEq($('#eq-canvas'), f);
+    if (m === 'hp' || m === 'tone' || m === 'tones') drawEq($('#eq-canvas'), f);
     markDirty(f);
   };
   pane.addEventListener('input', e => {

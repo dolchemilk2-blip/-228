@@ -4,6 +4,7 @@
 // меньше миллисекунды), спектральная обработка — с симметричным дополнением, FIR — с
 // компенсацией задержки.
 import { SR, integratedLufs } from './core.js';
+import { detectCutoff, detectTones, detones, soothe, transients, exciter, tape, loudness } from './master.js';
 
 // ------------------------------------------------------------------ БПФ
 const TW = new Map();
@@ -31,9 +32,9 @@ export function fft(re, im, inv = false) {
   }
   if (inv) for (let i = 0; i < n; i++) { re[i] /= n; im[i] /= n; }
 }
-const hann = n => { const w = new Float32Array(n); for (let i = 0; i < n; i++) w[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / n); return w; };
-const dB = p => 10 * Math.log10(p + 1e-14);
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+export const hann = n => { const w = new Float32Array(n); for (let i = 0; i < n; i++) w[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / n); return w; };
+export const dB = p => 10 * Math.log10(p + 1e-14);
+export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // ------------------------------------------------------------------ фильтры (RBJ cookbook)
 export function biquad(type, f0, Q = 0.707, gainDb = 0, sr = SR) {
@@ -62,7 +63,7 @@ export function filt(x, c, out = null) {
   }
   return y;
 }
-const cascade = (x, coefs) => coefs.reduce((y, c) => filt(y, c), x);
+export const cascade = (x, coefs) => coefs.reduce((y, c) => filt(y, c), x);
 
 // ------------------------------------------------------------------ огибающие
 /** Уровень по окнам, дБ: окно win, шаг hop (в отсчётах). */
@@ -73,7 +74,7 @@ export function envDb(x, win, hop) {
   for (let k = 0; k < n; k++) e[k] = dB((cs[k * hop + win] - cs[k * hop]) / win);
   return e;
 }
-function prc(arr, p) {
+export function prc(arr, p) {
   if (!arr.length) return -140;
   const a = Float32Array.from(arr).sort();
   const x = (a.length - 1) * p / 100, lo = Math.floor(x), hi = Math.ceil(x);
@@ -82,7 +83,7 @@ function prc(arr, p) {
 const speechDb = x => { const e = envDb(x, 960, 480); return e.length ? prc(e, 90) : -99; };
 const floorDb = x => { const e = envDb(x, 960, 480); if (!e.length) return -99; const thr = prc(e, 30), q = Array.from(e).filter(v => v < thr); return q.length ? prc(q, 50) : prc(e, 0); };
 /** Плавная кривая усиления (дБ на шаг hop) → умножение сигнала с линейной интерполяцией. */
-function applyCurveDb(x, gdb, hop, attack, release) {
+export function applyCurveDb(x, gdb, hop, attack, release) {
   const n = gdb.length, sm = new Float32Array(n);
   const aA = Math.exp(-hop / (attack * SR)), aR = Math.exp(-hop / (release * SR));
   let v = gdb[0];
@@ -126,7 +127,8 @@ export function dehum(x, { base = 'auto', harmonics = 6, depth = 30 } = {}) {
   const coefs = hum.peaks.slice(0, harmonics).map(p => biquad('peak', p.f, 30, -clamp(p.prom + 3, 10, depth)));
   return { y: cascade(x, coefs), cut: hum.peaks.slice(0, harmonics).map(p => p.f) };
 }
-export const highpass = (x, fc = 70) => filt(x, biquad('hp', fc, 0.707));
+/** Срез низа: 12 дБ/окт (order 2) или 24 дБ/окт (order 4, Баттерворт). */
+export const highpass = (x, fc = 70, order = 2) => order >= 4 ? cascade(x, [biquad('hp', fc, 0.5412), biquad('hp', fc, 1.3066)]) : filt(x, biquad('hp', fc, 0.707));
 
 // ------------------------------------------------------------------ щелчки
 /** Одиночные щелчки: выброс, которого нет в соседних отсчётах, заменяется плавной вставкой. */
@@ -155,7 +157,7 @@ const N_STFT = 2048, HOP = 512;
  * Кадр за кадром: fn(re, im, t, state) правит спектр на месте. Симметричное дополнение и
  * окно Ханна с шагом N/4 — сумма квадратов окон постоянна, сигнал восстанавливается без сдвига.
  */
-function stftMap(x, fn, onProgress, N = N_STFT, hop = HOP) {
+export function stftMap(x, fn, onProgress, N = N_STFT, hop = HOP) {
   const L = x.length, xp = new Float32Array(L + 2 * N); xp.set(x, N);
   const win = hann(N), nF = Math.floor((xp.length - N) / hop) + 1;
   const out = new Float32Array(xp.length), re = new Float64Array(N), im = new Float64Array(N), state = {};
@@ -170,8 +172,8 @@ function stftMap(x, fn, onProgress, N = N_STFT, hop = HOP) {
   const y = new Float32Array(L); for (let i = 0; i < L; i++) y[i] = out[N + i] / norm;
   return y;
 }
-const applyGain = (re, im, g, N) => { for (let k = 0; k <= N / 2; k++) { re[k] *= g[k]; im[k] *= g[k]; if (k && k < N / 2) { re[N - k] *= g[k]; im[N - k] *= g[k]; } } };
-function smoothFreq(g, r = 2) { const n = g.length, o = new Float32Array(n); for (let k = 0; k < n; k++) { let s = 0, c = 0; for (let q = Math.max(0, k - r); q <= Math.min(n - 1, k + r); q++) { s += g[q]; c++; } o[k] = s / c; } return o; }
+export const applyGain = (re, im, g, N) => { for (let k = 0; k <= N / 2; k++) { re[k] *= g[k]; im[k] *= g[k]; if (k && k < N / 2) { re[N - k] *= g[k]; im[N - k] *= g[k]; } } };
+export function smoothFreq(g, r = 2) { const n = g.length, o = new Float32Array(n); for (let k = 0; k < n; k++) { let s = 0, c = 0; for (let q = Math.max(0, k - r); q <= Math.min(n - 1, k + r); q++) { s += g[q]; c++; } o[k] = s / c; } return o; }
 
 /**
  * Профиль шума: средняя мощность по частотам в самых тихих кадрах файла (но не в цифровой
@@ -252,9 +254,10 @@ export function gatePauses(x, { depth = 12, margin = 9 } = {}) {
 
 // ------------------------------------------------------------------ свист и взрывные
 /** Де-эссер: полоса 4,5–9 кГц придавливается там, где она громче обычного для этой записи. */
-export function deess(x, { amount = 0.5 } = {}) {
+export function deess(x, { amount = 0.5, band: bandSpec = '4500-9000' } = {}) {
   if (amount <= 0) return x;
-  const band = cascade(x, [biquad('hp', 4500, 0.7), biquad('hp', 4500, 0.7), biquad('lp', 9000, 0.7)]);
+  const [lo, hi] = String(bandSpec).split('-').map(Number);
+  const band = cascade(x, [biquad('hp', lo || 4500, 0.7), biquad('hp', lo || 4500, 0.7), biquad('lp', hi || 9000, 0.7)]);
   const h = Math.round(0.002 * SR), e = envDb(band, Math.round(0.006 * SR), h); if (e.length < 10) return x;
   const all = envDb(x, Math.round(0.006 * SR), h), sp = prc(all, 90);
   const inSpeech = []; for (let i = 0; i < e.length && i < all.length; i++) if (all[i] > sp - 25) inSpeech.push(e[i]);
@@ -313,7 +316,7 @@ export function ltas(x, stride = 1) {
   return out;
 }
 /** Свёртка с длинным FIR через БПФ (перекрытие с накоплением), задержка фильтра снимается. */
-function firApply(x, h) {
+export function firApply(x, h) {
   const M = h.length, B = 16384, L = B - M + 1, n = x.length, out = new Float32Array(n + M);
   const hr = new Float64Array(B), hi = new Float64Array(B); hr.set(h); fft(hr, hi);
   const re = new Float64Array(B), im = new Float64Array(B);
@@ -335,7 +338,11 @@ export function matchTone(x, refLtas, { strength = 1, maxDb = 18 } = {}) {
   d = d.map((v, i) => 0.25 * d[Math.max(0, i - 1)] + 0.5 * v + 0.25 * d[Math.min(d.length - 1, i + 1)]);
   const core = fcs.map((f, i) => (f >= 300 && f <= 3000 ? d[i] : null)).filter(v => v != null);
   const mean = core.length ? core.reduce((s, v) => s + v, 0) / core.length : 0; d = d.map(v => v - mean);
-  const N = 4096, H = new Float64Array(N), Hi = new Float64Array(N), lf = fcs.map(f => Math.log(f));
+  return { y: firApply(x, firFromCurve(fcs, d)), curve: Object.fromEntries(fcs.map((f, i) => [f, +d[i].toFixed(1)])) };
+}
+/** Линейно-фазовый FIR по кривой усиления (дБ на частотах fcs, между ними — по логарифму частоты). */
+export function firFromCurve(fcs, d, N = 4096) {
+  const H = new Float64Array(N), Hi = new Float64Array(N), lf = fcs.map(f => Math.log(f));
   for (let k = 0; k <= N / 2; k++) {
     const f = k * SR / N; let g;
     if (f <= fcs[0]) g = d[0]; else if (f >= fcs[fcs.length - 1]) g = d[d.length - 1];
@@ -345,7 +352,7 @@ export function matchTone(x, refLtas, { strength = 1, maxDb = 18 } = {}) {
   fft(H, Hi, true);                                  // импульсная характеристика (циклическая)
   const h = new Float32Array(N + 1), w = hann(N + 1);
   for (let i = 0; i <= N; i++) h[i] = H[(i - N / 2 + N) % N] * w[i];
-  return { y: firApply(x, h), curve: Object.fromEntries(fcs.map((f, i) => [f, +d[i].toFixed(1)])) };
+  return h;
 }
 /** Полоса эквалайзера → коэффициенты, или null, если она ничего не делает. */
 export function bandCoefs(b) {
@@ -457,6 +464,7 @@ export function analyze(x) {
   return {
     dur: x.length / SR, lufs: integratedLufs(x), peakDb: 20 * Math.log10(pk + 1e-12), speechDb: speechDb(x), floorDb: floorDb(x),
     hum, octaves: oc, boom: oc ? +Math.max(0, oc[125] - TONE_REF[125]).toFixed(1) : 0, decay: sl.length ? +prc(sl, 50).toFixed(0) : null,
+    cutoff: detectCutoff(x), tones: detectTones(x),
   };
 }
 /** Спектрограмма для показа: строки — частота (логарифмически, fmin..fmax), столбцы — время. */
@@ -474,25 +482,29 @@ export function spectrogram(x, { cols = 600, rows = 160, fmin = 60, fmax = 16000
 }
 
 // ------------------------------------------------------------------ цепочка
-export const CHAIN_ORDER = ['dehum', 'hp', 'declip', 'declick', 'denoise', 'dereverb', 'deplosive', 'deess', 'eq5', 'eq', 'tone', 'comp', 'loud'];
+export const CHAIN_ORDER = ['dehum', 'hp', 'declip', 'declick', 'denoise', 'dereverb', 'tones', 'soothe', 'deplosive', 'deess', 'eq5', 'eq', 'tone', 'transient', 'exciter', 'tape', 'comp', 'loud'];
 export const CLEAN_PRESETS = {
   soft:   { dehum: 1, hp: 70, denoise: [6, 1.3], dereverb: [0.2, 0.3, 6], tone: 0, deess: 0, deplosive: 0, declick: 0 },
   normal: { dehum: 1, hp: 70, denoise: [10, 1.5], dereverb: [0.4, 0.4, 10], tone: 0, deess: 0, deplosive: 0, declick: 0 },
   strong: { dehum: 1, hp: 80, denoise: [16, 2], dereverb: [0.7, 0.6, 14], tone: 1, deess: 1, deplosive: 1, declick: 1 },
   hum:    { dehum: 1, hp: 70, denoise: null, dereverb: null, tone: 0, deess: 0, deplosive: 0, declick: 0 },
+  codec:  { dehum: 1, hp: 40, slope: 24, denoise: [6, 1.3], dereverb: null, tone: 0, deess: 0, deplosive: 0, declick: 0, tones: 1, soothe: 3, exciter: 0.5, tape: 0.2 },
+  master: { dehum: 0, hp: 30, slope: 24, denoise: null, dereverb: null, tone: 0, deess: 0, deplosive: 0, declick: 0, soothe: 2, transient: 1.5, tape: 0.25, loud: [-16, -1, 'limit'] },
   none:   { dehum: 0, hp: 0, denoise: null, dereverb: null, tone: 0, deess: 0, deplosive: 0, declick: 0 },
 };
 export function defaultChain(preset = 'normal', hints = {}) {
   const P = CLEAN_PRESETS[preset] || CLEAN_PRESETS.normal;
   return {
-    dehum: { on: !!P.dehum, base: 'auto' }, hp: { on: !!P.hp, fc: P.hp || 70 }, declip: { on: false }, declick: { on: !!P.declick, sens: 1 },
+    dehum: { on: !!P.dehum, base: 'auto' }, hp: { on: !!P.hp, fc: P.hp || 70, slope: P.slope || 12 }, declip: { on: false }, declick: { on: !!P.declick, sens: 1 },
+    tones: { on: !!P.tones, sens: 1 }, soothe: { on: !!P.soothe, lo: 5000, hi: 12000, depth: P.soothe || 3, sens: 1 },
+    transient: { on: !!P.transient, attack: P.transient || 1.5, sustain: 0 }, exciter: { on: !!P.exciter, amount: P.exciter || 0.5, from: 'auto', mode: 'tape' }, tape: { on: !!P.tape, amount: P.tape || 0.25 },
     denoise: { on: !!P.denoise, amount: P.denoise ? P.denoise[0] : 10, sens: P.denoise ? P.denoise[1] : 1.5 },
     dereverb: { on: !!P.dereverb, spectral: P.dereverb ? P.dereverb[0] : 0.4, t60: 0.5, tails: P.dereverb ? P.dereverb[1] : 0.4, pauses: P.dereverb ? P.dereverb[2] : 10 },
-    deplosive: { on: !!P.deplosive, amount: 0.6 }, deess: { on: !!P.deess, amount: 0.5 },
+    deplosive: { on: !!P.deplosive, amount: 0.6 }, deess: { on: !!P.deess, amount: 0.5, band: '4500-9000' },
     eq5: { on: false, f: [120, 250, 1000, 3000, 8000], g: [0, 0, 0, 0, 0] },
     eq: { on: false, bands: [{ type: 'lowshelf', f: 120, q: 0.7, gain: 0 }, { type: 'peak', f: 250, q: 1, gain: 0 }, { type: 'peak', f: 1000, q: 1, gain: 0 }, { type: 'peak', f: 3000, q: 1, gain: 0 }, { type: 'highshelf', f: 8000, q: 0.7, gain: 0 }] },
     tone: { on: !!P.tone || !!(hints.boom >= 4 && preset !== 'none' && preset !== 'hum'), mode: 'auto', strength: 1, ref: null },
-    comp: { on: false, amount: 0.4 }, loud: { on: preset !== 'none', lufs: -20 },
+    comp: { on: false, amount: 0.4 }, loud: { on: preset !== 'none', lufs: P.loud ? P.loud[0] : -20, ceil: P.loud ? P.loud[1] : -1.5, mode: P.loud ? P.loud[2] : 'gain' },
   };
 }
 /** Выполняет цепочку по порядку. aux: {noise: профиль шума файла, refLtas: спектр записи-образца}. */
@@ -502,7 +514,12 @@ export function runChain(x, chain, aux = {}, onProgress = null) {
   for (const k of steps) {
     const p = chain[k];
     if (k === 'dehum') { const r = dehum(y, p); y = r.y; log.push(r.cut.length ? `гул: вырезано ${r.cut.join(', ')} Гц` : 'гул: не найден'); }
-    else if (k === 'hp') { y = highpass(y, p.fc); log.push(`низ срезан ниже ${p.fc} Гц`); }
+    else if (k === 'hp') { y = highpass(y, p.fc, +p.slope === 24 ? 4 : 2); log.push(`низ срезан ниже ${p.fc} Гц${+p.slope === 24 ? ' (24 дБ/окт)' : ''}`); }
+    else if (k === 'tones') { const r = detones(y, p); y = r.y; log.push(r.cut.length ? 'призвуки: вырезано ' + r.cut.map(f => f >= 1000 ? (f / 1000).toFixed(2) + ' кГц' : f + ' Гц').join(', ') : 'призвуки: не найдены'); }
+    else if (k === 'soothe') { const r = soothe(y, p, prog); y = r.y; log.push(`резонансы ${p.lo}–${p.hi} Гц: в среднем −${r.avgDb} дБ`); }
+    else if (k === 'transient') { y = transients(y, p); log.push(`атаки ${p.attack > 0 ? '+' : ''}${p.attack} дБ, хвосты ${p.sustain > 0 ? '+' : ''}${p.sustain} дБ`); }
+    else if (k === 'exciter') { const r = exciter(y, p, aux.cutoff); y = r.y; log.push(r.from ? `воздух: от ${(r.from / 1000).toFixed(1)} кГц${r.detected ? ' (срез найден)' : ''}, ${r.levelDb} дБ` : 'воздух: выключен'); }
+    else if (k === 'tape') { y = tape(y, p); log.push(`лента ${Math.round(p.amount * 100)} %`); }
     else if (k === 'declip') { const r = declip(y, p); y = r.y; log.push(`клиппинг: восстановлено ${r.fixed} мест`); }
     else if (k === 'declick') { const r = declick(y, p); y = r.y; log.push(`щелчки: исправлено ${r.fixed}`); }
     else if (k === 'denoise') { const r = denoise(y, { ...p, profile: aux.noise || null }, prog); y = r.y; log.push(r.applied ? `шум: до −${p.amount} дБ${aux.noiseFrom ? ' (профиль из отрывка)' : ''}` : 'шум: профиль не построить'); }
@@ -520,7 +537,7 @@ export function runChain(x, chain, aux = {}, onProgress = null) {
       else { const r = deboom(y, p.strength); y = r.y; log.push(Object.keys(r.cuts).length ? 'гулкость: ' + Object.entries(r.cuts).map(([f, d]) => `${f} Гц ${d} дБ`).join(', ') : 'гулкость: низ в норме'); }
     }
     else if (k === 'comp') { y = compress(y, p); log.push(`компрессор ${Math.round(p.amount * 100)} %`); }
-    else if (k === 'loud') { const r = normalize(y, { lufs: p.lufs }); y = r.y; log.push(`громкость ${p.lufs} LUFS (${r.gainDb > 0 ? '+' : ''}${r.gainDb.toFixed(1)} дБ)`); }
+    else if (k === 'loud') { const r = loudness(y, { lufs: p.lufs, ceilDb: p.ceil ?? -1.5, mode: p.mode || 'gain' }); y = r.y; log.push(`громкость ${p.lufs} LUFS (${r.gainDb > 0 ? '+' : ''}${r.gainDb.toFixed(1)} дБ), пики ${r.tpDb.toFixed(1)} dBTP${p.mode === 'limit' ? (r.limited ? ', лимитер сработал' : ', лимитер не понадобился') : ''}`); }
     done++; prog(0);
   }
   return { y, log };
