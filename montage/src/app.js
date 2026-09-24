@@ -24,6 +24,7 @@ const S = {
   scriptText: '', P: null, files: [], matches: new Map(),
   edits: {}, gains: {}, voiced: {}, uploads: new Map(),
   preset: 'normal', result: null, busy: false, filter: 'all', showDirs: false,
+  tab: location.hash === '#clean' ? 'clean' : 'build', cleanFile: null,
 };
 const PALETTE = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8'];
 const colorOf = key => { const i = S.P ? S.P.chars.findIndex(c => c.key === key) : -1; return PALETTE[(i < 0 ? 0 : i) % PALETTE.length]; };
@@ -295,6 +296,7 @@ function statusOf(cue) {
   if (src.kind === 'upload') return { k: 'own', t: 'своя запись' };
   if (src.kind === 'manual') return { k: 'ok', t: 'выбрано вручную' };
   if (src.kind === 'order') return { k: 'check', t: 'по порядку — проверить' };
+  if (src.kind === 'moved') return src.sim >= 0.7 ? { k: 'ok', t: 'найдено не по порядку' } : { k: 'check', t: 'не по порядку — проверить' };
   if (src.group > 1) return { k: 'check', t: 'в общем куске — проверить' };
   if (src.sim < 0.5) return { k: 'check', t: 'похоже — проверить' };
   return { k: 'ok', t: 'найдено' };
@@ -437,7 +439,9 @@ function progress(t, p) {
   $('#prog-t').textContent = t; $('#prog-b').style.width = `${Math.round(100 * Math.max(0, Math.min(1, p || 0)))}%`;
 }
 function render() {
-  renderScript(); renderFiles(); renderRun(); renderReview(); renderMix();
+  document.querySelectorAll('[data-tabpane]').forEach(el => { el.hidden = el.dataset.tabpane !== S.tab; });
+  document.querySelectorAll('.tabs button').forEach(b => { b.classList.toggle('on', b.dataset.tab === S.tab); b.setAttribute('aria-selected', b.dataset.tab === S.tab); });
+  renderScript(); renderFiles(); renderRun(); renderReview(); renderMix(); renderCleanup();
 }
 function renderScript() {
   const el = $('#script-sum');
@@ -453,7 +457,7 @@ function renderFiles() {
     <div class="file" data-i="${i}">
       <div class="fhead">
         <span class="fname">${esc(f.name)}</span>
-        <span class="fmeta">${f.error ? `<span class="bad">${esc(f.error)}</span>` : f.dur ? fmt(f.dur) : 'читаю…'}${f.segs ? ` · кусков ${f.segs.length}` : ''}</span>
+        <span class="fmeta">${f.error ? `<span class="bad">${esc(f.error)}</span>` : f.dur ? fmt(f.dur) : 'читаю…'}${f.segs ? ` · кусков ${f.segs.length}` : ''}${f.raw48 ? ' · <span class="okt">очищено</span>' : ''}</span>
         <span class="fbtn">
           <button class="icon" data-act="up" title="Выше" ${i ? '' : 'disabled'} aria-label="Выше">↑</button>
           <button class="icon" data-act="down" title="Ниже" ${i < S.files.length - 1 ? '' : 'disabled'} aria-label="Ниже">↓</button>
@@ -584,6 +588,8 @@ function renderMix() {
 
 // ------------------------------------------------------------------ события
 function bind() {
+  $('.tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.tab = b.dataset.tab; stop(); history.replaceState(null, '', S.tab === 'clean' ? '#clean' : location.pathname); render(); });
+  bindCleanup();
   const drop = (zone, fn) => {
     zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('over'); });
     zone.addEventListener('dragleave', () => zone.classList.remove('over'));
@@ -668,5 +674,5 @@ function bind() {
 }
 
 // для проверки из консоли и автотестов
-window.montage = { S, C, PRESETS, render, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses };
+window.montage = { S, C, PRESETS, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses };
 bind(); render();

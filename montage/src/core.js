@@ -306,11 +306,13 @@ export function fillGaps(lines, segs, res, used) {
   while (k < order.length) {
     if (res.has(order[k])) { k++; continue; }
     let e = k; while (e < order.length && !res.has(order[e])) e++;
-    const lo = k > 0 ? lastOf(res.get(order[k - 1])) : 0;
-    const hi = e < order.length ? firstOf(res.get(order[e])) : segs.length;
+    // свободные куски сразу после предыдущей найденной реплики и сразу перед следующей:
+    // при чтении по порядку это один и тот же промежуток, при чтении вразнобой — два разных
     const miss = order.slice(k, e);
-    let free = [];
-    for (let j = lo; j < hi; j++) if (!taken.has(j)) free.push(j);
+    const freeSet = new Set();
+    if (k > 0) { let j = lastOf(res.get(order[k - 1])); while (j < segs.length && !taken.has(j)) { freeSet.add(j); j++; } }
+    if (e < order.length) { let j = firstOf(res.get(order[e])) - 1; while (j >= 0 && !taken.has(j)) { freeSet.add(j); j--; } }
+    let free = [...freeSet].sort((x, y) => x - y);
     const sound = new Map(lines.map(l => [l.key, !!l.sound]));
     free = free.filter(j => miss.some(mk => {
       const q = dur(j) / exp(mk);
@@ -374,7 +376,46 @@ export function extendGroups(lines, segs, res, { gain = 0.08, maxQ = 3 } = {}) {
       if (s < sim + gain && !(fits(cur, add) && s >= sim - 0.02)) break;
       group.unshift(order[e]); cur = cand; sim = s;
     }
-    if (group.length > 1) group.forEach((g, part) => res.set(g, { j: v.j, r: v.r, sim, group, part }));
+    if (group.length > 1) group.forEach((g, part) => res.set(g, { j: v.j, r: v.r, sim, group, part, moved: v.moved }));
+  }
+  return res;
+}
+
+/**
+ * Реплики, которые не нашлись по порядку, ищутся по всему файлу среди неиспользованных кусков:
+ * актёр мог читать сцены вразнобой, а в файле с правками дубли часто идут не по сценарию.
+ * Берётся только уверенное совпадение текста и только не слишком короткая реплика — «нет.»
+ * встречается в сценарии много раз, её так не угадать. Из равных кусков берётся более поздний дубль.
+ */
+export function rescueOutOfOrder(lines, segs, res, used, { tau = 0.55, minLen = 6, R = 4 } = {}) {
+  const taken = new Set(used);
+  for (const v of res.values()) for (let q = v.j; q < v.j + v.r; q++) taken.add(q);
+  const cands = [];
+  for (const l of lines) {
+    if (res.has(l.key) || l.sound || l.t.length < minLen) continue;
+    const L = bigrams(l.t);
+    for (let j = 0; j < segs.length; j++) {
+      if (taken.has(j) || !segs[j].t) continue;
+      let txt = '';
+      for (let r = 1; r <= R && j + r <= segs.length; r++) {
+        const q = j + r - 1;
+        if (taken.has(q)) break;
+        if (!segs[q].t) continue;
+        txt += segs[q].t;
+        if (txt.length > 2.2 * l.t.length + 10) break;
+        const sim = diceMaps(bigrams(txt), L);
+        if (sim >= tau) cands.push({ key: l.key, j, r, sim });
+      }
+    }
+  }
+  cands.sort((a, b) => b.sim - a.sim || b.j - a.j);
+  for (const c of cands) {
+    if (res.has(c.key)) continue;
+    let free = true;
+    for (let q = c.j; q < c.j + c.r; q++) if (taken.has(q)) { free = false; break; }
+    if (!free) continue;
+    res.set(c.key, { j: c.j, r: c.r, sim: c.sim, moved: true });
+    for (let q = c.j; q < c.j + c.r; q++) taken.add(q);
   }
   return res;
 }
@@ -448,6 +489,8 @@ export function matchFile(lines, dirs, segs, { quietSegs = null, env = null } = 
     else res.set(k, v);
   }
   extendGroups(lines, segs, res);
+  rescueOutOfOrder(lines, segs, res, used);         // не по порядку — по всему файлу, только уверенное
+  extendGroups(lines, segs, res);
   // звуковые ремарки («[смех]») не находятся по тексту — они участвуют только в раздаче промежутков
   const soundDirs = dirs.filter(d => isSoundOnly(d.raw || '')).map(d => ({ ...d, sound: true }));
   const gapItems = [...lines, ...soundDirs].sort((x, y) => x.ci - y.ci);
@@ -467,7 +510,7 @@ export function matchFile(lines, dirs, segs, { quietSegs = null, env = null } = 
     }
     out.set(k, { pieces, sim: v.sim, how, group: v.group ? v.group.length : 1, text: segs.slice(v.j, v.j + v.r).map(s => s.text || '').join(' ').trim() });
   };
-  for (const [k, v] of res) put(k, v, v.sim >= 0 ? 'text' : 'order');
+  for (const [k, v] of res) put(k, v, v.sim < 0 ? 'order' : v.moved ? 'moved' : 'text');
   const expOf = new Map(lines.map(l => [l.key, 0.4 + (l.raw || l.t).length / 13]));
   for (const [k, v] of dirRes) put(k, v, 'text');
   if (quietSegs) {                                   // тихие звуки в пустых промежутках (вздохи и т. п.)
@@ -484,7 +527,7 @@ export function matchFile(lines, dirs, segs, { quietSegs = null, env = null } = 
 
 /** Результаты нескольких файлов: найденное по тексту важнее найденного по порядку; при равенстве — файл ниже в списке. */
 export function mergeMatches(perFile) {
-  const rank = h => (h === 'text' ? 2 : 1);
+  const rank = h => (h === 'text' || h === 'moved' ? 2 : 1);
   const out = new Map();
   perFile.forEach((m, fi) => {
     for (const [k, v] of m) {
@@ -534,7 +577,7 @@ export const tameLoop = t => String(t).replace(/(.)\1{3,}/g, '$1$1').replace(/((
 // ------------------------------------------------------------------ громкость (ITU-R BS.1770)
 const KB1 = [1.53512485958697, -2.69169618940638, 1.19839281085285], KA1 = [1, -1.69065929318241, 0.73248077421585];
 const KB2 = [1, -2, 1], KA2 = [1, -1.99004745483398, 0.99007225036621];
-function biquad(x, b, a) {
+function kfilt(x, b, a) {
   const y = new Float64Array(x.length); let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
   for (let i = 0; i < x.length; i++) {
     const v = b[0] * x[i] + b[1] * x1 + b[2] * x2 - a[1] * y1 - a[2] * y2;
@@ -543,7 +586,7 @@ function biquad(x, b, a) {
   return y;
 }
 function gatedLoudness(x, block, hop) {
-  const z = biquad(biquad(x, KB1, KA1), KB2, KA2);
+  const z = kfilt(kfilt(x, KB1, KA1), KB2, KA2);
   const w = Math.round(block * SR), h = Math.round(hop * SR);
   if (z.length < w) { let s = 0; for (const v of z) s += v * v; return 10 * Math.log10(s / Math.max(1, z.length) + 1e-14) - 0.691; }
   const cs = new Float64Array(z.length + 1);

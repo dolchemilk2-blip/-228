@@ -166,6 +166,47 @@ details.how pre { background: var(--bg); border-radius: 8px; padding: 10px 12px;
 #prog-b { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
 #msg { position: fixed; left: 50%; transform: translateX(-50%); bottom: 84px; max-width: min(640px, calc(100% - 32px)); background: var(--ink); color: var(--surface); border-radius: 10px; padding: 12px 16px; font-size: 14px; z-index: 6; box-shadow: var(--shadow); }
 footer { color: var(--muted); font-size: 13px; padding-block: 8px 0; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.tabs button { background: transparent; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 14px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.tabs button.on { color: var(--ink); border-bottom-color: var(--accent); }
+.pane { display: grid; gap: 20px; }
+.okt { color: var(--ok); font-weight: 600; }
+.cl-files { display: flex; flex-wrap: wrap; gap: 6px; }
+.ftab { border: 1px solid var(--line); background: transparent; border-radius: 20px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
+.ftab.on { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.ftab i { font-style: normal; color: var(--ok); } .ftab.on i { color: var(--surface); }
+.cl-head { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.hints { display: flex; flex-wrap: wrap; gap: 6px; }
+.hint { font-size: 12.5px; padding: 2px 9px; border-radius: 20px; background: var(--none-soft); color: var(--muted); font-variant-numeric: tabular-nums; }
+.hint.ok { background: var(--ok-soft); color: var(--ok); } .hint.mid { background: var(--warn-soft); color: var(--warn); } .hint.bad { background: var(--bad-soft); color: var(--bad); }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.presets .ghost-b.on { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.mods { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+.mod { border: 1px solid var(--line2); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; opacity: .6; }
+.mod.on { opacity: 1; border-color: var(--line); }
+.mhead { display: grid; grid-template-columns: auto auto 1fr; gap: 4px 8px; align-items: baseline; cursor: pointer; }
+.mhead b { font-weight: 600; } .mhead span { grid-column: 2 / -1; font-size: 12.5px; color: var(--muted); }
+.mprm { display: grid; gap: 6px; }
+.prm { display: grid; gap: 2px; font-size: 12.5px; color: var(--muted); }
+.prm b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.prm select { border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 4px 8px; font-size: 13px; color: var(--ink); justify-self: start; }
+.prm input[type=range] { width: 100%; }
+.prm.grow { flex: 1 1 260px; }
+.eq { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.eqb { display: grid; justify-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.eqb .v { writing-mode: vertical-lr; direction: rtl; height: 90px; width: 24px; }
+.eqb b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.eqb input[type=number] { width: 62px; border: 1px solid var(--line); border-radius: 6px; padding: 2px 4px; font-size: 12px; background: var(--surface); color: var(--ink); text-align: center; }
+.cl-ab { display: grid; gap: 10px; border-top: 1px solid var(--line2); padding-top: 12px; }
+.ab-top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; }
+.play.ab { width: auto; padding: 0 14px; font-size: 13px; font-weight: 600; }
+.play.ab:disabled { opacity: .4; cursor: default; }
+.specs { display: grid; gap: 8px; }
+.specs > div { display: grid; gap: 3px; }
+.specs .lbl { font: 600 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.specs canvas { width: 100%; height: 150px; border-radius: 6px; background: #0e1220; display: block; }
+.small { font-size: 12.5px; }
+.cl-actions { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; border-top: 1px solid var(--line2); padding-top: 12px; }
 footer a { color: inherit; }
 @media (prefers-reduced-motion: reduce) { #prog-b { transition: none; } }
 </style>
@@ -178,6 +219,12 @@ footer a { color: inherit; }
     <p class="privacy">Всё считается в этом браузере. Записи и сценарий никуда не отправляются.</p>
   </header>
 
+  <nav class="tabs" role="tablist" aria-label="Разделы">
+    <button data-tab="build" role="tab" class="on">Сборка</button>
+    <button data-tab="clean" role="tab">Чистка звука</button>
+  </nav>
+
+  <div data-tabpane="build" class="pane">
   <div class="grid2">
     <section class="card" id="s1">
       <h2 class="step"><b>1</b> Сценарий <small><label class="ghost-b file-b">Открыть .txt<input type="file" id="script-file" accept=".txt,.md,text/plain" hidden></label></small></h2>
@@ -238,6 +285,16 @@ footer a { color: inherit; }
     <p class="muted" style="font-size:13px">Голоса сводятся к одному уровню, реплики подтягиваются к уровню своего голоса; шёпот остаётся тише, крик громче — по ремаркам «(шёпотом)», «(громко)» и капсу. Кнопки ± у реплики — ручная поправка в дБ.</p>
     <div id="mix-out"></div>
   </section>
+
+  </div>
+
+  <div data-tabpane="clean" class="pane" hidden>
+  <section class="card" id="cl">
+    <h2 class="step">Чистка звука <small><label class="ghost-b file-b">Добавить записи<input type="file" id="cl-add" accept="audio/*,.m4a,.opus,.flac" multiple hidden></label></small></h2>
+    <p class="muted">Гул, шум, эхо комнаты, щелчки, взрывные, свист, эквалайзер, подгон под другой голос. Всё, что здесь применено, идёт в сведение вместо оригинала; длина и положение реплик не меняются. Сначала послушайте отрывок «было / стало», потом применяйте ко всему файлу.</p>
+    <div id="cl-body"></div>
+  </section>
+  </div>
 
   <footer>Сопоставление: нарезка по паузам, распознавание Whisper, выравнивание текста по порядку сценария. Громкость — по ITU-R BS.1770.</footer>
 </div>
