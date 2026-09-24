@@ -197,7 +197,7 @@ footer { color: var(--muted); font-size: 13px; padding-block: 8px 0; }
 .eqg { width: 100%; height: 240px; display: block; border-radius: 8px; border: 1px solid var(--line2); touch-action: none; cursor: crosshair; }
 .eqg:focus-visible { outline: 2px solid var(--accent); }
 .bands { display: grid; gap: 4px; }
-.band { display: grid; grid-template-columns: 22px minmax(110px, 1fr) auto auto auto 28px 28px; gap: 6px; align-items: center; font-size: 12.5px; padding: 3px 6px; border-radius: 6px; }
+.band { display: grid; grid-template-columns: 22px minmax(110px, 1fr) auto auto auto 28px 28px 28px; gap: 6px; align-items: center; font-size: 12.5px; padding: 3px 6px; border-radius: 6px; }
 .band.sel { background: var(--accent-soft); }
 .band.off { opacity: .5; }
 .band .bn { font: 600 11px var(--mono); color: var(--accent); text-align: center; }
@@ -220,6 +220,22 @@ footer { color: var(--muted); font-size: 13px; padding-block: 8px 0; }
 .specs canvas { width: 100%; height: 150px; border-radius: 6px; background: #0e1220; display: block; }
 .small { font-size: 12.5px; }
 .cl-actions { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; border-top: 1px solid var(--line2); padding-top: 12px; }
+.sfx-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.srows { display: grid; border-top: 1px solid var(--line2); }
+.srow { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(150px, 190px) 170px 150px 34px; gap: 8px 10px; align-items: center; padding: 8px 4px; border-bottom: 1px solid var(--line2); border-left: 3px solid transparent; }
+.srow.on { border-left-color: var(--ok); }
+.srow .stext { font-size: 14px; overflow-wrap: anywhere; }
+.srow select { border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 5px 8px; font-size: 13px; color: var(--ink); min-width: 0; }
+.srow .gain { display: grid; gap: 2px; font: 12px var(--mono); color: var(--muted); }
+.srow .gain input { width: 100%; }
+.icon.xs { width: 22px; height: 22px; font-size: 10px; }
+.icon.solo { font: 600 11px var(--mono); color: var(--accent); border-color: var(--accent); }
+.icon.solo.on { background: var(--accent); color: var(--accent-ink); }
+.cl-spec { display: grid; gap: 8px; border-top: 1px solid var(--line2); padding-top: 12px; }
+@media (max-width: 860px) { .srow { grid-template-columns: auto minmax(0, 1fr) 34px; } .srow select, .srow .gain { grid-column: 2; } }
+.specv { width: 100%; height: 320px; display: block; border-radius: 6px; background: #0e1220; cursor: crosshair; touch-action: none; }
+.specv-bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.specv-bar b { color: var(--ink); font-variant-numeric: tabular-nums; font-family: var(--mono); font-weight: 500; }
 footer a { color: inherit; }
 @media (prefers-reduced-motion: reduce) { #prog-b { transition: none; } }
 </style>
@@ -235,6 +251,7 @@ footer a { color: inherit; }
   <nav class="tabs" role="tablist" aria-label="Разделы">
     <button data-tab="build" role="tab" class="on">Сборка</button>
     <button data-tab="clean" role="tab">Чистка звука</button>
+    <button data-tab="sfx" role="tab">Звуки</button>
   </nav>
 
   <div data-tabpane="build" class="pane">
@@ -306,6 +323,14 @@ footer a { color: inherit; }
     <h2 class="step">Чистка звука <small><label class="ghost-b file-b">Добавить записи<input type="file" id="cl-add" accept="audio/*,.m4a,.opus,.flac" multiple hidden></label></small></h2>
     <p class="muted">Гул, шум, эхо комнаты, щелчки, взрывные, свист, эквалайзер, подгон под другой голос. Всё, что здесь применено, идёт в сведение вместо оригинала; длина и положение реплик не меняются. Сначала послушайте отрывок «было / стало», потом применяйте ко всему файлу.</p>
     <div id="cl-body"></div>
+  </section>
+  </div>
+
+  <div data-tabpane="sfx" class="pane" hidden>
+  <section class="card" id="sfx">
+    <h2 class="step">Звуки по сценарию <small>дверь, стук, шаги, грохот — из ремарок</small></h2>
+    <p class="muted">Ремарки, которые звучат, находятся сами. К каждой можно подставить свой файл или встроенный звук-заглушку, чтобы услышать, где он ляжет. «Между репликами» — реплики ждут звук; «фоном» — звук стелется под следующими репликами тише. В сведение уходит всё отмеченное галочкой.</p>
+    <div id="sfx-body"></div>
   </section>
   </div>
 

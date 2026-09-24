@@ -5,8 +5,8 @@ const dir = new URL('./src/', import.meta.url);
 const read = f => fs.readFileSync(new URL(f, dir), 'utf8');
 const strip = src => src.replace(/^import [^\n]*\n/gm, '').replace(/^export /gm, '');
 const names = src => [...src.matchAll(/^export (?:const|function|let) (\w+)/gm)].map(m => m[1]);
-const core = read('core.js'), dsp = read('dsp.js');
-const lib = strip(core) + '\n' + strip(dsp), libNames = [...names(core), ...names(dsp)];
+const core = read('core.js'), dsp = read('dsp.js'), sfx = read('sfx.js');
+const lib = strip(core) + '\n' + strip(dsp) + '\n' + strip(sfx), libNames = [...names(core), ...names(dsp), ...names(sfx)];
 const bundleLib = `const C = (() => {\n${lib}\nreturn { ${libNames.join(', ')} };\n})();`;
 // фоновый воркер обработки звука: то же ядро плюс приём сообщений
 const workerSrc = lib + `
@@ -17,8 +17,8 @@ self.onmessage = e => {
     else if (m.type === 'run') { const r = runChain(m.y, m.chain, m.aux || {}, p => self.postMessage({ id: m.id, type: 'progress', p })); self.postMessage({ id: m.id, type: 'done', y: r.y, log: r.log }, [r.y.buffer]); }
   } catch (err) { self.postMessage({ id: m.id, type: 'error', message: String(err && err.message || err) }); }
 };`;
-const app = strip(read('app.js')), cleanup = strip(read('cleanup.js'));
-const bundle = `${bundleLib}\nconst DSP_WORKER_SRC = ${JSON.stringify(workerSrc)};\n\n${cleanup}\n\n${app}`;
+const app = strip(read('app.js')), cleanup = strip(read('cleanup.js')), sounds = strip(read('sounds.js'));
+const bundle = `${bundleLib}\nconst DSP_WORKER_SRC = ${JSON.stringify(workerSrc)};\n\n${cleanup}\n\n${sounds}\n\n${app}`;
 const page = read('page.html').replace('/*BUNDLE*/', () => bundle);
 fs.writeFileSync(new URL('./index.html', import.meta.url), page);
 console.log(`index.html: ${(page.length / 1024).toFixed(0)} КБ, ядро: ${libNames.length} функций`);

@@ -311,6 +311,7 @@ function bandsHtml(c) {
       <label><input type="number" data-m="eq" data-b="${i}" data-p="f" value="${Math.round(b.f)}" min="20" max="20000" step="1"><span>Гц</span></label>
       <label><input type="number" data-m="eq" data-b="${i}" data-p="gain" value="${b.gain}" min="-18" max="18" step="0.5" ${NO_GAIN.has(b.type) ? 'disabled' : ''}><span>дБ</span></label>
       <label><input type="number" data-m="eq" data-b="${i}" data-p="q" value="${b.q}" min="0.3" max="12" step="0.1"><span>Q</span></label>
+      <button class="icon solo" data-act="band-solo" data-b="${i}" title="Слушать только эту полосу" aria-label="Слушать только эту полосу">S</button>
       <button class="icon" data-act="band-off" data-b="${i}" title="${b.off ? 'Включить полосу' : 'Выключить полосу'}" aria-label="Выключить полосу">${b.off ? '○' : '●'}</button>
       <button class="icon" data-act="band-rm" data-b="${i}" title="Убрать" aria-label="Убрать полосу">✕</button>
     </div>`).join('');
@@ -357,14 +358,73 @@ function renderCleanup() {
       <div class="specs"><div><span class="lbl">было</span><canvas id="cl-spec-a"></canvas></div><div><span class="lbl" id="cl-lbl-b">стало${c.dirty ? ' — считаю…' : ''}</span><canvas id="cl-spec-b"></canvas></div></div>
       <p class="muted small" id="cl-plog"></p>
     </div>
+    <div class="cl-spec">
+      <div class="specv-bar"><button class="ghost-b" data-act="spec-open">${c.specOpen ? 'Скрыть спектр файла' : 'Спектр всего файла'}</button>
+        ${c.specOpen ? `<button class="ghost-b" data-act="spec-fit">Весь файл</button>${f.raw48 ? `<button class="ghost-b" data-act="spec-which">${c.specView.which === 'after' ? 'показано: стало' : 'показано: было'}</button>` : ''}<button class="play ab" data-act="spec-play">▶ 8 с с курсора</button><span>колёсико — увеличить, тянуть — двигать, двойной щелчок — сюда отрывок</span><span id="spec-readout"></span>` : ''}</div>
+      ${c.specOpen ? '<canvas id="spec-view" class="specv" aria-label="Спектрограмма всего файла"></canvas>' : ''}
+    </div>
     <div class="cl-actions">
       <button class="primary" data-act="apply" ${c.busy ? 'disabled' : ''}>${f.raw48 ? 'Применить заново ко всему файлу' : 'Применить ко всему файлу'}</button>
       ${files.length > 1 ? `<button class="ghost-b" data-act="apply-all" ${c.busy ? 'disabled' : ''}>Ко всем файлам с этими настройками</button>` : ''}
       ${f.raw48 ? '<button class="ghost-b" data-act="revert">Вернуть оригинал</button><button class="ghost-b" data-act="wav">Скачать WAV</button>' : ''}
       <span class="muted small" id="cl-applied">${f.raw48 ? 'В сведение идёт обработанная версия. ' + (c.log ? c.log.join(' · ') : '') : 'Пока в сведение идёт оригинал.'}</span>
     </div>`;
-  requestAnimationFrame(() => { drawWave($('#cl-wave'), f); drawSpec($('#cl-spec-a'), c.before); refreshPreviewUI(f); abButtons(); });
+  requestAnimationFrame(() => { drawWave($('#cl-wave'), f); drawSpec($('#cl-spec-a'), c.before); refreshPreviewUI(f); abButtons(); if (c.specOpen) drawSpecView(f); });
 }
+// ------------------------------------------------------------------ спектр всего файла с зумом
+function drawSpecView(f) {
+  const cv = $('#spec-view'); if (!cv) return;
+  const c = cl(f), v = c.specView, y = v.which === 'after' && f.raw48 ? f.y48 : srcOf(f), dur = y.length / C.SR;
+  const W = Math.max(320, Math.floor(cv.clientWidth || 800)), H = 320, dpr = window.devicePixelRatio || 1;
+  const span = dur / v.zoom; v.center = Math.max(span / 2, Math.min(dur - span / 2, v.center));
+  const a = v.center - span / 2, b = v.center + span / 2;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const g = cv.getContext('2d'); g.scale(dpr, dpr);
+  const seg = y.subarray(Math.round(a * C.SR), Math.round(b * C.SR));
+  const sp = C.spectrogram(seg, { cols: W, rows: H, fmin: 40, fmax: 20000 }), img = g.createImageData(W, H), d = img.data;
+  for (let r = 0; r < H; r++) for (let x = 0; x < W; x++) {
+    const col = Math.min(sp.cols - 1, Math.floor(x * sp.cols / W)), val = (sp.data[r * sp.cols + col] - sp.min) / (sp.max - sp.min), cc = color(Math.max(0, Math.min(1, val)));
+    const o = (r * W + x) * 4; d[o] = cc[0]; d[o + 1] = cc[1]; d[o + 2] = cc[2]; d[o + 3] = 255;
+  }
+  const tmp = document.createElement('canvas'); tmp.width = W; tmp.height = H; tmp.getContext('2d').putImageData(img, 0, 0);
+  g.drawImage(tmp, 0, 0, W, H);
+  // оси: частота слева (логарифмическая 40–20000), время снизу
+  g.font = '11px ' + cssVar('--mono'); g.fillStyle = 'rgba(255,255,255,.75)'; g.strokeStyle = 'rgba(255,255,255,.18)'; g.lineWidth = 1;
+  for (const fr of [100, 200, 500, 1000, 2000, 5000, 10000]) { const yy = H - Math.log(fr / 40) / Math.log(20000 / 40) * H; g.beginPath(); g.moveTo(0, yy); g.lineTo(W, yy); g.stroke(); g.fillText(fr >= 1000 ? fr / 1000 + 'к' : String(fr), 3, yy - 2); }
+  const step = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 30, 60, 120].find(s => span / s <= 12) || 300;
+  g.textAlign = 'center';
+  for (let t = Math.ceil(a / step) * step; t < b; t += step) { const x = (t - a) / span * W; g.beginPath(); g.moveTo(x, H - 14); g.lineTo(x, H); g.stroke(); g.fillText(fmt(t), x, H - 3); }
+  g.textAlign = 'left';
+  if (v.cursor != null && v.cursor >= a && v.cursor <= b) { const x = (v.cursor - a) / span * W; g.strokeStyle = cssVar('--accent'); g.lineWidth = 1.5; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); }
+  const ex = (c.at - a) / span * W, ew = EXCERPT / span * W;
+  if (ex + ew > 0 && ex < W) { g.strokeStyle = 'rgba(255,255,255,.7)'; g.setLineDash([3, 3]); g.strokeRect(ex, 1, ew, H - 2); g.setLineDash([]); }
+  v.a = a; v.b = b; v.W = W; v.H = H;
+  const ro = $('#spec-readout'); if (ro) ro.innerHTML = `<b>${fmt(a)}–${fmt(b)}</b> · ×${v.zoom.toFixed(v.zoom < 10 ? 1 : 0)}`;
+}
+function specViewPos(e) { const cv = $('#spec-view'), r = cv.getBoundingClientRect(), v = cl(S.cleanFile).specView; const t = v.a + (e.clientX - r.left) / r.width * (v.b - v.a), fr = 40 * Math.pow(20000 / 40, 1 - (e.clientY - r.top) / r.height); return { t, fr }; }
+let specDrag = null;
+function bindSpecView(pane) {
+  pane.addEventListener('wheel', e => {
+    if (e.target.id !== 'spec-view') return; e.preventDefault();
+    const f = S.cleanFile, v = cl(f).specView, { t } = specViewPos(e), dur = srcOf(f).length / C.SR;
+    const z0 = v.zoom; v.zoom = Math.max(1, Math.min(200, v.zoom * (e.deltaY < 0 ? 1.3 : 1 / 1.3)));
+    const span = dur / v.zoom, frac = (t - v.a) / (v.b - v.a);          // точка под курсором остаётся на месте
+    v.center = t - (frac - 0.5) * span; if (v.zoom === z0) return;
+    drawSpecView(f);
+  }, { passive: false });
+  pane.addEventListener('pointerdown', e => { if (e.target.id === 'spec-view') { const v = cl(S.cleanFile).specView; specDrag = { x: e.clientX, center: v.center, moved: false }; try { e.target.setPointerCapture(e.pointerId); } catch {} } });
+  pane.addEventListener('pointermove', e => {
+    if (e.target.id !== 'spec-view') return;
+    const f = S.cleanFile, v = cl(f).specView, { t, fr } = specViewPos(e);
+    const ro = $('#spec-readout'); if (ro) ro.innerHTML = `<b>${fmt(a2(t))}</b> · <b>${fr >= 1000 ? (fr / 1000).toFixed(2) + ' кГц' : Math.round(fr) + ' Гц'}</b> · ×${v.zoom.toFixed(v.zoom < 10 ? 1 : 0)}`;
+    if (!specDrag) return;
+    const dx = e.clientX - specDrag.x; if (Math.abs(dx) > 2) specDrag.moved = true;
+    v.center = specDrag.center - dx / e.target.getBoundingClientRect().width * (v.b - v.a); drawSpecView(f);
+  });
+  pane.addEventListener('pointerup', e => { if (specDrag && e.target.id === 'spec-view') { if (!specDrag.moved) { const v = cl(S.cleanFile).specView; v.cursor = specViewPos(e).t; drawSpecView(S.cleanFile); } specDrag = null; } });
+  pane.addEventListener('dblclick', e => { if (e.target.id === 'spec-view') { const f = S.cleanFile, c = cl(f), dur = srcOf(f).length / C.SR; c.at = Math.round(Math.max(0, Math.min(dur - EXCERPT, specViewPos(e).t - EXCERPT / 2))); $('#cl-at').value = c.at; $('#cl-at-t').textContent = fmt(c.at); drawWave($('#cl-wave'), f); drawSpecView(f); markDirty(f); } });
+}
+const a2 = t => Math.max(0, t);
 /** После пересчёта отрывка: обновить только то, что зависит от результата, — без перестройки формы. */
 function refreshPreviewUI(f) {
   const c = cl(f); if (S.cleanFile !== f) return;
@@ -405,6 +465,16 @@ function bindCleanup() {
     if (a === 'band-add') { if (c.chain.eq.bands.length >= 10) return; c.chain.eq.bands.push({ type: 'peak', f: 1000, q: 1, gain: 0 }); c.chain.eq.on = true; c.eqSel = c.chain.eq.bands.length - 1; renderCleanup(); markDirty(f); return; }
     if (a === 'band-rm') { c.chain.eq.bands.splice(+b.dataset.b, 1); c.eqSel = -1; renderCleanup(); markDirty(f); return; }
     if (a === 'band-off') { const band = c.chain.eq.bands[+b.dataset.b]; band.off = !band.off; renderCleanup(); markDirty(f); return; }
+    if (a === 'band-solo') { if (playing && playing.btn === b) return stop(); const band = c.chain.eq.bands[+b.dataset.b]; if (!band || !c.before) return;
+      // слышно только эту полосу: полосовой фильтр с её шириной; для срезов — сам срез
+      const q = Math.max(0.7, band.q || 1), co = band.type === 'hp' || band.type === 'lp' ? C.biquad(band.type, band.f, q) : C.biquad('bp', band.f, q);
+      let y = C.filt(c.before, co); if (band.type !== 'hp' && band.type !== 'lp') y = C.filt(y, co);
+      const L = C.integratedLufs(y), g = isFinite(L) && L > -69 ? Math.pow(10, (-20 - L) / 20) : 1; y = y.map(v => v * g);
+      abStop(); play(y, b); return; }
+    if (a === 'spec-open') { c.specView = c.specView || { zoom: 1, center: srcOf(f).length / C.SR / 2, which: 'before' }; c.specOpen = !c.specOpen; renderCleanup(); return; }
+    if (a === 'spec-which') { c.specView.which = c.specView.which === 'before' ? 'after' : 'before'; drawSpecView(f); return; }
+    if (a === 'spec-fit') { c.specView.zoom = 1; c.specView.center = srcOf(f).length / C.SR / 2; drawSpecView(f); return; }
+    if (a === 'spec-play') { const v = c.specView; if (playing && playing.btn === b) return stop(); const y = (v.which === 'after' && f.raw48 ? f.y48 : srcOf(f)), at = Math.round((v.cursor ?? v.center) * C.SR); abStop(); play(y.slice(at, at + 8 * C.SR), b); return; }
   });
   const onParam = e => {
     const x = e.target, f = S.cleanFile; if (!f || !x.dataset.m) return;
@@ -441,6 +511,7 @@ function bindCleanup() {
   pane.addEventListener('wheel', e => { if (e.target.id === 'eq-canvas') eqWheel(e); }, { passive: false });
   pane.addEventListener('keydown', e => { if (e.target.id === 'eq-canvas') eqKey(e); });
   $('#cl-add').addEventListener('change', e => { addFiles(e.target.files); e.target.value = ''; });
+  bindSpecView(pane);
 }
 // ------------------------------------------------------------------ эквалайзер: мышь и клавиатура
 let eqDrag = null;

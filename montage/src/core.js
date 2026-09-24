@@ -663,11 +663,18 @@ export function levelLines(items, { charLufs = -20, strength = 0.75, voiceMax = 
  * «пауза» +0,7, «долгая пауза» +1,5, «тишина» +1,0, прочие ремарки +0,15 (до +1,2), сцены 2,6 с.
  * cues — весь сценарий; audioOf(cue) → Float32Array | null. Незаписанная реплика — пауза.
  */
-export function layout(cues, audioOf, isVoiced) {
+export function layout(cues, audioOf, isVoiced, bedOf = null) {
   const placed = [], sheet = [], rows = [];
   let pend = { extra: 0, generic: 0, scene: null }, t = 0.6, prev = '', scene = '1', first = true;
   for (const c of cues) {
     if (c.type === 'scene') { pend.scene = c.n; continue; }
+    const bed = c.type === 'dir' && bedOf ? bedOf(c) : null;
+    if (bed) {                                        // звук фоном: ложится с этого места, реплики не ждут
+      const at = t + (pend.scene != null ? (first ? 0 : 2.6) : 0);
+      placed.push({ at, audio: bed.audio, cue: c, bed: true });
+      rows.push({ cue: c, scene: pend.scene != null ? pend.scene : scene, at, dur: bed.audio.length / SR, recorded: true, sound: bed.name });
+      continue;
+    }
     if (c.type === 'dir' && !isVoiced(c)) {
       const tl = c.text.toLowerCase();
       if (tl.includes('долгая пауза')) pend.extra += 1.5;
@@ -683,6 +690,7 @@ export function layout(cues, audioOf, isVoiced) {
     t += gap;
     const y = audioOf(c);
     let dur;
+    if (y && y.audio) { placed.push({ at: t, audio: y.audio, cue: c }); dur = y.audio.length / SR; rows.push({ cue: c, scene, at: t, dur, recorded: true, sound: y.name }); t += dur; prev = c.text; continue; }
     if (y) { placed.push({ at: t, audio: y, cue: c }); dur = y.length / SR; }
     else { dur = estDuration(c.text); sheet.push({ cue: c, at: t, dur }); }
     rows.push({ cue: c, scene, at: t, dur, recorded: !!y });
