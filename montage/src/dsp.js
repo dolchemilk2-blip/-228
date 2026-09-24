@@ -359,6 +359,11 @@ export function eq(x, bands) {
   const coefs = bands.map(bandCoefs).filter(Boolean);
   return coefs.length ? cascade(x, coefs) : x;
 }
+/** Пятиполосный эквалайзер {f: [..], g: [..]} → полосы для eq(): полки по краям, колокола в середине. */
+export function eq5Bands(p) {
+  const n = (p && p.f || []).length;
+  return (p.f || []).map((f, i) => ({ type: i === 0 ? 'lowshelf' : i === n - 1 ? 'highshelf' : 'peak', f, q: i === 0 || i === n - 1 ? 0.7 : 1, gain: +(p.g && p.g[i]) || 0 }));
+}
 /** Усиление фильтра в дБ на частотах freqs (Гц). */
 export function biquadResponse(c, freqs, sr = SR) {
   const [b0, b1, b2, a1, a2] = c, out = new Float32Array(freqs.length);
@@ -469,7 +474,7 @@ export function spectrogram(x, { cols = 600, rows = 160, fmin = 60, fmax = 16000
 }
 
 // ------------------------------------------------------------------ цепочка
-export const CHAIN_ORDER = ['dehum', 'hp', 'declip', 'declick', 'denoise', 'dereverb', 'deplosive', 'deess', 'eq', 'tone', 'comp', 'loud'];
+export const CHAIN_ORDER = ['dehum', 'hp', 'declip', 'declick', 'denoise', 'dereverb', 'deplosive', 'deess', 'eq5', 'eq', 'tone', 'comp', 'loud'];
 export const CLEAN_PRESETS = {
   soft:   { dehum: 1, hp: 70, denoise: [6, 1.3], dereverb: [0.2, 0.3, 6], tone: 0, deess: 0, deplosive: 0, declick: 0 },
   normal: { dehum: 1, hp: 70, denoise: [10, 1.5], dereverb: [0.4, 0.4, 10], tone: 0, deess: 0, deplosive: 0, declick: 0 },
@@ -484,6 +489,7 @@ export function defaultChain(preset = 'normal', hints = {}) {
     denoise: { on: !!P.denoise, amount: P.denoise ? P.denoise[0] : 10, sens: P.denoise ? P.denoise[1] : 1.5 },
     dereverb: { on: !!P.dereverb, spectral: P.dereverb ? P.dereverb[0] : 0.4, t60: 0.5, tails: P.dereverb ? P.dereverb[1] : 0.4, pauses: P.dereverb ? P.dereverb[2] : 10 },
     deplosive: { on: !!P.deplosive, amount: 0.6 }, deess: { on: !!P.deess, amount: 0.5 },
+    eq5: { on: false, f: [120, 250, 1000, 3000, 8000], g: [0, 0, 0, 0, 0] },
     eq: { on: false, bands: [{ type: 'lowshelf', f: 120, q: 0.7, gain: 0 }, { type: 'peak', f: 250, q: 1, gain: 0 }, { type: 'peak', f: 1000, q: 1, gain: 0 }, { type: 'peak', f: 3000, q: 1, gain: 0 }, { type: 'highshelf', f: 8000, q: 0.7, gain: 0 }] },
     tone: { on: !!P.tone || !!(hints.boom >= 4 && preset !== 'none' && preset !== 'hum'), mode: 'auto', strength: 1, ref: null },
     comp: { on: false, amount: 0.4 }, loud: { on: preset !== 'none', lufs: -20 },
@@ -507,6 +513,7 @@ export function runChain(x, chain, aux = {}, onProgress = null) {
     }
     else if (k === 'deplosive') { y = deplosive(y, p); log.push('взрывные придавлены'); }
     else if (k === 'deess') { y = deess(y, p); log.push('свист придавлен'); }
+    else if (k === 'eq5') { const bands = eq5Bands(p); y = eq(y, bands); log.push('пять полос: ' + (bands.filter(b => Math.abs(b.gain) >= 0.1).map(b => `${b.f} Гц ${b.gain > 0 ? '+' : ''}${b.gain}`).join(', ') || 'без изменений')); }
     else if (k === 'eq') { y = eq(y, p.bands); log.push('эквалайзер: ' + (p.bands.filter(bandCoefs).map(b => `${b.type === 'hp' ? 'срез ниже' : b.type === 'lp' ? 'срез выше' : b.type === 'notch' ? 'вырез' : ''} ${b.f} Гц${b.type === 'hp' || b.type === 'lp' || b.type === 'notch' ? '' : ' ' + (b.gain > 0 ? '+' : '') + b.gain}`.trim()).join(', ') || 'без изменений')); }
     else if (k === 'tone') {
       if (p.mode === 'match' && aux.refLtas) { const r = matchTone(y, aux.refLtas, { strength: p.strength }); y = r.y; log.push('тембр подогнан под образец'); }

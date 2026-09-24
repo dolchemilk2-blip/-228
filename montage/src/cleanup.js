@@ -18,6 +18,7 @@ const MODULES = [
     params: [{ k: 'amount', min: 0, max: 1, step: 0.05, pct: true, label: 'сила' }] },
   { k: 'deess', name: 'Свист', desc: 'резкие «с», «ш», «ц»: полоса 4,5–9 кГц придавливается там, где громче обычного',
     params: [{ k: 'amount', min: 0, max: 1, step: 0.05, pct: true, label: 'сила' }] },
+  { k: 'eq5', name: 'Эквалайзер — пять полос', desc: 'простой: ползунки ±12 дБ, частоту можно поменять; работает вместе с графическим ниже', params: [] },
   { k: 'tone', name: 'Тембр', desc: 'снять гулкость (горб в низах) или подогнать спектр под другую запись, чтобы голоса звучали вместе',
     params: [{ k: 'mode', type: 'select', opts: [['auto', 'снять гулкость'], ['match', 'как у другой записи']] }, { k: 'ref', type: 'ref' }, { k: 'strength', min: 0, max: 1, step: 0.05, pct: true, label: 'насколько' }] },
   { k: 'comp', name: 'Компрессор', desc: 'ровнее по громкости внутри реплик; поднимает и хвосты комнаты — включать после чистки',
@@ -165,7 +166,7 @@ function revertFile(f) {
 async function restoreClean(f) {
   const p = S.pendingClean && S.pendingClean.get(f.name); if (!p) return;
   S.pendingClean.delete(f.name);
-  const c = cl(f); c.chain = p.chain; c.preset = p.preset || 'normal'; c.dirty = true;
+  const c = cl(f); c.chain = { ...C.defaultChain(p.preset || 'normal'), ...p.chain }; c.preset = p.preset || 'normal'; c.dirty = true;   // проекты старых версий без новых модулей
   await analyzeFile(f);
   if (p.applied) await applyFile(f, true);
 }
@@ -239,6 +240,7 @@ function otherCoefs(c) {
   const out = [], ch = c.chain;
   if (ch.hp.on) out.push(C.biquad('hp', ch.hp.fc, 0.707));
   if (ch.dehum.on && c.A && c.A.hum) for (const p of c.A.hum.peaks.slice(0, 6)) out.push(C.biquad('peak', p.f, 30, -Math.max(10, Math.min(30, p.prom + 3))));
+  if (ch.eq5 && ch.eq5.on) for (const b of C.eq5Bands(ch.eq5)) { const co = C.bandCoefs(b); if (co) out.push(co); }
   if (ch.tone.on && ch.tone.mode === 'auto' && c.A && c.A.octaves) for (const [fc, ref] of Object.entries(C.TONE_REF)) { const d = Math.max(-8, Math.min(0, ref + 2 - c.A.octaves[fc]) * ch.tone.strength); if (d <= -0.5) out.push(C.biquad('peak', +fc, 1.0, d)); }
   return out;
 }
@@ -303,6 +305,10 @@ function paramHtml(mod, p, c, f) {
   const shown = p.pct ? `${Math.round(v * 100)} %` : `${v}${p.unit ? ' ' + p.unit : ''}`;
   return `<label class="prm"><span>${esc(p.label)} <b>${shown}</b></span><input type="range" data-m="${mod.k}" data-p="${p.k}" min="${p.min}" max="${p.max}" step="${p.step}" value="${v}"></label>`;
 }
+function eq5Html(c) {
+  const p = c.chain.eq5;
+  return `<div class="eq5">${p.f.map((f, i) => `<div class="eqb"><input type="range" class="v" data-m="eq5" data-b="${i}" data-p="g" min="-12" max="12" step="0.5" value="${p.g[i]}" aria-label="усиление ${f} Гц"><b>${p.g[i] > 0 ? '+' : ''}${p.g[i]}</b><input type="number" data-m="eq5" data-b="${i}" data-p="f" value="${f}" min="30" max="16000" step="10" aria-label="частота"><span>Гц</span></div>`).join('')}</div>`;
+}
 function bandsHtml(c) {
   const rows = c.chain.eq.bands.map((b, i) => `
     <div class="band ${i === c.eqSel ? 'sel' : ''} ${b.off ? 'off' : ''}" data-b="${i}">
@@ -321,7 +327,7 @@ function bandsHtml(c) {
 function eqModuleHtml(c) {
   const ch = c.chain;
   return `<div class="mod eq-mod ${ch.eq.on ? 'on' : ''}">
-    <label class="mhead"><input type="checkbox" data-m="eq" data-p="on" ${ch.eq.on ? 'checked' : ''}><b>Эквалайзер</b><span>серым — спектр отрывка «было», зелёным — «стало»; пунктир — что делают срез низа, гул и тембр</span></label>
+    <label class="mhead"><input type="checkbox" data-m="eq" data-p="on" ${ch.eq.on ? 'checked' : ''}><b>Эквалайзер</b><span>серым — спектр отрывка «было», зелёным — «стало»; пунктир — что делают срез низа, гул, тембр и пять полос</span></label>
     <div class="eq-presets">${Object.entries(EQ_PRESETS).map(([k, p]) => `<button class="ghost-b" data-eqpreset="${k}">${p.name}</button>`).join('')}</div>
     <canvas id="eq-canvas" class="eqg" tabindex="0" aria-label="График эквалайзера"></canvas>
     ${bandsHtml(c)}
@@ -339,7 +345,7 @@ function renderCleanup() {
   const mods = MODULES.map(m => `
     <div class="mod ${chain[m.k].on ? 'on' : ''}">
       <label class="mhead"><input type="checkbox" data-m="${m.k}" data-p="on" ${chain[m.k].on ? 'checked' : ''}><b>${m.name}</b><span>${m.desc}</span></label>
-      <div class="mprm">${m.params.map(p => paramHtml(m, p, c, f)).join('')}</div>
+      <div class="mprm">${m.k === 'eq5' ? eq5Html(c) : m.params.map(p => paramHtml(m, p, c, f)).join('')}</div>
     </div>`).join('');
   pane.innerHTML = tabs + `
     <div class="cl-head"><div class="hints">${hintChips(c.A)}</div>
@@ -452,7 +458,7 @@ function bindCleanup() {
     const b = e.target.closest('button'); if (!b) return;
     const f = S.cleanFile, c = f && cl(f);
     if (b.dataset.name) { S.cleanFile = S.files.find(x => x.name === b.dataset.name); abStop(); stop(); renderCleanup(); return; }
-    if (b.dataset.preset) { c.preset = b.dataset.preset; const eqKeep = c.chain.eq; c.chain = C.defaultChain(c.preset, { boom: c.A.boom }); c.chain.eq = eqKeep; c.dirty = true; renderCleanup(); previewSoon(f); return; }
+    if (b.dataset.preset) { c.preset = b.dataset.preset; const eqKeep = c.chain.eq, eq5Keep = c.chain.eq5; c.chain = C.defaultChain(c.preset, { boom: c.A.boom }); c.chain.eq = eqKeep; c.chain.eq5 = eq5Keep; c.dirty = true; renderCleanup(); previewSoon(f); return; }
     if (b.dataset.eqpreset) { const p = EQ_PRESETS[b.dataset.eqpreset]; c.chain.eq.bands = clone(p.bands); if (p.bands.length) c.chain.eq.on = true; c.eqSel = -1; renderCleanup(); markDirty(f); return; }
     const a = b.dataset.act;
     if (a === 'before' || a === 'after') return abPlay(f, a);
@@ -479,6 +485,11 @@ function bindCleanup() {
   const onParam = e => {
     const x = e.target, f = S.cleanFile; if (!f || !x.dataset.m) return;
     const c = cl(f), m = x.dataset.m, p = x.dataset.p;
+    if (m === 'eq5' && x.dataset.b != null) {
+      const i = +x.dataset.b, v = +x.value; if (!isFinite(v)) return;
+      if (p === 'g') { c.chain.eq5.g[i] = Math.max(-12, Math.min(12, v)); x.nextElementSibling.textContent = (v > 0 ? '+' : '') + v; } else c.chain.eq5.f[i] = Math.max(30, Math.min(16000, v));
+      drawEq($('#eq-canvas'), f); markDirty(f); return;
+    }
     if (m === 'eq' && x.dataset.b != null) {
       const band = c.chain.eq.bands[+x.dataset.b]; if (!band) return;
       if (p === 'type') { band.type = x.value; if (NO_GAIN.has(band.type)) band.gain = 0; const gi = x.closest('.band').querySelector('[data-p=gain]'); gi.disabled = NO_GAIN.has(band.type); gi.value = band.gain; }

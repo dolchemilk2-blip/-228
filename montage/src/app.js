@@ -308,6 +308,7 @@ async function mixdown() {
   S.busy = true; render(); progress('Свожу…', 0.1);
   await new Promise(r => setTimeout(r, 30));
   try {
+    if (typeof dbRestore === 'function') await dbRestore();      // звуки из базы, которых ещё нет (проект открыт на другом компьютере)
     const strength = +$('#lvl').value, target = +$('#lufs').value;
     const items = [];
     const voiceOf = cue => cue.type === 'line' ? cue.spk : (S.matches.get(cue.id)?.voice || 'ремарки');
@@ -386,7 +387,7 @@ function reportCsv() {
 function projectJson() {
   return JSON.stringify({ app: 'montage', v: 1, script: S.scriptText,
     files: S.files.map(f => ({ name: f.name, size: f.size, chars: [...f.chars] })),
-    edits: S.edits, gains: S.gains, voiced: S.voiced, sfx: S.sfxSaved || {}, sfxLib: (S.sfx ? S.sfx.lib : []).map(f => f.name),
+    edits: S.edits, gains: S.gains, voiced: S.voiced, sfx: S.sfxSaved || {}, sfxLib: (S.sfx ? S.sfx.lib : []).map(f => f.db ? { name: f.name, db: f.db, text: f.text || '' } : f.name),
     cleanup: S.files.filter(f => f.clean && f.clean.chain).map(f => ({ name: f.name, chain: f.clean.chain, preset: f.clean.preset, applied: !!f.raw48 })) }, null, 1);
 }
 
@@ -612,6 +613,7 @@ function bind() {
       S.pendingChars = new Map((p.files || []).map(x => [x.name, x.chars]));
       for (const f of S.files) if (S.pendingChars.has(f.name)) { f.chars = new Set(S.pendingChars.get(f.name)); f.manualChars = true; }
       S.sfxSaved = p.sfx || {}; sfxState().cues = JSON.parse(JSON.stringify(S.sfxSaved)); saveEdits();
+      S.sfxPendingDb = (p.sfxLib || []).filter(e => e && typeof e === 'object' && e.db);
       S.pendingClean = new Map((p.cleanup || []).map(x => [x.name, x]));
       for (const f of S.files) if (f.y48) restoreClean(f);
       notify('Проект открыт. Добавьте те же файлы записей — роли подставятся сами.'); render();
@@ -681,5 +683,5 @@ function bind() {
 }
 
 // для проверки из консоли и автотестов
-window.montage = { S, C, PRESETS, projectJson, sfxAudio, sfxAuto, renderSounds, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses };
+window.montage = { S, C, PRESETS, projectJson, sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses };
 bind(); render();
