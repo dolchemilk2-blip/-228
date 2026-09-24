@@ -710,22 +710,42 @@ export function layout(cues, audioOf, isVoiced, bedOf = null, { tempo = 1, timin
 }
 
 /** Пиковый лимитер с заглядыванием вперёд (5 мс) и восстановлением 60 мс. */
-export function limit(x, ceil = 0.84, inPlace = false) {
-  const la = Math.round(0.005 * SR), n = x.length, cap = la + 2, qi = new Int32Array(cap), qv = new Float32Array(cap);
-  const need = i => { const a = Math.abs(x[i]); return a > ceil ? ceil / a : 1; };
-  const push = j => { const nj = need(j); while (tl > h && qv[(tl - 1) % cap] >= nj) tl--; qi[tl % cap] = j; qv[tl % cap] = nj; tl++; };
-  let h = 0, tl = 0; for (let j = 0; j < Math.min(la, n); j++) push(j);   // скользящий минимум на окне [i, i+la] — один проход, без массивов на весь сигнал
+/** Лимитер на отрезке [a, b): упреждение 5 мс, атака 1,5 мс, отпускание 60 мс; усиление в начале — 1. */
+const LIM_Q = 512, LIM_M = LIM_Q - 1, LIM_I = new Int32Array(LIM_Q), LIM_V = new Float32Array(LIM_Q);
+function limitSpan(x, y, a, b, ceil) {
+  const la = Math.round(0.005 * SR), qi = LIM_I, qv = LIM_V;   // очередь-кольцо: скользящий минимум нужного усиления на окне [i, i+la]
   const aAtt = 1 - Math.exp(-1 / (0.0015 * SR)), aRel = 1 - Math.exp(-1 / (0.06 * SR));
-  const y = inPlace ? x : new Float32Array(n); let env = 1;
-  for (let i = 0; i < n; i++) {
-    if (i + la < n) push(i + la);
-    while (qi[h % cap] < i) h++;
-    const tg = qv[h % cap];
+  let h = 0, tl = 0, env = 1;
+  for (let j = a, e = Math.min(a + la, b); j < e; j++) {
+    const v = x[j] < 0 ? -x[j] : x[j], nj = v > ceil ? ceil / v : 1;
+    while (tl > h && qv[(tl - 1) & LIM_M] >= nj) tl--;
+    qi[tl & LIM_M] = j; qv[tl & LIM_M] = nj; tl++;
+  }
+  for (let i = a; i < b; i++) {
+    const j = i + la;
+    if (j < b) { const v = x[j] < 0 ? -x[j] : x[j], nj = v > ceil ? ceil / v : 1; while (tl > h && qv[(tl - 1) & LIM_M] >= nj) tl--; qi[tl & LIM_M] = j; qv[tl & LIM_M] = nj; tl++; }
+    while (qi[h & LIM_M] < i) h++;
+    const tg = qv[h & LIM_M];
     env += (tg - env) * (tg < env ? aAtt : aRel);
     let v = x[i] * env;
     if (v > ceil) v = ceil; else if (v < -ceil) v = -ceil;
     y[i] = v;
   }
+}
+/**
+ * Лимитер. Работает только там, где есть превышение: от 5 мс до пика и 0,5 с после последнего (за это время
+ * отпускание возвращает усиление к 1 с точностью 0,03 %), остальное копируется как есть — в разы быстрее.
+ */
+export function limit(x, ceil = 0.84, inPlace = false) {
+  const n = x.length, la = Math.round(0.005 * SR), settle = Math.round(0.5 * SR), y = inPlace ? x : x.slice();
+  let a = -1, last = -Infinity;
+  for (let k = 0; k < n; k++) {
+    const v = x[k]; if (v <= ceil && v >= -ceil) continue;
+    if (a < 0) a = Math.max(0, k - la);
+    else if (k - last > settle + la) { limitSpan(x, y, a, Math.min(n, last + settle), ceil); a = Math.max(0, k - la); }
+    last = k;
+  }
+  if (a >= 0) limitSpan(x, y, a, Math.min(n, last + settle), ceil);
   return y;
 }
 

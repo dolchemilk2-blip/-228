@@ -5,8 +5,8 @@ const dir = new URL('./src/', import.meta.url);
 const read = f => fs.readFileSync(new URL(f, dir), 'utf8');
 const strip = src => src.replace(/^import [^\n]*\n/gm, '').replace(/^export /gm, '');
 const names = src => [...src.matchAll(/^export (?:const|function|let) (\w+)/gm)].map(m => m[1]);
-const core = read('core.js'), dsp = read('dsp.js'), master = read('master.js'), sfx = read('sfx.js');
-const lib = strip(core) + '\n' + strip(dsp) + '\n' + strip(master) + '\n' + strip(sfx), libNames = [...names(core), ...names(dsp), ...names(master), ...names(sfx)];
+const core = read('core.js'), dsp = read('dsp.js'), master = read('master.js'), fxdsp = read('fxdsp.js'), sfx = read('sfx.js');
+const lib = strip(core) + '\n' + strip(dsp) + '\n' + strip(master) + '\n' + strip(fxdsp) + '\n' + strip(sfx), libNames = [...names(core), ...names(dsp), ...names(master), ...names(fxdsp), ...names(sfx)];
 const bundleLib = `const C = (() => {\n${lib}\nreturn { ${libNames.join(', ')} };\n})();`;
 // фоновый воркер обработки звука: то же ядро плюс приём сообщений
 const workerSrc = lib + `
@@ -14,6 +14,7 @@ self.onmessage = e => {
   const m = e.data;
   try {
     if (m.type === 'analyze') { self.postMessage({ id: m.id, type: 'analyzed', A: analyze(m.y), noise: noiseProfile(m.y), ltas: m.wantLtas ? ltas(m.y, 2) : null }); }
+    else if (m.type === 'fx') { const y = fxProcess(m.y, m.key); self.postMessage({ id: m.id, type: 'done', y }, [y.buffer]); }
     else if (m.type === 'run') { const r = runChain(m.y, m.chain, m.aux || {}, p => self.postMessage({ id: m.id, type: 'progress', p })); self.postMessage({ id: m.id, type: 'done', y: r.y, log: r.log }, [r.y.buffer]); }
   } catch (err) { self.postMessage({ id: m.id, type: 'error', message: String(err && err.message || err) }); }
 };`;

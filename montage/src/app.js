@@ -46,7 +46,7 @@ function play(samples, btn) {
   playing = { src, btn }; if (btn) btn.classList.add('on');
   src.onended = () => { if (playing && playing.src === src) stop(); };
 }
-function stop() { if (playing) { try { playing.src.stop(); } catch {} playing.btn?.classList.remove('on'); playing = null; } if (typeof abStop === 'function') abStop(); }
+function stop() { if (playing) { try { playing.src.stop(); } catch {} playing.btn?.classList.remove('on'); playing = null; } if (typeof abStop === 'function') abStop(); if (typeof tpPause === 'function') tpPause(); }
 
 async function decodeFile(file) {
   const buf = await file.arrayBuffer();
@@ -336,54 +336,173 @@ async function mixdown() {
     }
     if (!items.length && !(S.sfx && Object.values(S.sfx.cues).some(c => c.on && c.src))) throw new Error('нет ни одной реплики с записью');
     C.levelLines(items, { strength, manual: S.gains });
-    for (const it of items) { it.audio0 = it.audio; it.fix0 = it.fix; it.levelAfter0 = it.levelAfter; }   // выровненный звук — основа для регуляторов персонажей
+    for (const it of items) { it.audio0 = it.audio; it.fix0 = it.fix; it.levelAfter0 = it.levelAfter; it.man0 = S.gains[it.id] || 0; }   // выровненный звук — основа для регуляторов персонажей
     const byId = new Map(items.map(it => [it.id, it]));
     if (S.result && S.result.url) URL.revokeObjectURL(S.result.url);
     S.result = { items, byId, strength, target, at: new Date() };
     progress('Свожу: громкость и лимитер…', 0.6);
     await new Promise(r => setTimeout(r, 30));
-    remix();
+    if (typeof fxPool === 'function') fxPool();          // потоки эффектов прогреваются заранее
+    await remix('full');
     progress('', 0);
   } catch (err) { console.error(err); notify('Свести не получилось: ' + err.message); }
   finally { S.busy = false; render(); }
 }
-/** Быстрая часть сведения: громкость персонажей → сумма → мастер → плеер. Повторяется при движении регуляторов, без распознавания и выравнивания заново. */
-function remix() {
+/** Звук реплики в дорожку: эффект (из кэша) × громкость персонажа × ручная поправка после выравнивания. */
+function itemAudio(it) {
+  const vg = (S.voiceGains[it.voice] || 0) + ((S.gains[it.id] || 0) - (it.man0 || 0)), g = Math.pow(10, vg / 20);
+  it.fix = it.fix0 + vg; it.levelAfter = it.levelAfter0 + vg;
+  const fx = it.fxKey && it._fx && it._fx.k === it.fxKey ? it._fx : null;
+  const base = fx ? fx.y : it.audio0;
+  it.core = fx ? fx.core : null;
+  if (it._out && it._out.base === base && it._out.vg === vg) { it.audio = it._out.y; return; }
+  it.audio = vg ? base.map(v => v * g) : base;
+  it._out = { base, vg, y: it.audio };
+}
+/**
+ * Сведение по частям. 'full' — точно: раскладка, сумма, фон, мастер с измерением громкости (как при скачивании).
+ * 'layout' — сдвиги, темп, фон: раскладка и сумма заново, общее усиление прежнее, лимитер только у пиков.
+ * 'lines' — эффект или громкость у части реплик: пересчитываются только их куски дорожки.
+ */
+async function remix(mode = 'full', ids = null) {
   const r = S.result; if (!r) return;
-  const T = [performance.now()], lap = k => { T.push(performance.now()); if (DEBUG) console.info(`сведение: ${k} ${((T.at(-1) - T.at(-2)) / 1000).toFixed(2)} с`); };
-  for (const it of r.items) {
-    const vg = S.voiceGains[it.voice] || 0, g = Math.pow(10, vg / 20);
-    it.fix = it.fix0 + vg; it.levelAfter = it.levelAfter0 + vg;
-    it.audio = vg ? it.audio0.map(v => v * g) : it.audio0;
-    it.fxKey = typeof lineFx === 'function' ? lineFx(it) : null;
-    if (it.fxKey) { const fx = applyFx(it); it.audio = fx.audio; it.core = fx.core; } else it.core = null;
-  }
-  lap('поправки');
-  // раскладка заново: сдвиги реплик, темп пауз, хвосты эффектов
+  const T = [performance.now()], lap = k => { T.push(performance.now()); if (DEBUG) console.info(`сведение (${mode}): ${k} ${((T.at(-1) - T.at(-2)) / 1000).toFixed(2)} с`); };
+  if (mode !== 'full' && (!r.lay || !r.out || r.gain == null)) mode = 'full';
+  const items = mode === 'lines' && ids ? r.items.filter(it => ids.has(it.id)) : r.items;
+  const fxN = typeof ensureFx === 'function' ? await ensureFx(items) : 0;
+  lap(`эффекты (${fxN} реплик)`);
+  const before = new Map(); if (mode === 'lines') for (const p of r.lay.placed) if (p.item && ids.has(p.item.id)) before.set(p.item.id, p.audio.length);
+  for (const it of items) itemAudio(it);
+  lap('громкость');
+  if (mode === 'lines') { if (remixLines(r, ids, before)) { lap('куски дорожки'); r.approx = true; S.tlTracks = null; return; } mode = 'layout'; }
   const lay = C.layout(S.P.cues, cue => { const it = r.byId.get(cue.id); if (it) return it.core != null ? { audio: it.audio, core: it.core } : it.audio; return cue.type === 'dir' && sfxIsSeq(cue) ? sfxAudio(cue.id) : null; },
     cue => isVoicedDir(cue) || sfxIsSeq(cue), sfxBed, { tempo: S.tempo || 1, timing: S.timing });
   lay.placed.forEach(p => { p.item = r.byId.get(p.cue.id); });
   r.lay = lay; S.tlTracks = null;
   lap('раскладка');
-  r.out = null; r.master = null;                       // старый результат отпускается до выделения нового
-  const mix = new Float32Array(Math.ceil(lay.total * C.SR));
+  const N = Math.ceil(lay.total * C.SR);                // буфер дорожки переиспользуется, с запасом в минуту: выделять 200 МБ на каждую правку — долго
+  if (!r.mixBuf || r.mixBuf.length < N || r.mixBuf.length > N + 120 * C.SR) { r.out = null; r.mixBuf = null; r.mixBuf = new Float32Array(N + 60 * C.SR); }
+  const mix = r.mixBuf.subarray(0, N); mix.fill(0);
   for (const p of lay.placed) { const i0 = Math.round(p.at * C.SR), n = Math.min(p.audio.length, Math.max(0, mix.length - i0)); for (let i = 0; i < n; i++) mix[i0 + i] += p.audio[i]; }   // всё суммой: реплики могут наезжать друг на друга
   lap('сумма');
   r.amb = typeof ambMix === 'function' ? ambMix(mix, lay) : [];
   lap('фон');
-  const m = C.master(mix, r.lay.placed, { targetLufs: r.target });
+  if (mode === 'full') { const m = C.master(mix, lay.placed, { targetLufs: r.target }); r.out = m.out; r.master = m; r.gain = Math.pow(10, m.gainDb / 20); r.approx = false; }
+  else { for (let i = 0; i < mix.length; i++) mix[i] *= r.gain; r.out = C.limit(mix, 0.84, true); r.approx = true; }
   lap('мастер');
-  r.out = m.out; r.master = m;
-  if (r.url) URL.revokeObjectURL(r.url);
-  r.url = URL.createObjectURL(new Blob([wav16(m.out)], { type: 'audio/wav' }));
-  lap('wav');
+  tpLoad(r.out);
+  lap('плеер');
 }
-let remixTimer = null;
-function remixSoon() {
+/** Пересчёт кусков дорожки под изменившимися репликами. false — изменений слишком много, проще целиком. */
+function remixLines(r, ids, before) {
+  TP.hold = true;
+  try { return remixLinesInner(r, ids, before); } finally { TP.hold = false; if (TP.dirty) { TP.dirty = false; if (TP.playing) tpPlay(tpTime()); } }
+}
+function remixLinesInner(r, ids, before) {
+  const SR = C.SR, n = r.out.length, spans = [];
+  for (const p of r.lay.placed) {
+    if (!p.item || !ids.has(p.item.id)) continue;
+    const old = before.get(p.item.id) || 0; p.audio = p.item.audio;
+    const a = Math.round(p.at * SR), b = a + Math.max(old, p.audio.length); spans.push([a, Math.min(n, b)]);
+  }
+  if (!spans.length) return true;
+  spans.sort((x, y) => x[0] - y[0]);
+  const la = Math.round(0.02 * SR), settle = Math.round(0.6 * SR), merged = [];
+  for (const [a, b] of spans) { const A = Math.max(0, a - la), B = Math.min(n, b + settle); const m = merged[merged.length - 1]; if (m && A <= m[1]) m[1] = Math.max(m[1], B); else merged.push([A, B]); }
+  if (merged.reduce((s, [a, b]) => s + b - a, 0) > 0.6 * n) return false;
+  const ceil = 0.84, lim = ceil / r.gain;
+  const pre = (a, b) => {                              // сумма всего, что звучит на [a, b), до мастера
+    const y = new Float32Array(b - a);
+    for (const p of r.lay.placed) { const i0 = Math.round(p.at * SR), s0 = Math.max(a, i0), s1 = Math.min(b, i0 + p.audio.length); for (let i = s0; i < s1; i++) y[i - a] += p.audio[i - i0]; }
+    for (const c of r.amb || []) { const i0 = Math.round(c.at * SR), s0 = Math.max(a, i0), s1 = Math.min(b, i0 + c.audio.length); for (let i = s0; i < s1; i++) y[i - a] += c.audio[i - i0]; }
+    return y;
+  };
+  for (let [a, b] of merged) {
+    // границы — где лимитер точно отпущен: пиков нет за 0,6 с до начала и на 20 мс после конца
+    for (let guard = 0; guard < 20 && a > 0; guard++) { const w = pre(Math.max(0, a - settle), a); let hit = -1; for (let i = w.length - 1; i >= 0; i--) if (w[i] > lim || w[i] < -lim) { hit = i; break; } if (hit < 0) break; a = Math.max(0, a - settle + hit - la); }
+    for (let guard = 0; guard < 20 && b < n; guard++) { const w = pre(b, Math.min(n, b + la)); let hit = false; for (const v of w) if (v > lim || v < -lim) { hit = true; break; } if (!hit) break; b = Math.min(n, b + settle); }
+    const y = pre(a, b); for (let i = 0; i < y.length; i++) y[i] *= r.gain;
+    C.limit(y, ceil, true); r.out.set(y, a); tpUpdate(a, b);
+  }
+  return true;
+}
+// ------------------------------------------------------------------ плеер из памяти: без сборки WAV, правки слышны сразу
+const TP = { buf: null, src: null, startAt: 0, offset: 0, playing: false, len: 0, hold: false, dirty: false };
+/** Буфер плеера с запасом в минуту: сдвиги меняют длину дорожки, а новый буфер на 200 МБ — это секунда. */
+function tpLoad(out) {
+  const ctx = audioCtx(); TP.len = out.length;
+  if (!TP.buf || TP.buf.length < out.length || TP.buf.length > out.length + 120 * C.SR) TP.buf = ctx.createBuffer(1, out.length + 60 * C.SR, C.SR);
+  TP.buf.copyToChannel(out, 0);
+  if (TP.buf.length > out.length) TP.buf.getChannelData(0).fill(0, out.length);
+  TP.offset = Math.min(TP.offset, out.length / C.SR);
+  if (TP.playing) tpPlay(tpTime());
+}
+function tpUpdate(a, b) { if (!TP.buf) return; TP.buf.copyToChannel(S.result.out.subarray(a, b), 0, a); if (TP.playing && (b / C.SR) > tpTime()) { if (TP.hold) TP.dirty = true; else tpPlay(tpTime()); } }
+function tpTime() { return TP.playing ? Math.min(TP.len / C.SR, audioCtx().currentTime - TP.startAt) : TP.offset; }
+function tpPlay(t = tpTime()) {
+  if (!TP.buf) return; const ctx = audioCtx(); if (ctx.state === 'suspended') ctx.resume();
+  if (TP.src) { TP.src.onended = null; try { TP.src.stop(); } catch {} }
+  if (playing) { try { playing.src.stop(); } catch {} playing.btn?.classList.remove('on'); playing = null; }
+  t = Math.max(0, Math.min(t, TP.len / C.SR - 0.01));
+  const src = ctx.createBufferSource(); src.buffer = TP.buf; src.connect(ctx.destination); src.start(0, t, TP.len / C.SR - t);
+  src.onended = () => { if (TP.src === src) { TP.playing = false; TP.offset = 0; tpUi(); } };
+  TP.src = src; TP.startAt = ctx.currentTime - t; TP.playing = true; tpUi(); if (typeof tlFollow === 'function') tlFollow();
+}
+function tpPause() { if (!TP.playing) return; TP.offset = tpTime(); TP.playing = false; if (TP.src) { TP.src.onended = null; try { TP.src.stop(); } catch {} TP.src = null; } tpUi(); }
+function tpSeek(t, play = null) { if (play === true || (play == null && TP.playing)) tpPlay(t); else { TP.offset = Math.max(0, Math.min(t, TP.len / C.SR)); tpUi(); } }
+function tpUi() {
+  const b = $('#tp-play'); if (b) { b.textContent = TP.playing ? '⏸' : '▶'; b.setAttribute('aria-label', TP.playing ? 'Пауза' : 'Играть'); }
+  const tt = $('#tp-time'); if (tt && S.result && S.result.out) tt.textContent = `${fmt(tpTime())} / ${fmt(S.result.out.length / C.SR)}`;
+  const sk = $('#tp-seek'); if (sk && !sk.matches(':active')) sk.value = tpTime();
+  if (typeof drawTimeline === 'function') drawTimeline();
+}
+/** Перед скачиванием — точная громкость, если были быстрые правки. */
+async function exactResult() {
+  const r = S.result; if (!r || !r.approx) return;
+  progress('Уточняю итоговую громкость…', 0.5); await new Promise(res => setTimeout(res, 20));
+  await remix('full'); progress('', 0); renderMix();
+}
+const REMIX_RANK = { lines: 1, layout: 2, full: 3 };
+let remixTimer = null, remixReq = null, remixRunning = null;
+/** Пересчёт после правки. kind: 'lines' (с набором реплик), 'layout' или 'full'; запросы за 120 мс складываются. */
+function remixSoon(kind = 'layout', ids = null) {
+  if (!remixReq) remixReq = { kind, ids: new Set() };
+  else if (REMIX_RANK[kind] > REMIX_RANK[remixReq.kind]) remixReq.kind = kind;
+  if (ids) for (const id of ids) remixReq.ids.add(id);
   clearTimeout(remixTimer);
   const note = $('#vg-note'); if (note) note.textContent = 'пересчитываю…';
-  remixTimer = setTimeout(() => { if (!S.result || S.busy) return; remix(); renderMix(); }, 350);
+  remixTimer = setTimeout(runRemix, 120);
 }
+async function runRemix() {
+  if (remixRunning) { await remixRunning; }
+  if (!remixReq || !S.result || S.busy) return;
+  const req = remixReq; remixReq = null;
+  const t0 = performance.now();
+  remixRunning = remix(req.kind, req.kind === 'lines' ? req.ids : null).catch(err => { console.error(err); notify('Пересчёт не удался: ' + err.message); });
+  await remixRunning; remixRunning = null;
+  S.lastRemixMs = performance.now() - t0;
+  if (remixReq) { runRemix(); return; }
+  refreshMix();
+}
+function mixStatusHtml(r) { return `${r.approx ? '<span class="muted small" title="После быстрых правок общее усиление прежнее; при скачивании громкость пересчитается точно">громкость уточнится при скачивании</span> ' : ''}${S.lastRemixMs ? `<span class="muted small">пересчёт ${(S.lastRemixMs / 1000).toFixed(1)} с</span>` : ''}`; }
+function mixStatHtml(r) {
+  const sounds = r.lay.rows.filter(x => x.sound).length, recorded = r.lay.placed.length - sounds, paused = r.lay.sheet.filter(s => s.cue).length, voices = new Set(r.items.map(it => it.voice));
+  return `${fmt(r.out.length / C.SR)} · реплик со звуком ${recorded}${sounds ? ` · звуков ${sounds}` : ''} · пауз под незаписанное ${paused} · громкость ${r.target} LUFS${r.master.held ? ` · у ${r.master.held} реплик подъём придержан, чтобы не упирались в лимитер` : ''}${r.items.filter(it => it.fxKey).length ? ` · с эффектом ${r.items.filter(it => it.fxKey).length}` : ''}${r.amb && r.amb.length ? ` · фон в ${r.amb.length} сценах` : ''}${Object.keys(S.timing).length ? ` · сдвинуто ${Object.keys(S.timing).length}` : ''}${Object.keys(S.voiceGains).filter(v => voices.has(v)).length ? ' · поправки: ' + Object.entries(S.voiceGains).filter(([v]) => voices.has(v)).map(([v, g]) => `${charName(v)} ${g > 0 ? '+' : ''}${g} дБ`).join(', ') : ''}`;
+}
+/** После быстрого пересчёта — только то, что поменялось: таймлайн, сводка, плеер. Выделение и фокус остаются. */
+function refreshMix() {
+  const r = S.result, out = $('#mix-out'); if (!r || !r.out || !out.querySelector('#tl-cv')) return renderMix();
+  S.tlTracks = null;
+  const st = out.querySelector('.stat'); if (st) st.innerHTML = mixStatHtml(r);
+  const ms = $('#mix-status'); if (ms) ms.innerHTML = mixStatusHtml(r);
+  const sk = $('#tp-seek'); if (sk) sk.max = (r.out.length / C.SR).toFixed(1);
+  if ($('#tl-info')) $('#tl-info').innerHTML = tlInfoHtml(); if ($('.tl-bar')) $('.tl-bar').innerHTML = tlBarHtml();
+  const note = $('#vg-note'); if (note) note.textContent = '';
+  tpUi();
+}
+/** Реплики персонажа — для пересчёта только их. */
+const voiceIds = v => new Set(S.result ? S.result.items.filter(it => it.voice === v).map(it => it.id) : []);
+
 function wav16(x) {
   const n = x.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
   const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
@@ -626,16 +745,16 @@ function renderMix() {
   $('#lvl-v').textContent = (+$('#lvl').value).toFixed(2).replace(/0$/, '');
   if ($('#tempo')) { $('#tempo').value = S.tempo || 1; $('#tempo-v').textContent = (S.tempo || 1).toFixed(2).replace(/0$/, '') + '×'; }
   const r = S.result, out = $('#mix-out');
-  if (!r) { out.innerHTML = ''; return; }
-  const was = out.querySelector('audio'), pos = was ? { t: was.currentTime, playing: !was.paused && !was.ended } : null;
-  const sounds = r.lay.rows.filter(x => x.sound).length, recorded = r.lay.placed.length - sounds, paused = r.lay.sheet.filter(s => s.cue).length;
+  if (!r || !r.out) { out.innerHTML = ''; if (typeof tpPause === 'function') tpPause(); return; }
   const voices = new Map();
   for (const it of r.items) { if (!voices.has(it.voice)) voices.set(it.voice, []); voices.get(it.voice).push(it); }
   const spread = list => { const a = list.map(x => x.levelAfter).sort((x, y) => x - y), b = list.map(x => x.level).sort((x, y) => x - y); const p = (arr, q) => arr[Math.min(arr.length - 1, Math.floor(q * (arr.length - 1)))]; return [p(b, 0.9) - p(b, 0.1), p(a, 0.9) - p(a, 0.1)]; };
   out.innerHTML = `
-    <audio controls src="${r.url}"></audio>
+    <div class="tp"><button class="play big" id="tp-play" data-act="tp-play" aria-label="Играть">${TP.playing ? '⏸' : '▶'}</button>
+      <input type="range" id="tp-seek" min="0" max="${(r.out.length / C.SR).toFixed(1)}" step="0.1" value="${tpTime()}" aria-label="Позиция"><span class="tp-time" id="tp-time">${fmt(tpTime())} / ${fmt(r.out.length / C.SR)}</span>
+      <span id="mix-status">${mixStatusHtml(r)}</span></div>
     <div class="tl"><div class="tl-bar">${typeof tlBarHtml === 'function' ? tlBarHtml() : ''}</div><canvas id="tl-cv" tabindex="0" aria-label="Таймлайн сведения"></canvas><div class="tl-info" id="tl-info">${typeof tlInfoHtml === 'function' ? tlInfoHtml() : ''}</div></div>
-    <p class="stat">${fmt(r.out.length / C.SR)} · реплик со звуком ${recorded}${sounds ? ` · звуков ${sounds}` : ''} · пауз под незаписанное ${paused} · громкость ${r.target} LUFS${r.master.held ? ` · у ${r.master.held} реплик подъём придержан, чтобы не упирались в лимитер` : ''}${r.items.filter(it => it.fxKey).length ? ` · с эффектом ${r.items.filter(it => it.fxKey).length}` : ''}${r.amb && r.amb.length ? ` · фон в ${r.amb.length} сценах` : ''}${Object.keys(S.timing).length ? ` · сдвинуто ${Object.keys(S.timing).length}` : ''}${Object.keys(S.voiceGains).filter(v => voices.has(v)).length ? ' · поправки: ' + Object.entries(S.voiceGains).filter(([v]) => voices.has(v)).map(([v, g]) => `${charName(v)} ${g > 0 ? '+' : ''}${g} дБ`).join(', ') : ''}</p>
+    <p class="stat">${mixStatHtml(r)}</p>
     <div class="levels">${[...voices].map(([v, list]) => { const [b, a] = spread(list); return `<div><span class="chip ${S.P.chars.some(c => c.key === v) ? colorOf(v) : 'ghost'}">${esc(charName(v))}</span> разброс громкости ${b.toFixed(1)} → <b>${a.toFixed(1)} дБ</b></div>`; }).join('')}</div>
     <div class="vgains">
       <div class="vg-head"><b>Персонажи: громкость и эффект</b><span class="muted small">поправка ко всем репликам персонажа поверх выравнивания; эффект — «голос в голове», телефон, мегафон, за дверью… Пометки в сценарии («в микрофон», «из другого угла») срабатывают сами. Применяется сразу, плеер продолжает с того же места</span><span class="muted small" id="vg-note"></span></div>
@@ -651,8 +770,6 @@ function renderMix() {
       ${r.lay.scenes && r.lay.scenes.length > 1 ? '<button class="ghost-b" data-act="chapters" title="Строки вида «00:00 Сцена 1 — кабинет» для описания на YouTube">Главы (.txt)</button>' : ''}
     </div>
     ${r.lay.scenes && r.lay.scenes.length > 1 ? '<p class="muted small">В MP3 сцены записаны главами: в плеерах подкастов и VLC по ним можно прыгать.</p>' : ''}`;
-  const a2 = out.querySelector('audio');
-  if (a2 && pos && pos.t > 0) a2.addEventListener('loadedmetadata', () => { a2.currentTime = Math.min(pos.t, a2.duration || pos.t); if (pos.playing) a2.play().catch(() => {}); }, { once: true });
   if (typeof drawTimeline === 'function') requestAnimationFrame(drawTimeline);
 }
 
@@ -736,19 +853,26 @@ function bind() {
   });
   $('#lvl').addEventListener('input', () => { $('#lvl-v').textContent = (+$('#lvl').value).toFixed(2).replace(/0$/, ''); });
   $('#tempo').addEventListener('input', () => { $('#tempo-v').textContent = (+$('#tempo').value).toFixed(2).replace(/0$/, '') + '×'; });
-  $('#tempo').addEventListener('change', () => { S.tempo = +$('#tempo').value; saveEdits(); if (S.result) remixSoon(); });
+  $('#tempo').addEventListener('change', () => { S.tempo = +$('#tempo').value; saveEdits(); if (S.result) remixSoon('layout'); });
   if (typeof bindTimeline === 'function') bindTimeline();
   $('#mixgo').addEventListener('click', mixdown);
   $('#mix-out').addEventListener('input', e => { const x = e.target; if (x.dataset.voice == null) return; x.nextElementSibling.textContent = `${+x.value > 0 ? '+' : ''}${+x.value} дБ`; });
   $('#mix-out').addEventListener('change', e => { const x = e.target;
-    if (x.dataset.fxvoice != null) { if (x.value) S.fxVoice[x.dataset.fxvoice] = x.value; else delete S.fxVoice[x.dataset.fxvoice]; saveEdits(); remixSoon(); return; }
-    if (x.dataset.voice == null) return; const v = +x.value; if (v) S.voiceGains[x.dataset.voice] = v; else delete S.voiceGains[x.dataset.voice]; saveEdits(); remixSoon(); });
+    if (x.dataset.fxvoice != null) { if (x.value) S.fxVoice[x.dataset.fxvoice] = x.value; else delete S.fxVoice[x.dataset.fxvoice]; saveEdits(); remixSoon('lines', voiceIds(x.dataset.fxvoice)); return; }
+    if (x.dataset.voice == null) return; const v = +x.value; if (v) S.voiceGains[x.dataset.voice] = v; else delete S.voiceGains[x.dataset.voice]; saveEdits(); remixSoon('lines', voiceIds(x.dataset.voice)); });
+  $('#mix-out').addEventListener('input', e => { if (e.target.id === 'tp-seek') { TP.offset = +e.target.value; if (TP.playing) tpPlay(+e.target.value); else tpUi(); } });
+  document.addEventListener('keydown', e => {                 // пробел — играть / пауза, если не пишем в поле
+    if (e.code !== 'Space' || e.repeat || !S.result || !S.result.out || S.tab !== 'build' || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    e.preventDefault(); TP.playing ? tpPause() : tpPlay();
+  });
   $('#mix-out').addEventListener('click', async e => {
     const b = e.target.closest('button'); if (!b || !S.result) return;
     const stamp = S.result.at.toISOString().slice(0, 16).replace(/[-:T]/g, '').replace(/^(\d{8})(\d{4})$/, '$1-$2');
     const a = b.dataset.act;
     try {
-      if (a === 'vg0') { delete S.voiceGains[b.dataset.voice]; saveEdits(); const sl = $('#mix-out').querySelector(`input[data-voice="${CSS.escape(b.dataset.voice)}"]`); if (sl) { sl.value = 0; sl.nextElementSibling.textContent = '0 дБ'; } remixSoon(); return; }
+      if (a === 'tp-play') { TP.playing ? tpPause() : tpPlay(); return; }
+      if (a === 'vg0') { delete S.voiceGains[b.dataset.voice]; saveEdits(); const sl = $('#mix-out').querySelector(`input[data-voice="${CSS.escape(b.dataset.voice)}"]`); if (sl) { sl.value = 0; sl.nextElementSibling.textContent = '0 дБ'; } remixSoon('lines', voiceIds(b.dataset.voice)); return; }
+      if (['mp3', 'wav', 'stems'].includes(a) && S.result.approx) { b.disabled = true; await exactResult(); b.disabled = false; }
       if (a === 'mp3') { b.disabled = true; const blob = await encodeMp3(S.result.out, +$('#kbps').value); progress('', 0); const tag = typeof id3Chapters === 'function' ? id3Chapters((S.P.title || 'Радиоспектакль')) : null; download(tag && tag.length ? new Blob([tag, blob], { type: 'audio/mpeg' }) : blob, `сведение-${stamp}.mp3`); b.disabled = false; }
       if (a === 'stems') { b.disabled = true; try { const z = await exportStems(); if (z) download(z, `стемы-${stamp}.zip`); } catch (err) { progress('', 0); notify('Стемы не получились: ' + err.message); } b.disabled = false; }
       if (a === 'chapters') download(new Blob([chaptersText()], { type: 'text/plain;charset=utf-8' }), `главы-${stamp}.txt`);
@@ -761,5 +885,5 @@ function bind() {
 }
 
 // для проверки из консоли и автотестов
-window.montage = { S, C, PRESETS, projectJson, remix, renderMix, computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses };
+window.montage = { S, C, PRESETS, projectJson, remix, renderMix, refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses };
 bind(); render();
