@@ -427,6 +427,8 @@ function remixLinesInner(r, ids, before) {
   return true;
 }
 // ------------------------------------------------------------------ плеер из памяти: без сборки WAV, правки слышны сразу
+const ICON_PLAY = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>';
+const ICON_PAUSE = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="3.5" y="2.5" width="3" height="11" rx="1" fill="currentColor"/><rect x="9.5" y="2.5" width="3" height="11" rx="1" fill="currentColor"/></svg>';
 const TP = { buf: null, src: null, startAt: 0, offset: 0, playing: false, len: 0, hold: false, dirty: false };
 /** Буфер плеера с запасом в минуту: сдвиги меняют длину дорожки, а новый буфер на 200 МБ — это секунда. */
 function tpLoad(out) {
@@ -451,8 +453,8 @@ function tpPlay(t = tpTime()) {
 function tpPause() { if (!TP.playing) return; TP.offset = tpTime(); TP.playing = false; if (TP.src) { TP.src.onended = null; try { TP.src.stop(); } catch {} TP.src = null; } tpUi(); }
 function tpSeek(t, play = null) { if (play === true || (play == null && TP.playing)) tpPlay(t); else { TP.offset = Math.max(0, Math.min(t, TP.len / C.SR)); tpUi(); } }
 function tpUi() {
-  const b = $('#tp-play'); if (b) { b.textContent = TP.playing ? '⏸' : '▶'; b.setAttribute('aria-label', TP.playing ? 'Пауза' : 'Играть'); }
-  const tt = $('#tp-time'); if (tt && S.result && S.result.out) tt.textContent = `${fmt(tpTime())} / ${fmt(S.result.out.length / C.SR)}`;
+  document.querySelectorAll('#tp-play, .tp-play-btn').forEach(b => { b.innerHTML = TP.playing ? ICON_PAUSE : ICON_PLAY; b.setAttribute('aria-label', TP.playing ? 'Пауза' : 'Играть'); b.title = (TP.playing ? 'Пауза' : 'Играть') + ' (пробел)'; });
+  if (S.result && S.result.out) document.querySelectorAll('#tp-time, .tp-time-txt').forEach(tt => { tt.textContent = `${fmt(tpTime())} / ${fmt(S.result.out.length / C.SR)}`; });
   const sk = $('#tp-seek'); if (sk && !sk.matches(':active')) sk.value = tpTime();
   if (typeof drawTimeline === 'function') drawTimeline();
 }
@@ -496,7 +498,7 @@ function refreshMix() {
   const st = out.querySelector('.stat'); if (st) st.innerHTML = mixStatHtml(r);
   const ms = $('#mix-status'); if (ms) ms.innerHTML = mixStatusHtml(r);
   const sk = $('#tp-seek'); if (sk) sk.max = (r.out.length / C.SR).toFixed(1);
-  if ($('#tl-info')) $('#tl-info').innerHTML = tlInfoHtml(); if ($('.tl-bar')) $('.tl-bar').innerHTML = tlBarHtml();
+  if ($('#tl-info')) $('#tl-info').innerHTML = tlInfoHtml(); tlRefreshBar();
   const note = $('#vg-note'); if (note) note.textContent = '';
   tpUi();
 }
@@ -745,15 +747,25 @@ function renderMix() {
   $('#lvl-v').textContent = (+$('#lvl').value).toFixed(2).replace(/0$/, '');
   if ($('#tempo')) { $('#tempo').value = S.tempo || 1; $('#tempo-v').textContent = (S.tempo || 1).toFixed(2).replace(/0$/, '') + '×'; }
   const r = S.result, out = $('#mix-out');
-  if (!r || !r.out) { out.innerHTML = ''; if (typeof tpPause === 'function') tpPause(); return; }
+  if (!r || !r.out) { if (tlState().full) tlSetFull(false); out.innerHTML = ''; if (typeof tpPause === 'function') tpPause(); return; }
+  if (!out.querySelector('#mix-tl')) out.innerHTML = '<div id="mix-top"></div><div id="mix-tl"></div><div id="mix-rest"></div>';
   const voices = new Map();
   for (const it of r.items) { if (!voices.has(it.voice)) voices.set(it.voice, []); voices.get(it.voice).push(it); }
   const spread = list => { const a = list.map(x => x.levelAfter).sort((x, y) => x - y), b = list.map(x => x.level).sort((x, y) => x - y); const p = (arr, q) => arr[Math.min(arr.length - 1, Math.floor(q * (arr.length - 1)))]; return [p(b, 0.9) - p(b, 0.1), p(a, 0.9) - p(a, 0.1)]; };
-  out.innerHTML = `
-    <div class="tp"><button class="play big" id="tp-play" data-act="tp-play" aria-label="Играть">${TP.playing ? '⏸' : '▶'}</button>
+  $('#mix-top').innerHTML = `
+    <div class="tp"><button class="play big" id="tp-play" data-act="tp-play" aria-label="${TP.playing ? 'Пауза' : 'Играть'}" title="Играть и пауза (пробел)">${TP.playing ? ICON_PAUSE : ICON_PLAY}</button>
       <input type="range" id="tp-seek" min="0" max="${(r.out.length / C.SR).toFixed(1)}" step="0.1" value="${tpTime()}" aria-label="Позиция"><span class="tp-time" id="tp-time">${fmt(tpTime())} / ${fmt(r.out.length / C.SR)}</span>
       <span id="mix-status">${mixStatusHtml(r)}</span></div>
-    <div class="tl"><div class="tl-bar">${typeof tlBarHtml === 'function' ? tlBarHtml() : ''}</div><canvas id="tl-cv" tabindex="0" aria-label="Таймлайн сведения"></canvas><div class="tl-info" id="tl-info">${typeof tlInfoHtml === 'function' ? tlInfoHtml() : ''}</div></div>
+`;
+  if (!$('#mix-tl .tl')) $('#mix-tl').innerHTML = `<div class="tl ${tlState().full ? 'full' : ''}" role="region" aria-label="Таймлайн сведения">
+      <div class="tl-bar">${tlBarHtml()}</div>
+      <div class="tl-canvas"><canvas id="tl-cv" tabindex="0" aria-label="Таймлайн: стрелки двигают выбранное, клавиша меню — действия, F — на весь экран"></canvas></div>
+      <canvas id="tl-ov" aria-label="Весь спектакль: щелчок — перейти"></canvas>
+      <div class="tl-info" id="tl-info">${tlInfoHtml()}</div>
+      <div id="tl-menu" class="tl-menu" role="menu" aria-label="Действия" hidden></div>
+      <div class="tl-flash" role="status" aria-live="polite"></div></div>`;
+  else { tlRefreshBar(); tlRefreshInfo(); }
+  $('#mix-rest').innerHTML = `
     <p class="stat">${mixStatHtml(r)}</p>
     <div class="levels">${[...voices].map(([v, list]) => { const [b, a] = spread(list); return `<div><span class="chip ${S.P.chars.some(c => c.key === v) ? colorOf(v) : 'ghost'}">${esc(charName(v))}</span> разброс громкости ${b.toFixed(1)} → <b>${a.toFixed(1)} дБ</b></div>`; }).join('')}</div>
     <div class="vgains">
@@ -770,7 +782,8 @@ function renderMix() {
       ${r.lay.scenes && r.lay.scenes.length > 1 ? '<button class="ghost-b" data-act="chapters" title="Строки вида «00:00 Сцена 1 — кабинет» для описания на YouTube">Главы (.txt)</button>' : ''}
     </div>
     ${r.lay.scenes && r.lay.scenes.length > 1 ? '<p class="muted small">В MP3 сцены записаны главами: в плеерах подкастов и VLC по ним можно прыгать.</p>' : ''}`;
-  if (typeof drawTimeline === 'function') requestAnimationFrame(drawTimeline);
+  histUi();
+  requestAnimationFrame(drawTimeline);
 }
 
 // ------------------------------------------------------------------ события
@@ -853,14 +866,20 @@ function bind() {
   });
   $('#lvl').addEventListener('input', () => { $('#lvl-v').textContent = (+$('#lvl').value).toFixed(2).replace(/0$/, ''); });
   $('#tempo').addEventListener('input', () => { $('#tempo-v').textContent = (+$('#tempo').value).toFixed(2).replace(/0$/, '') + '×'; });
-  $('#tempo').addEventListener('change', () => { S.tempo = +$('#tempo').value; saveEdits(); if (S.result) remixSoon('layout'); });
+  $('#tempo').addEventListener('change', () => { if (+$('#tempo').value === (S.tempo || 1)) return; histPush(`темп пауз ${(+$('#tempo').value).toFixed(2)}×`); S.tempo = +$('#tempo').value; saveEdits(); if (S.result) remixSoon('layout'); });
   if (typeof bindTimeline === 'function') bindTimeline();
   $('#mixgo').addEventListener('click', mixdown);
   $('#mix-out').addEventListener('input', e => { const x = e.target; if (x.dataset.voice == null) return; x.nextElementSibling.textContent = `${+x.value > 0 ? '+' : ''}${+x.value} дБ`; });
   $('#mix-out').addEventListener('change', e => { const x = e.target;
-    if (x.dataset.fxvoice != null) { if (x.value) S.fxVoice[x.dataset.fxvoice] = x.value; else delete S.fxVoice[x.dataset.fxvoice]; saveEdits(); remixSoon('lines', voiceIds(x.dataset.fxvoice)); return; }
-    if (x.dataset.voice == null) return; const v = +x.value; if (v) S.voiceGains[x.dataset.voice] = v; else delete S.voiceGains[x.dataset.voice]; saveEdits(); remixSoon('lines', voiceIds(x.dataset.voice)); });
+    if (x.dataset.fxvoice != null) { if ((x.value || undefined) === S.fxVoice[x.dataset.fxvoice]) return; histPush(`эффект персонажа ${charName(x.dataset.fxvoice)}: ${x.value ? FX_PRESETS[x.value].name : 'как по пометкам'}`); if (x.value) S.fxVoice[x.dataset.fxvoice] = x.value; else delete S.fxVoice[x.dataset.fxvoice]; saveEdits(); remixSoon('lines', voiceIds(x.dataset.fxvoice)); drawTimeline(); return; }
+    if (x.dataset.voice == null) return; const v = +x.value; if (v === (S.voiceGains[x.dataset.voice] || 0)) return; histPush(`громкость персонажа ${charName(x.dataset.voice)} ${v > 0 ? '+' : ''}${v} дБ`); if (v) S.voiceGains[x.dataset.voice] = v; else delete S.voiceGains[x.dataset.voice]; saveEdits(); remixSoon('lines', voiceIds(x.dataset.voice)); });
   $('#mix-out').addEventListener('input', e => { if (e.target.id === 'tp-seek') { TP.offset = +e.target.value; if (TP.playing) tpPlay(+e.target.value); else tpUi(); } });
+  document.addEventListener('keydown', e => {                 // Ctrl+Z — отменить, Ctrl+Shift+Z или Ctrl+Y — повторить (в текстовых полях — их собственная отмена)
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || !S.result || S.tab !== 'build') return;
+    if (/TEXTAREA/.test(e.target.tagName) || (e.target.tagName === 'INPUT' && /text|search|number/.test(e.target.type))) return;
+    if (e.code === 'KeyZ' && !e.shiftKey) { e.preventDefault(); histUndo(); }
+    else if ((e.code === 'KeyZ' && e.shiftKey) || e.code === 'KeyY') { e.preventDefault(); histRedo(); }
+  });
   document.addEventListener('keydown', e => {                 // пробел — играть / пауза, если не пишем в поле
     if (e.code !== 'Space' || e.repeat || !S.result || !S.result.out || S.tab !== 'build' || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
     e.preventDefault(); TP.playing ? tpPause() : tpPlay();
@@ -871,7 +890,7 @@ function bind() {
     const a = b.dataset.act;
     try {
       if (a === 'tp-play') { TP.playing ? tpPause() : tpPlay(); return; }
-      if (a === 'vg0') { delete S.voiceGains[b.dataset.voice]; saveEdits(); const sl = $('#mix-out').querySelector(`input[data-voice="${CSS.escape(b.dataset.voice)}"]`); if (sl) { sl.value = 0; sl.nextElementSibling.textContent = '0 дБ'; } remixSoon('lines', voiceIds(b.dataset.voice)); return; }
+      if (a === 'vg0') { histPush(`громкость персонажа ${charName(b.dataset.voice)} 0 дБ`); delete S.voiceGains[b.dataset.voice]; saveEdits(); const sl = $('#mix-out').querySelector(`input[data-voice="${CSS.escape(b.dataset.voice)}"]`); if (sl) { sl.value = 0; sl.nextElementSibling.textContent = '0 дБ'; } remixSoon('lines', voiceIds(b.dataset.voice)); return; }
       if (['mp3', 'wav', 'stems'].includes(a) && S.result.approx) { b.disabled = true; await exactResult(); b.disabled = false; }
       if (a === 'mp3') { b.disabled = true; const blob = await encodeMp3(S.result.out, +$('#kbps').value); progress('', 0); const tag = typeof id3Chapters === 'function' ? id3Chapters((S.P.title || 'Радиоспектакль')) : null; download(tag && tag.length ? new Blob([tag, blob], { type: 'audio/mpeg' }) : blob, `сведение-${stamp}.mp3`); b.disabled = false; }
       if (a === 'stems') { b.disabled = true; try { const z = await exportStems(); if (z) download(z, `стемы-${stamp}.zip`); } catch (err) { progress('', 0); notify('Стемы не получились: ' + err.message); } b.disabled = false; }
@@ -885,5 +904,5 @@ function bind() {
 }
 
 // для проверки из консоли и автотестов
-window.montage = { S, C, PRESETS, projectJson, remix, renderMix, refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses };
+window.montage = { S, C, PRESETS, projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses };
 bind(); render();
