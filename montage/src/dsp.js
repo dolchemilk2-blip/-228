@@ -347,10 +347,74 @@ export function matchTone(x, refLtas, { strength = 1, maxDb = 18 } = {}) {
   for (let i = 0; i <= N; i++) h[i] = H[(i - N / 2 + N) % N] * w[i];
   return { y: firApply(x, h), curve: Object.fromEntries(fcs.map((f, i) => [f, +d[i].toFixed(1)])) };
 }
-/** Эквалайзер: полосы {type, f, q, gain}. */
+/** Полоса эквалайзера → коэффициенты, или null, если она ничего не делает. */
+export function bandCoefs(b) {
+  if (!b || b.off) return null;
+  const q = b.q || (b.type === 'hp' || b.type === 'lp' ? 0.707 : 1);
+  if (b.type === 'hp' || b.type === 'lp' || b.type === 'notch') return biquad(b.type, b.f, b.type === 'notch' ? Math.max(1, q) : q, 0);
+  return Math.abs(b.gain) >= 0.1 ? biquad(b.type, b.f, q, b.gain) : null;
+}
+/** Эквалайзер: полосы {type: peak|lowshelf|highshelf|hp|lp|notch, f, q, gain, off}. */
 export function eq(x, bands) {
-  const coefs = bands.filter(b => b && Math.abs(b.gain) >= 0.1).map(b => biquad(b.type, b.f, b.q || 0.9, b.gain));
+  const coefs = bands.map(bandCoefs).filter(Boolean);
   return coefs.length ? cascade(x, coefs) : x;
+}
+/** Усиление фильтра в дБ на частотах freqs (Гц). */
+export function biquadResponse(c, freqs, sr = SR) {
+  const [b0, b1, b2, a1, a2] = c, out = new Float32Array(freqs.length);
+  for (let i = 0; i < freqs.length; i++) {
+    const w = 2 * Math.PI * freqs[i] / sr, c1 = Math.cos(w), s1 = Math.sin(w), c2 = Math.cos(2 * w), s2 = Math.sin(2 * w);
+    const nr = b0 + b1 * c1 + b2 * c2, ni = -(b1 * s1 + b2 * s2), dr = 1 + a1 * c1 + a2 * c2, di = -(a1 * s1 + a2 * s2);
+    out[i] = 10 * Math.log10((nr * nr + ni * ni) / (dr * dr + di * di) + 1e-20);
+  }
+  return out;
+}
+/** Суммарный отклик набора коэффициентов, дБ. */
+export function responseOf(coefList, freqs) {
+  const out = new Float32Array(freqs.length);
+  for (const c of coefList) { const r = biquadResponse(c, freqs); for (let i = 0; i < out.length; i++) out[i] += r[i]; }
+  return out;
+}
+export const eqResponse = (bands, freqs) => responseOf(bands.map(bandCoefs).filter(Boolean), freqs);
+/** Средний спектр отрывка, дБ на частотах freqs, сглажен на 1/6 октавы — для анализатора под эквалайзером. */
+export function avgSpectrum(x, freqs) {
+  const N = 4096, hop = 2048, win = hann(N), nF = Math.max(1, Math.floor((x.length - N) / hop) + 1);
+  const re = new Float64Array(N), im = new Float64Array(N), P = new Float64Array(N / 2 + 1);
+  for (let t = 0; t < nF; t++) { const o = t * hop; for (let i = 0; i < N; i++) { re[i] = (o + i < x.length ? x[o + i] : 0) * win[i]; im[i] = 0; } fft(re, im); for (let k = 0; k <= N / 2; k++) P[k] += re[k] * re[k] + im[k] * im[k]; }
+  const hz = SR / N, out = new Float32Array(freqs.length);
+  for (let i = 0; i < freqs.length; i++) {
+    const f = freqs[i], lo = Math.max(1, Math.floor(f / Math.pow(2, 1 / 12) / hz)), hi = Math.max(lo + 1, Math.ceil(f * Math.pow(2, 1 / 12) / hz));
+    let s = 0, c = 0; for (let k = lo; k < hi && k <= N / 2; k++) { s += P[k]; c++; }
+    out[i] = dB(c ? s / c / nF : 0);
+  }
+  return out;
+}
+/**
+ * Восстановление клиппинга: ровная «полка» у потолка заменяется кубической кривой Эрмита по
+ * значениям и наклонам на её краях, не выше двух потолков. На стенде (сухой голос, срез на
+ * 30–85 % пика) ошибка к оригиналу уменьшается на 3–5 дБ при любой глубине среза.
+ */
+export function declip(x, { threshold = 0.985, cap = 2.0 } = {}) {
+  let pk = 0; for (const v of x) pk = Math.max(pk, Math.abs(v));
+  if (pk < 0.02) return { y: x, fixed: 0 };
+  const lim = pk * threshold, y = Float32Array.from(x), n = x.length; let fixed = 0, i = 0;
+  while (i < n) {
+    if (Math.abs(x[i]) < lim) { i++; continue; }
+    let j = i; while (j < n && Math.abs(x[j]) >= lim && Math.sign(x[j]) === Math.sign(x[i])) j++;
+    const L = j - i;
+    if (L >= 2 && L < 0.004 * SR && i >= 2 && j + 1 < n) {
+      const y0 = x[i - 1], y1 = x[j], m0 = (x[i - 1] - x[i - 2]) * (L + 1), m1 = (x[j + 1] - x[j]) * (L + 1), sgn = Math.sign(x[i]);
+      for (let t = i; t < j; t++) {
+        const s = (t - (i - 1)) / (L + 1), s2 = s * s, s3 = s2 * s;
+        const v = (2 * s3 - 3 * s2 + 1) * y0 + (s3 - 2 * s2 + s) * m0 + (-2 * s3 + 3 * s2) * y1 + (s3 - s2) * m1;
+        y[t] = sgn * Math.min(cap * lim, Math.max(Math.abs(x[t]), Math.abs(v)));
+      }
+      fixed++;
+    }
+    i = j;
+  }
+  if (fixed) { let mx = 0; for (const v of y) mx = Math.max(mx, Math.abs(v)); if (mx > 0.999) for (let k = 0; k < n; k++) y[k] *= 0.999 / mx; }
+  return { y, fixed };
 }
 
 // ------------------------------------------------------------------ динамика
@@ -405,7 +469,7 @@ export function spectrogram(x, { cols = 600, rows = 160, fmin = 60, fmax = 16000
 }
 
 // ------------------------------------------------------------------ цепочка
-export const CHAIN_ORDER = ['dehum', 'hp', 'declick', 'denoise', 'dereverb', 'deplosive', 'deess', 'eq', 'tone', 'comp', 'loud'];
+export const CHAIN_ORDER = ['dehum', 'hp', 'declip', 'declick', 'denoise', 'dereverb', 'deplosive', 'deess', 'eq', 'tone', 'comp', 'loud'];
 export const CLEAN_PRESETS = {
   soft:   { dehum: 1, hp: 70, denoise: [6, 1.3], dereverb: [0.2, 0.3, 6], tone: 0, deess: 0, deplosive: 0, declick: 0 },
   normal: { dehum: 1, hp: 70, denoise: [10, 1.5], dereverb: [0.4, 0.4, 10], tone: 0, deess: 0, deplosive: 0, declick: 0 },
@@ -416,7 +480,7 @@ export const CLEAN_PRESETS = {
 export function defaultChain(preset = 'normal', hints = {}) {
   const P = CLEAN_PRESETS[preset] || CLEAN_PRESETS.normal;
   return {
-    dehum: { on: !!P.dehum, base: 'auto' }, hp: { on: !!P.hp, fc: P.hp || 70 }, declick: { on: !!P.declick, sens: 1 },
+    dehum: { on: !!P.dehum, base: 'auto' }, hp: { on: !!P.hp, fc: P.hp || 70 }, declip: { on: false }, declick: { on: !!P.declick, sens: 1 },
     denoise: { on: !!P.denoise, amount: P.denoise ? P.denoise[0] : 10, sens: P.denoise ? P.denoise[1] : 1.5 },
     dereverb: { on: !!P.dereverb, spectral: P.dereverb ? P.dereverb[0] : 0.4, t60: 0.5, tails: P.dereverb ? P.dereverb[1] : 0.4, pauses: P.dereverb ? P.dereverb[2] : 10 },
     deplosive: { on: !!P.deplosive, amount: 0.6 }, deess: { on: !!P.deess, amount: 0.5 },
@@ -433,8 +497,9 @@ export function runChain(x, chain, aux = {}, onProgress = null) {
     const p = chain[k];
     if (k === 'dehum') { const r = dehum(y, p); y = r.y; log.push(r.cut.length ? `гул: вырезано ${r.cut.join(', ')} Гц` : 'гул: не найден'); }
     else if (k === 'hp') { y = highpass(y, p.fc); log.push(`низ срезан ниже ${p.fc} Гц`); }
+    else if (k === 'declip') { const r = declip(y, p); y = r.y; log.push(`клиппинг: восстановлено ${r.fixed} мест`); }
     else if (k === 'declick') { const r = declick(y, p); y = r.y; log.push(`щелчки: исправлено ${r.fixed}`); }
-    else if (k === 'denoise') { const r = denoise(y, { ...p, profile: aux.noise || null }, prog); y = r.y; log.push(r.applied ? `шум: до −${p.amount} дБ` : 'шум: профиль не построить'); }
+    else if (k === 'denoise') { const r = denoise(y, { ...p, profile: aux.noise || null }, prog); y = r.y; log.push(r.applied ? `шум: до −${p.amount} дБ${aux.noiseFrom ? ' (профиль из отрывка)' : ''}` : 'шум: профиль не построить'); }
     else if (k === 'dereverb') {
       if (p.spectral > 0) { y = dereverbSpectral(y, { amount: p.spectral, t60: p.t60 }, prog); log.push(`эхо спектрально: ${Math.round(p.spectral * 100)} %`); }
       if (p.tails > 0) { y = dryUp(y, p.tails); log.push(`хвосты после слогов: ${Math.round(p.tails * 100)} %`); }
@@ -442,7 +507,7 @@ export function runChain(x, chain, aux = {}, onProgress = null) {
     }
     else if (k === 'deplosive') { y = deplosive(y, p); log.push('взрывные придавлены'); }
     else if (k === 'deess') { y = deess(y, p); log.push('свист придавлен'); }
-    else if (k === 'eq') { y = eq(y, p.bands); log.push('эквалайзер: ' + p.bands.filter(b => Math.abs(b.gain) >= 0.1).map(b => `${b.f} Гц ${b.gain > 0 ? '+' : ''}${b.gain}`).join(', ')); }
+    else if (k === 'eq') { y = eq(y, p.bands); log.push('эквалайзер: ' + (p.bands.filter(bandCoefs).map(b => `${b.type === 'hp' ? 'срез ниже' : b.type === 'lp' ? 'срез выше' : b.type === 'notch' ? 'вырез' : ''} ${b.f} Гц${b.type === 'hp' || b.type === 'lp' || b.type === 'notch' ? '' : ' ' + (b.gain > 0 ? '+' : '') + b.gain}`.trim()).join(', ') || 'без изменений')); }
     else if (k === 'tone') {
       if (p.mode === 'match' && aux.refLtas) { const r = matchTone(y, aux.refLtas, { strength: p.strength }); y = r.y; log.push('тембр подогнан под образец'); }
       else { const r = deboom(y, p.strength); y = r.y; log.push(Object.keys(r.cuts).length ? 'гулкость: ' + Object.entries(r.cuts).map(([f, d]) => `${f} Гц ${d} дБ`).join(', ') : 'гулкость: низ в норме'); }

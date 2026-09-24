@@ -46,7 +46,7 @@ function play(samples, btn) {
   playing = { src, btn }; if (btn) btn.classList.add('on');
   src.onended = () => { if (playing && playing.src === src) stop(); };
 }
-function stop() { if (playing) { try { playing.src.stop(); } catch {} playing.btn?.classList.remove('on'); playing = null; } }
+function stop() { if (playing) { try { playing.src.stop(); } catch {} playing.btn?.classList.remove('on'); playing = null; } if (typeof abStop === 'function') abStop(); }
 
 async function decodeFile(file) {
   const buf = await file.arrayBuffer();
@@ -385,7 +385,8 @@ function reportCsv() {
 function projectJson() {
   return JSON.stringify({ app: 'montage', v: 1, script: S.scriptText,
     files: S.files.map(f => ({ name: f.name, size: f.size, chars: [...f.chars] })),
-    edits: S.edits, gains: S.gains, voiced: S.voiced }, null, 1);
+    edits: S.edits, gains: S.gains, voiced: S.voiced,
+    cleanup: S.files.filter(f => f.clean && f.clean.chain).map(f => ({ name: f.name, chain: f.clean.chain, preset: f.clean.preset, applied: !!f.raw48 })) }, null, 1);
 }
 
 // ------------------------------------------------------------------ ввод
@@ -420,7 +421,9 @@ async function addFiles(list) {
   render();
   for (const f of S.files) if (!f.y48) {
     try { f.y48 = await decodeFile(f.file); f.dur = f.y48.length / C.SR; } catch { f.error = 'не удалось прочитать файл — формат не поддерживается браузером'; }
+    if (S.pendingChars && S.pendingChars.has(f.name)) { f.chars = new Set(S.pendingChars.get(f.name)); f.manualChars = true; }
     render();
+    if (f.y48 && S.pendingClean && S.pendingClean.has(f.name)) restoreClean(f);
   }
 }
 async function uploadFor(id, file) {
@@ -607,6 +610,8 @@ function bind() {
       S.edits = p.edits || {}; S.gains = p.gains || {}; S.voiced = p.voiced || {}; saveEdits();
       S.pendingChars = new Map((p.files || []).map(x => [x.name, x.chars]));
       for (const f of S.files) if (S.pendingChars.has(f.name)) { f.chars = new Set(S.pendingChars.get(f.name)); f.manualChars = true; }
+      S.pendingClean = new Map((p.cleanup || []).map(x => [x.name, x]));
+      for (const f of S.files) if (f.y48) restoreClean(f);
       notify('Проект открыт. Добавьте те же файлы записей — роли подставятся сами.'); render();
     } catch { notify('Это не файл проекта Монтажки.'); }
     e.target.value = '';
@@ -674,5 +679,5 @@ function bind() {
 }
 
 // для проверки из консоли и автотестов
-window.montage = { S, C, PRESETS, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses };
+window.montage = { S, C, PRESETS, projectJson, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses };
 bind(); render();
