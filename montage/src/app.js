@@ -22,7 +22,7 @@ const store = {
 
 const S = {
   scriptText: '', P: null, files: [], matches: new Map(),
-  edits: {}, gains: {}, voiced: {}, voiceGains: {}, uploads: new Map(),
+  edits: {}, gains: {}, voiced: {}, voiceGains: {}, timing: {}, tempo: 1, fxVoice: {}, fxLine: {}, takePick: {}, amb: null, uploads: new Map(),
   preset: 'normal', result: null, busy: false, filter: 'all', showDirs: false,
   tab: location.hash === '#clean' ? 'clean' : 'build', cleanFile: null,
 };
@@ -32,8 +32,8 @@ const charName = key => (S.P && S.P.chars.find(c => c.key === key) || { name: ke
 
 // ------------------------------------------------------------------ состояние правок
 const editsKey = () => 'montage:' + hash(S.scriptText);
-function saveEdits() { store.set(editsKey(), { edits: S.edits, gains: S.gains, voiced: S.voiced, voiceGains: S.voiceGains, sfx: S.sfxSaved || {} }); }
-function loadEdits() { const v = store.get(editsKey()); S.edits = v?.edits || {}; S.gains = v?.gains || {}; S.voiced = v?.voiced || {}; S.voiceGains = v?.voiceGains || {}; S.sfxSaved = v?.sfx || {}; sfxState().cues = JSON.parse(JSON.stringify(S.sfxSaved)); }
+function saveEdits() { store.set(editsKey(), { edits: S.edits, gains: S.gains, voiced: S.voiced, voiceGains: S.voiceGains, timing: S.timing, tempo: S.tempo, fxVoice: S.fxVoice, fxLine: S.fxLine, amb: ambSaved(), takes: S.takePick, sfx: S.sfxSaved || {} }); }
+function loadEdits() { const v = store.get(editsKey()); S.edits = v?.edits || {}; S.gains = v?.gains || {}; S.voiced = v?.voiced || {}; S.voiceGains = v?.voiceGains || {}; S.timing = v?.timing || {}; S.tempo = v?.tempo || 1; S.fxVoice = v?.fxVoice || {}; S.fxLine = v?.fxLine || {}; S.amb = v?.amb ? { duck: 8, scenes: {}, cands: {}, ...v.amb } : null; S.takePick = v?.takes || {}; S.sfxSaved = v?.sfx || {}; sfxState().cues = JSON.parse(JSON.stringify(S.sfxSaved)); }
 
 // ------------------------------------------------------------------ звук
 let actx = null, playing = null;
@@ -269,6 +269,7 @@ function matchAll() {
     const cue = cues.find(c => c.id === k);
     v.defaultOn = (v.how === 'text' && v.sim >= 0.6) || (v.how === 'order' && C.isSoundOnly(cue.text));
   }
+  if (typeof computeTakes === 'function') computeTakes();
 }
 
 // что звучит в реплике: своя запись > ручной выбор > автоматика
@@ -282,8 +283,10 @@ function sourceOf(cue) {
   }
   const m = S.matches.get(cue.id);
   if (!m) return null;
+  const tk = typeof takeOf === 'function' ? takeOf(cue.id) : null;
+  if (tk && !tk.t.main) { const tf = S.files[tk.t.file]; if (tf && tf.y48) return { kind: 'take', sim: tk.t.sim, text: tk.t.text, take: tk.i, takes: tk.n, auto: tk.i === tk.best && S.takePick[cue.id] == null, pieces: tk.t.pieces.map(p => ({ ...p, f: tf, file: tf.name })) }; }
   const f = S.files[m.file];
-  return f && f.y48 ? { kind: m.how, sim: m.sim, group: m.group, text: m.text, pieces: m.pieces.map(p => ({ ...p, f, file: f.name })) } : null;
+  return f && f.y48 ? { kind: m.how, sim: m.sim, group: m.group, text: m.text, take: tk ? tk.i : null, takes: tk ? tk.n : 0, pieces: m.pieces.map(p => ({ ...p, f, file: f.name })) } : null;
 }
 function isVoicedDir(cue) {
   if (cue.type !== 'dir') return false;
@@ -308,6 +311,7 @@ function statusOf(cue) {
   if (!src) return (S.edits[cue.id]?.none) ? { k: 'none', t: 'без записи' } : { k: 'miss', t: 'нет записи' };
   if (src.kind === 'upload') return { k: 'own', t: 'своя запись' };
   if (src.kind === 'manual') return { k: 'ok', t: 'выбрано вручную' };
+  if (src.kind === 'take') return src.sim >= 0.6 ? { k: 'ok', t: `дубль ${src.take + 1} из ${src.takes}${src.auto ? ' — лучший' : ''}` } : { k: 'check', t: `дубль ${src.take + 1} из ${src.takes} — проверить` };
   if (src.kind === 'order') return { k: 'check', t: 'по порядку — проверить' };
   if (src.kind === 'moved') return src.sim >= 0.7 ? { k: 'ok', t: 'найдено не по порядку' } : { k: 'check', t: 'не по порядку — проверить' };
   if (src.group > 1) return { k: 'check', t: 'в общем куске — проверить' };
@@ -334,10 +338,8 @@ async function mixdown() {
     C.levelLines(items, { strength, manual: S.gains });
     for (const it of items) { it.audio0 = it.audio; it.fix0 = it.fix; it.levelAfter0 = it.levelAfter; }   // выровненный звук — основа для регуляторов персонажей
     const byId = new Map(items.map(it => [it.id, it]));
-    const lay = C.layout(S.P.cues, cue => byId.get(cue.id)?.audio || (cue.type === 'dir' && sfxIsSeq(cue) ? sfxAudio(cue.id) : null), cue => isVoicedDir(cue) || sfxIsSeq(cue), sfxBed);
-    lay.placed.forEach(p => { p.item = byId.get(p.cue.id); });
     if (S.result && S.result.url) URL.revokeObjectURL(S.result.url);
-    S.result = { lay, items, byId, strength, target, at: new Date() };
+    S.result = { items, byId, strength, target, at: new Date() };
     progress('Свожу: громкость и лимитер…', 0.6);
     await new Promise(r => setTimeout(r, 30));
     remix();
@@ -353,13 +355,22 @@ function remix() {
     const vg = S.voiceGains[it.voice] || 0, g = Math.pow(10, vg / 20);
     it.fix = it.fix0 + vg; it.levelAfter = it.levelAfter0 + vg;
     it.audio = vg ? it.audio0.map(v => v * g) : it.audio0;
+    it.fxKey = typeof lineFx === 'function' ? lineFx(it) : null;
+    if (it.fxKey) { const fx = applyFx(it); it.audio = fx.audio; it.core = fx.core; } else it.core = null;
   }
-  for (const p of r.lay.placed) if (p.item) p.audio = p.item.audio;
   lap('поправки');
+  // раскладка заново: сдвиги реплик, темп пауз, хвосты эффектов
+  const lay = C.layout(S.P.cues, cue => { const it = r.byId.get(cue.id); if (it) return it.core != null ? { audio: it.audio, core: it.core } : it.audio; return cue.type === 'dir' && sfxIsSeq(cue) ? sfxAudio(cue.id) : null; },
+    cue => isVoicedDir(cue) || sfxIsSeq(cue), sfxBed, { tempo: S.tempo || 1, timing: S.timing });
+  lay.placed.forEach(p => { p.item = r.byId.get(p.cue.id); });
+  r.lay = lay; S.tlTracks = null;
+  lap('раскладка');
   r.out = null; r.master = null;                       // старый результат отпускается до выделения нового
-  const mix = new Float32Array(Math.ceil(r.lay.total * C.SR));
-  for (const p of r.lay.placed) { const i0 = Math.round(p.at * C.SR), n = Math.min(p.audio.length, Math.max(0, mix.length - i0)); if (p.bed) { for (let i = 0; i < n; i++) mix[i0 + i] += p.audio[i]; } else mix.set(p.audio.subarray(0, n), i0); }
+  const mix = new Float32Array(Math.ceil(lay.total * C.SR));
+  for (const p of lay.placed) { const i0 = Math.round(p.at * C.SR), n = Math.min(p.audio.length, Math.max(0, mix.length - i0)); for (let i = 0; i < n; i++) mix[i0 + i] += p.audio[i]; }   // всё суммой: реплики могут наезжать друг на друга
   lap('сумма');
+  r.amb = typeof ambMix === 'function' ? ambMix(mix, lay) : [];
+  lap('фон');
   const m = C.master(mix, r.lay.placed, { targetLufs: r.target });
   lap('мастер');
   r.out = m.out; r.master = m;
@@ -426,7 +437,7 @@ function reportCsv() {
 function projectJson() {
   return JSON.stringify({ app: 'montage', v: 1, script: S.scriptText,
     files: S.files.map(f => ({ name: f.name, size: f.size, chars: [...f.chars] })),
-    edits: S.edits, gains: S.gains, voiced: S.voiced, voiceGains: S.voiceGains, sfx: S.sfxSaved || {}, sfxLib: (S.sfx ? S.sfx.lib : []).map(f => f.db ? { name: f.name, db: f.db, text: f.text || '' } : f.name),
+    edits: S.edits, gains: S.gains, voiced: S.voiced, voiceGains: S.voiceGains, timing: S.timing, tempo: S.tempo, fxVoice: S.fxVoice, fxLine: S.fxLine, amb: ambSaved(), takes: S.takePick, sfx: S.sfxSaved || {}, sfxLib: (S.sfx ? S.sfx.lib : []).map(f => f.db ? { name: f.name, db: f.db, text: f.text || '' } : f.name),
     cleanup: S.files.filter(f => f.clean && f.clean.chain).map(f => ({ name: f.name, chain: f.clean.chain, preset: f.clean.preset, applied: !!f.raw48 })) }, null, 1);
 }
 
@@ -537,6 +548,7 @@ function renderReview() {
     <span class="pill check">проверить ${c.check}</span>
     <span class="pill miss">нет записи ${c.miss}</span>
     ${c.none ? `<span class="pill none">роли без записей ${c.none}</span>` : ''}`;
+  if ($('#rv-rerec')) $('#rv-rerec').innerHTML = typeof rerecHtml === 'function' ? rerecHtml() : '';
   document.querySelectorAll('#rv-filter button').forEach(b => b.classList.toggle('on', b.dataset.f === S.filter));
   $('#dirs-t').checked = S.showDirs;
   const rows = [];
@@ -575,6 +587,7 @@ function rowHtml(cue, st, hasFile) {
     </div>
     <div class="acts">
       ${src ? `<button class="play" data-act="play" aria-label="Слушать">▶</button>` : ''}
+      ${src && src.takes > 1 ? `<button class="ghost-b" data-act="take-next" title="Актёр прочёл реплику ${src.takes} раза; сначала стоит лучший">дубль ${src.take + 1}/${src.takes} ▸</button>` : ''}
       ${isDir ? `<label class="mini"><input type="checkbox" data-act="voiced" ${on ? 'checked' : ''}> в дорожку</label>` : ''}
       <button class="ghost-b" data-act="pick">${src ? 'Другой кусок' : 'Найти'}</button>
       <label class="ghost-b file-b">Своя запись<input type="file" accept="audio/*" data-act="own" hidden></label>
@@ -611,6 +624,7 @@ function renderMix() {
   const sec = $('#mix'); sec.hidden = !(S.matches.size || S.uploads.size || (S.P && S.sfx && Object.values(S.sfx.cues).some(c => c.on && c.src)));
   $('#mixgo').disabled = S.busy;
   $('#lvl-v').textContent = (+$('#lvl').value).toFixed(2).replace(/0$/, '');
+  if ($('#tempo')) { $('#tempo').value = S.tempo || 1; $('#tempo-v').textContent = (S.tempo || 1).toFixed(2).replace(/0$/, '') + '×'; }
   const r = S.result, out = $('#mix-out');
   if (!r) { out.innerHTML = ''; return; }
   const was = out.querySelector('audio'), pos = was ? { t: was.currentTime, playing: !was.paused && !was.ended } : null;
@@ -620,11 +634,12 @@ function renderMix() {
   const spread = list => { const a = list.map(x => x.levelAfter).sort((x, y) => x - y), b = list.map(x => x.level).sort((x, y) => x - y); const p = (arr, q) => arr[Math.min(arr.length - 1, Math.floor(q * (arr.length - 1)))]; return [p(b, 0.9) - p(b, 0.1), p(a, 0.9) - p(a, 0.1)]; };
   out.innerHTML = `
     <audio controls src="${r.url}"></audio>
-    <p class="stat">${fmt(r.out.length / C.SR)} · реплик со звуком ${recorded}${sounds ? ` · звуков ${sounds}` : ''} · пауз под незаписанное ${paused} · громкость ${r.target} LUFS${r.master.held ? ` · у ${r.master.held} реплик подъём придержан, чтобы не упирались в лимитер` : ''}${Object.keys(S.voiceGains).filter(v => voices.has(v)).length ? ' · поправки: ' + Object.entries(S.voiceGains).filter(([v]) => voices.has(v)).map(([v, g]) => `${charName(v)} ${g > 0 ? '+' : ''}${g} дБ`).join(', ') : ''}</p>
+    <div class="tl"><div class="tl-bar">${typeof tlBarHtml === 'function' ? tlBarHtml() : ''}</div><canvas id="tl-cv" tabindex="0" aria-label="Таймлайн сведения"></canvas><div class="tl-info" id="tl-info">${typeof tlInfoHtml === 'function' ? tlInfoHtml() : ''}</div></div>
+    <p class="stat">${fmt(r.out.length / C.SR)} · реплик со звуком ${recorded}${sounds ? ` · звуков ${sounds}` : ''} · пауз под незаписанное ${paused} · громкость ${r.target} LUFS${r.master.held ? ` · у ${r.master.held} реплик подъём придержан, чтобы не упирались в лимитер` : ''}${r.items.filter(it => it.fxKey).length ? ` · с эффектом ${r.items.filter(it => it.fxKey).length}` : ''}${r.amb && r.amb.length ? ` · фон в ${r.amb.length} сценах` : ''}${Object.keys(S.timing).length ? ` · сдвинуто ${Object.keys(S.timing).length}` : ''}${Object.keys(S.voiceGains).filter(v => voices.has(v)).length ? ' · поправки: ' + Object.entries(S.voiceGains).filter(([v]) => voices.has(v)).map(([v, g]) => `${charName(v)} ${g > 0 ? '+' : ''}${g} дБ`).join(', ') : ''}</p>
     <div class="levels">${[...voices].map(([v, list]) => { const [b, a] = spread(list); return `<div><span class="chip ${S.P.chars.some(c => c.key === v) ? colorOf(v) : 'ghost'}">${esc(charName(v))}</span> разброс громкости ${b.toFixed(1)} → <b>${a.toFixed(1)} дБ</b></div>`; }).join('')}</div>
     <div class="vgains">
-      <div class="vg-head"><b>Громкость персонажей</b><span class="muted small">поправка ко всем репликам персонажа поверх выравнивания; применяется сразу, плеер обновляется с того же места</span><span class="muted small" id="vg-note"></span></div>
-      ${[...voices.keys()].map(v => { const g = S.voiceGains[v] || 0; return `<label class="vg"><span class="chip ${S.P.chars.some(c => c.key === v) ? colorOf(v) : 'ghost'}">${esc(charName(v))}</span><input type="range" data-voice="${esc(v)}" min="-12" max="6" step="0.5" value="${g}" aria-label="громкость ${esc(charName(v))}"><b>${g > 0 ? '+' : ''}${g} дБ</b><button class="icon xs" data-act="vg0" data-voice="${esc(v)}" title="Сбросить в 0" aria-label="Сбросить">0</button></label>`; }).join('')}
+      <div class="vg-head"><b>Персонажи: громкость и эффект</b><span class="muted small">поправка ко всем репликам персонажа поверх выравнивания; эффект — «голос в голове», телефон, мегафон, за дверью… Пометки в сценарии («в микрофон», «из другого угла») срабатывают сами. Применяется сразу, плеер продолжает с того же места</span><span class="muted small" id="vg-note"></span></div>
+      ${[...voices.keys()].map(v => { const g = S.voiceGains[v] || 0; return `<label class="vg"><span class="chip ${S.P.chars.some(c => c.key === v) ? colorOf(v) : 'ghost'}">${esc(charName(v))}</span><input type="range" data-voice="${esc(v)}" min="-12" max="6" step="0.5" value="${g}" aria-label="громкость ${esc(charName(v))}"><b>${g > 0 ? '+' : ''}${g} дБ</b><button class="icon xs" data-act="vg0" data-voice="${esc(v)}" title="Сбросить в 0" aria-label="Сбросить">0</button>${typeof FX_PRESETS !== 'undefined' ? (() => { const cur = fxOfVoice(v); return `<select data-fxvoice="${esc(v)}" aria-label="эффект ${esc(charName(v))}"><option value="">${cur && !S.fxVoice[v] ? 'сам: ' + FX_PRESETS[cur.key].name : 'без эффекта'}</option>${Object.entries(FX_PRESETS).filter(([k]) => k !== 'none' || (cur && !S.fxVoice[v])).map(([k, p]) => `<option value="${k}" ${S.fxVoice[v] === k ? 'selected' : ''}>${p.name}</option>`).join('')}</select>`; })() : ''}</label>`; }).join('')}
     </div>
     <div class="dl">
       <button class="primary" data-act="mp3">Скачать MP3</button>
@@ -632,9 +647,13 @@ function renderMix() {
       <button class="ghost-b" data-act="pauses">Паузы (.txt)</button>
       <button class="ghost-b" data-act="csv">Разметка (.csv)</button>
       <button class="ghost-b" data-act="proj">Проект (.json)</button>
-    </div>`;
+      <button class="ghost-b" data-act="stems" title="Дорожки по персонажам, звуки и фон отдельными WAV плюс проект для Reaper">Стемы для Reaper, Audacity (.zip${typeof buildStems === 'function' ? ', ≈ ' + Math.round(buildStems().stems.length * r.out.length * 2 / 1e6) + ' МБ' : ''})</button>
+      ${r.lay.scenes && r.lay.scenes.length > 1 ? '<button class="ghost-b" data-act="chapters" title="Строки вида «00:00 Сцена 1 — кабинет» для описания на YouTube">Главы (.txt)</button>' : ''}
+    </div>
+    ${r.lay.scenes && r.lay.scenes.length > 1 ? '<p class="muted small">В MP3 сцены записаны главами: в плеерах подкастов и VLC по ним можно прыгать.</p>' : ''}`;
   const a2 = out.querySelector('audio');
   if (a2 && pos && pos.t > 0) a2.addEventListener('loadedmetadata', () => { a2.currentTime = Math.min(pos.t, a2.duration || pos.t); if (pos.playing) a2.play().catch(() => {}); }, { once: true });
+  if (typeof drawTimeline === 'function') requestAnimationFrame(drawTimeline);
 }
 
 // ------------------------------------------------------------------ события
@@ -655,7 +674,7 @@ function bind() {
     try {
       const p = JSON.parse(await f.text());
       $('#script').value = p.script || ''; setScript(p.script || '');
-      S.edits = p.edits || {}; S.gains = p.gains || {}; S.voiced = p.voiced || {}; S.voiceGains = p.voiceGains || {}; saveEdits();
+      S.edits = p.edits || {}; S.gains = p.gains || {}; S.voiced = p.voiced || {}; S.voiceGains = p.voiceGains || {}; S.timing = p.timing || {}; S.tempo = p.tempo || 1; S.fxVoice = p.fxVoice || {}; S.fxLine = p.fxLine || {}; S.amb = p.amb ? { duck: 8, scenes: {}, cands: {}, ...p.amb } : null; S.takePick = p.takes || {}; saveEdits();
       S.pendingChars = new Map((p.files || []).map(x => [x.name, x.chars]));
       for (const f of S.files) if (S.pendingChars.has(f.name)) { f.chars = new Set(S.pendingChars.get(f.name)); f.manualChars = true; }
       S.sfxSaved = p.sfx || {}; sfxState().cues = JSON.parse(JSON.stringify(S.sfxSaved)); saveEdits();
@@ -688,6 +707,8 @@ function bind() {
   $('#go').addEventListener('click', analyze);
   $('#rv-filter').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { S.filter = b.dataset.f; renderReview(); } });
   $('#dirs-t').addEventListener('change', e => { S.showDirs = e.target.checked; renderReview(); });
+  $('#rv-rerec').addEventListener('click', e => { const b = e.target.closest('button[data-act=rerec]'); if (!b) return; const spk = b.dataset.spk || null;
+    download(new Blob([rerecText(spk)], { type: 'text/plain;charset=utf-8' }), `дозапись${spk ? '-' + charName(spk) : ''}.txt`); });
   $('#rv-list').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     const row = b.closest('.row'); if (!row) return;
@@ -702,6 +723,7 @@ function bind() {
       S.edits[cue.id] = { pieces: [...base, piece].sort((x, y) => x.file === y.file ? x.a - y.a : 0) };
       if (cue.type === 'dir') S.voiced[cue.id] = true;
     }
+    if (a === 'take-next') { const tk = takeOf(cue.id); if (tk) { const nx = (tk.i + 1) % tk.n; if (nx === tk.best) delete S.takePick[cue.id]; else S.takePick[cue.id] = nx; } }
     if (a === 'none') S.edits[cue.id] = { none: true };
     if (a === 'reset') { delete S.edits[cue.id]; S.uploads.delete(cue.id); }
     if (a === 'g+' || a === 'g-') { S.gains[cue.id] = (S.gains[cue.id] || 0) + (a === 'g+' ? 1 : -1); if (!S.gains[cue.id]) delete S.gains[cue.id]; }
@@ -713,16 +735,23 @@ function bind() {
     if (x.dataset.act === 'voiced') { S.voiced[row.dataset.id] = x.checked; saveEdits(); S.result = null; renderReview(); renderMix(); }
   });
   $('#lvl').addEventListener('input', () => { $('#lvl-v').textContent = (+$('#lvl').value).toFixed(2).replace(/0$/, ''); });
+  $('#tempo').addEventListener('input', () => { $('#tempo-v').textContent = (+$('#tempo').value).toFixed(2).replace(/0$/, '') + '×'; });
+  $('#tempo').addEventListener('change', () => { S.tempo = +$('#tempo').value; saveEdits(); if (S.result) remixSoon(); });
+  if (typeof bindTimeline === 'function') bindTimeline();
   $('#mixgo').addEventListener('click', mixdown);
   $('#mix-out').addEventListener('input', e => { const x = e.target; if (x.dataset.voice == null) return; x.nextElementSibling.textContent = `${+x.value > 0 ? '+' : ''}${+x.value} дБ`; });
-  $('#mix-out').addEventListener('change', e => { const x = e.target; if (x.dataset.voice == null) return; const v = +x.value; if (v) S.voiceGains[x.dataset.voice] = v; else delete S.voiceGains[x.dataset.voice]; saveEdits(); remixSoon(); });
+  $('#mix-out').addEventListener('change', e => { const x = e.target;
+    if (x.dataset.fxvoice != null) { if (x.value) S.fxVoice[x.dataset.fxvoice] = x.value; else delete S.fxVoice[x.dataset.fxvoice]; saveEdits(); remixSoon(); return; }
+    if (x.dataset.voice == null) return; const v = +x.value; if (v) S.voiceGains[x.dataset.voice] = v; else delete S.voiceGains[x.dataset.voice]; saveEdits(); remixSoon(); });
   $('#mix-out').addEventListener('click', async e => {
     const b = e.target.closest('button'); if (!b || !S.result) return;
     const stamp = S.result.at.toISOString().slice(0, 16).replace(/[-:T]/g, '').replace(/^(\d{8})(\d{4})$/, '$1-$2');
     const a = b.dataset.act;
     try {
       if (a === 'vg0') { delete S.voiceGains[b.dataset.voice]; saveEdits(); const sl = $('#mix-out').querySelector(`input[data-voice="${CSS.escape(b.dataset.voice)}"]`); if (sl) { sl.value = 0; sl.nextElementSibling.textContent = '0 дБ'; } remixSoon(); return; }
-      if (a === 'mp3') { b.disabled = true; const blob = await encodeMp3(S.result.out, +$('#kbps').value); progress('', 0); download(blob, `сведение-${stamp}.mp3`); b.disabled = false; }
+      if (a === 'mp3') { b.disabled = true; const blob = await encodeMp3(S.result.out, +$('#kbps').value); progress('', 0); const tag = typeof id3Chapters === 'function' ? id3Chapters((S.P.title || 'Радиоспектакль')) : null; download(tag && tag.length ? new Blob([tag, blob], { type: 'audio/mpeg' }) : blob, `сведение-${stamp}.mp3`); b.disabled = false; }
+      if (a === 'stems') { b.disabled = true; try { const z = await exportStems(); if (z) download(z, `стемы-${stamp}.zip`); } catch (err) { progress('', 0); notify('Стемы не получились: ' + err.message); } b.disabled = false; }
+      if (a === 'chapters') download(new Blob([chaptersText()], { type: 'text/plain;charset=utf-8' }), `главы-${stamp}.txt`);
       if (a === 'wav') download(new Blob([C.wav24(S.result.out)], { type: 'audio/wav' }), `сведение-${stamp}.wav`);
       if (a === 'pauses') download(new Blob([reportPauses()], { type: 'text/plain;charset=utf-8' }), `паузы-${stamp}.txt`);
       if (a === 'csv') download(new Blob([reportCsv()], { type: 'text/csv;charset=utf-8' }), `разметка-${stamp}.csv`);
@@ -732,5 +761,5 @@ function bind() {
 }
 
 // для проверки из консоли и автотестов
-window.montage = { S, C, PRESETS, projectJson, remix, renderMix, sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses };
+window.montage = { S, C, PRESETS, projectJson, remix, renderMix, computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses };
 bind(); render();

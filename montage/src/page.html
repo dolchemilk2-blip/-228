@@ -159,12 +159,21 @@ details.how pre { background: var(--bg); border-radius: 8px; padding: 10px 12px;
 .levels { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; font-variant-numeric: tabular-nums; }
 .levels div { display: flex; gap: 8px; align-items: center; }
 .dl { display: flex; flex-wrap: wrap; gap: 8px; }
+.tl { display: grid; gap: 6px; border: 1px solid var(--line2); border-radius: 10px; padding: 8px 10px; }
+.tl-bar { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.tl-bar .on, .ghost-b.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+#tl-cv { width: 100%; display: block; border-radius: 6px; touch-action: none; outline: none; }
+#tl-cv:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.tl-info { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; font-size: 13px; min-height: 22px; }
+.tl-info b { font-variant-numeric: tabular-nums; }
+.tl-info .tl-txt { color: var(--muted); max-width: 46ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-info select { border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 3px 6px; font-size: 12.5px; color: var(--ink); }
 .vgains { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line2); border-radius: 10px; }
 .vg-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
-.vg { display: grid; grid-template-columns: minmax(90px, auto) minmax(140px, 320px) 64px 24px; gap: 10px; align-items: center; }
+.vg { display: grid; grid-template-columns: minmax(90px, 170px) minmax(140px, 300px) 64px 24px minmax(0, 240px); gap: 10px; align-items: center; }
 .vg b { font-variant-numeric: tabular-nums; font-size: 13px; text-align: right; }
 .vg input[type=range] { width: 100%; }
-@media (max-width: 560px) { .vg { grid-template-columns: 1fr 56px 24px; } .vg input[type=range] { grid-column: 1 / -1; } }
+@media (max-width: 700px) { .vg { grid-template-columns: 1fr 56px 24px; } .vg input[type=range], .vg select { grid-column: 1 / -1; } }
 #prog { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 5; }
 #prog .in { max-width: 1120px; margin: 0 auto; display: grid; gap: 8px; }
 #prog-t { font-size: 14px; }
@@ -205,6 +214,17 @@ footer { color: var(--muted); font-size: 13px; padding-block: 8px 0; }
 .eqb b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .eqb input[type=number] { width: 62px; border: 1px solid var(--line); border-radius: 6px; padding: 2px 4px; font-size: 12px; background: var(--surface); color: var(--ink); text-align: center; }
 .dbbox { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line2); border-radius: 10px; }
+.rerec { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 8px 10px; border: 1px solid var(--line2); border-radius: 10px; margin: 8px 0; }
+.chip.as-btn { border: 0; cursor: pointer; font-family: inherit; } .chip.as-btn:hover { filter: brightness(0.95); }
+.ambbox { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line2); border-radius: 10px; }
+.arows { display: grid; border-top: 1px solid var(--line2); }
+.arow { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(140px, 260px) 150px 34px auto auto; gap: 6px 10px; align-items: center; padding: 7px 4px; border-bottom: 1px solid var(--line2); border-left: 3px solid transparent; font-size: 13.5px; }
+.arow.on { border-left-color: var(--ok); }
+.arow .asrc { font-size: 13px; overflow-wrap: anywhere; } .arow .asrc i { font-style: normal; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.arow .gain, .duck { display: grid; gap: 2px; font: 12px var(--mono); color: var(--muted); } .arow .gain input { width: 100%; }
+.duck { margin-left: auto; min-width: 190px; }
+@media (max-width: 860px) { .arow { grid-template-columns: auto minmax(0, 1fr) 34px; } .arow .asrc, .arow .gain, .arow .ghost-b { grid-column: 2; } }
+.vg select { border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 3px 6px; font-size: 12.5px; color: var(--ink); max-width: 230px; }
 .dbline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .dbline input { flex: 1 1 260px; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-size: 14px; background: var(--surface); color: var(--ink); font-family: inherit; }
 .dbrows { display: grid; max-height: 360px; overflow: auto; border-top: 1px solid var(--line2); }
@@ -316,6 +336,7 @@ footer a { color: inherit; }
   <section class="card" id="review" hidden>
     <h2 class="step"><b>4</b> Проверка <small>▶ — послушать, «Другой кусок» — выбрать из записи</small></h2>
     <div class="sum" id="rv-sum"></div>
+    <div id="rv-rerec"></div>
     <div class="filters" id="rv-filter">
       <button data-f="all" class="on">Все</button><button data-f="check">Проверить</button><button data-f="miss">Нет записи</button><button data-f="dirs">Озвученные ремарки</button>
       <label><input type="checkbox" id="dirs-t"> показывать ремарки</label>
@@ -327,7 +348,8 @@ footer a { color: inherit; }
     <h2 class="step"><b>5</b> Сведение <small>меняется только громкость — звук записей не обрабатывается</small></h2>
     <div class="settings">
       <label for="lvl">Выравнивание реплик: <span id="lvl-v">0.75</span><input type="range" id="lvl" min="0" max="1" step="0.05" value="0.75"></label>
-      <label for="lufs">Итоговая громкость<select id="lufs"><option value="-16">−16 LUFS (подкасты)</option><option value="-18" selected>−18 LUFS</option><option value="-23">−23 LUFS (эфир)</option></select></label>
+      <label for="tempo">Темп пауз: <span id="tempo-v">1×</span><input type="range" id="tempo" min="0.5" max="1.8" step="0.05" value="1"></label>
+      <label for="lufs">Итоговая громкость<select id="lufs"><option value="-14">−14 LUFS (YouTube, стриминг)</option><option value="-16">−16 LUFS (подкасты)</option><option value="-18" selected>−18 LUFS</option><option value="-23">−23 LUFS (эфир)</option></select></label>
       <label for="kbps">MP3<select id="kbps"><option value="160">160 кбит/с</option><option value="192">192 кбит/с</option><option value="256" selected>256 кбит/с</option><option value="320">320 кбит/с</option></select></label>
       <button class="primary" id="mixgo">Свести</button>
     </div>

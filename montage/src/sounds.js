@@ -51,7 +51,8 @@ function renderSounds() {
   const el = $('#sfx-body'); if (!el) return;
   if (!S.P) { el.innerHTML = '<p class="muted">Сначала вставьте сценарий на вкладке «Сборка»: звуки берутся из его ремарок.</p>'; return; }
   const st = sfxState(), db = dbState(); sfxAuto();
-  if (!db.restoring.size && (Object.values(st.cues).some(c => c.src && c.src.startsWith('lib:BBC ') && !st.lib.some(x => x.name === c.src.slice(4))) || (S.sfxPendingDb || []).length)) dbRestore();
+  const missing = c => c && c.src && c.src.startsWith('lib:BBC ') && !st.lib.some(x => x.name === c.src.slice(4));
+  if (!db.restoring.size && (Object.values(st.cues).some(missing) || Object.values(ambState().scenes).some(missing) || (S.sfxPendingDb || []).length)) dbRestore();
   const auto = new Map(C.soundCues(S.P.cues).map(q => [q.id, q]));
   const dirs = S.P.cues.filter(c => c.type === 'dir' && !/^\(?(долгая )?пауза\)?\.?$/i.test(c.text.trim()));
   const rows = dirs.filter(c => st.showAll || auto.has(c.id) || (st.cues[c.id] && st.cues[c.id].src));
@@ -84,6 +85,7 @@ function renderSounds() {
       <span class="pill ok">в дорожке ${inTrack}</span>
       <label class="mini"><input type="checkbox" id="sfx-all" ${st.showAll ? 'checked' : ''}> показывать все ремарки</label>
     </div>
+    ${ambHtml()}
     ${dbBoxHtml(db)}
     ${st.lib.length ? `<div class="chips">${st.lib.map(f => `<span class="chip ghost">${esc(f.name)} <i>${fmt(f.dur)}</i> <button class="icon xs" data-act="lib-play" data-name="${esc(f.name)}" aria-label="Слушать">▶</button><button class="icon xs" data-act="lib-rm" data-name="${esc(f.name)}" aria-label="Убрать">✕</button></span>`).join('')}</div>` : ''}
     <div class="srows">${list.join('') || '<p class="muted pad">Звучащих ремарок не нашлось. Включите «показывать все ремарки» и назначьте звук вручную.</p>'}</div>`;
@@ -106,6 +108,7 @@ function dbBoxHtml(db) {
 }
 function bindSounds() {
   const el = $('#sfx-body');
+  bindAmb(el);
   el.addEventListener('input', e => { if (e.target.id === 'db-q') dbState().q = e.target.value; });
   el.addEventListener('keydown', e => { if (e.target.id === 'db-q' && e.key === 'Enter') { e.preventDefault(); dbRun(e.target.value); } });
   el.addEventListener('change', e => {

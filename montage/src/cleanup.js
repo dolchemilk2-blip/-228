@@ -107,7 +107,7 @@ async function analyzeFile(f) {
       const y = srcOf(f).slice();
       const r = await dspCall({ type: 'analyze', y, wantLtas: false }, [y.buffer]);
       c.A = r.A; c.noise = r.noise;
-      if (!c.chain) c.chain = C.defaultChain(c.preset, { boom: r.A.boom });
+      if (!c.chain) { const ap = autoPreset(r.A); c.preset = ap.preset; c.presetWhy = ap.why; c.chain = C.defaultChain(c.preset, { boom: r.A.boom }); }
       if (c.at == null) c.at = excerptStart(f);
     } catch (err) { notify('Не удалось разобрать файл: ' + err.message); }
     c.busy = false; c.dirty = true; c.pending = null; renderCleanup(); previewSoon(f);
@@ -115,10 +115,17 @@ async function analyzeFile(f) {
   })();
   return c.pending;
 }
+/** Пресет по разбору записи: сжатая — «После кодека», гулкая — «Сильно», чуть комнаты — «Обычно», сухая — «Мягко». */
+function autoPreset(A) {
+  if (A.cutoff && A.cutoff.f <= 14000) return { preset: 'codec', why: `верх обрезан на ${(A.cutoff.f / 1000).toFixed(1)} кГц` };
+  if ((A.decay != null && A.decay < 100) || A.boom >= 4) return { preset: 'strong', why: A.decay != null && A.decay < 100 ? 'слышна комната' : 'гулкий низ' };
+  if ((A.decay != null && A.decay < 125) || A.floorDb > -55) return { preset: 'normal', why: A.floorDb > -55 ? 'заметный фон' : 'немного комнаты' };
+  return { preset: 'soft', why: 'запись сухая и тихая' };
+}
 async function refLtas(name) {
   const rf = S.files.find(x => x.name === name); if (!rf || !srcOf(rf)) return null;
   const c = cl(rf); if (c.ltas) return c.ltas;
-  const y = srcOf(rf).slice();
+  const y = rf.y48.slice();                          // образец — как он звучит сейчас (после его чистки, если она применена)
   const r = await dspCall({ type: 'analyze', y, wantLtas: true }, [y.buffer]);
   c.A = c.A || r.A; c.noise = c.noise || r.noise; c.ltas = r.ltas; return c.ltas;
 }
@@ -152,11 +159,24 @@ async function applyFile(f, quiet = false) {
     progress(`Обрабатываю ${f.name}…`, 0);
     const r = await dspCall({ type: 'run', y: src, chain: c.chain, aux }, [src.buffer], p => progress(`Обрабатываю ${f.name}: ${Math.round(p * 100)} %`, p));
     if (!f.raw48) f.raw48 = f.y48;
-    f.y48 = r.y; c.log = r.log; c.appliedChain = clone(c.chain);
+    f.y48 = r.y; c.log = r.log; c.appliedChain = clone(c.chain); c.ltas = null;
     S.result = null; progress('', 0);
     if (!quiet) notify(`${f.name}: обработано. В сведение теперь идёт очищенная версия.`);
   } catch (err) { progress('', 0); notify('Не получилось: ' + err.message); }
   c.busy = false; S.busy = false; render();
+}
+/** Все записи — как эта: та же чистка и тембр, подогнанный под неё, чтобы голоса звучали из одного места. */
+async function matchAllTo(f) {
+  const c = cl(f), others = S.files.filter(x => x !== f && srcOf(x) && !x.error);
+  if (!others.length) return notify('Других записей нет.');
+  await applyFile(f, true);
+  for (const o of others) {
+    const oc = cl(o); await analyzeFile(o);
+    oc.chain = clone(c.chain); oc.preset = c.preset;
+    oc.chain.tone = { ...oc.chain.tone, on: true, mode: 'match', ref: f.name, strength: 0.8 };
+    oc.dirty = true; await applyFile(o, true);
+  }
+  notify(`Готово: ${others.length} ${others.length === 1 ? 'запись подогнана' : 'записей подогнаны'} под «${f.name}» — та же чистка и тембр.`);
 }
 async function applyAll(f) {
   const c = cl(f), others = S.files.filter(x => x !== f && srcOf(x) && !x.error);
@@ -363,7 +383,7 @@ function renderCleanup() {
     </div>`).join('');
   pane.innerHTML = tabs + `
     <div class="cl-head"><div class="hints">${hintChips(c.A)}</div>
-      <div class="presets">${Object.entries(PRESET_NAMES).map(([k, n]) => `<button class="ghost-b ${c.preset === k ? 'on' : ''}" data-preset="${k}">${n}</button>`).join('')}</div></div>
+      <div class="presets">${Object.entries(PRESET_NAMES).map(([k, n]) => `<button class="ghost-b ${c.preset === k ? 'on' : ''}" data-preset="${k}">${n}</button>`).join('')}${c.presetWhy ? `<span class="muted small">«${PRESET_NAMES[c.presetAuto || c.preset] || ''}» выбран сам: ${esc(c.presetWhy)}</span>` : ''}</div></div>
     <div class="mods">${mods}</div>
     ${eqModuleHtml(c)}
     <div class="cl-ab">
@@ -385,7 +405,7 @@ function renderCleanup() {
     </div>
     <div class="cl-actions">
       <button class="primary" data-act="apply" ${c.busy ? 'disabled' : ''}>${f.raw48 ? 'Применить заново ко всему файлу' : 'Применить ко всему файлу'}</button>
-      ${files.length > 1 ? `<button class="ghost-b" data-act="apply-all" ${c.busy ? 'disabled' : ''}>Ко всем файлам с этими настройками</button>` : ''}
+      ${files.length > 1 ? `<button class="ghost-b" data-act="apply-all" ${c.busy ? 'disabled' : ''}>Ко всем файлам с этими настройками</button><button class="ghost-b" data-act="match-all" ${c.busy ? 'disabled' : ''} title="Та же чистка всем записям и тембр, подогнанный под эту">Все записи — как эта</button>` : ''}
       ${f.raw48 ? '<button class="ghost-b" data-act="revert">Вернуть оригинал</button><button class="ghost-b" data-act="wav">Скачать WAV</button>' : ''}
       <span class="muted small" id="cl-applied">${f.raw48 ? 'В сведение идёт обработанная версия. ' + (c.log ? c.log.join(' · ') : '') : 'Пока в сведение идёт оригинал.'}</span>
     </div>`;
@@ -472,12 +492,13 @@ function bindCleanup() {
     const b = e.target.closest('button'); if (!b) return;
     const f = S.cleanFile, c = f && cl(f);
     if (b.dataset.name) { S.cleanFile = S.files.find(x => x.name === b.dataset.name); abStop(); stop(); renderCleanup(); return; }
-    if (b.dataset.preset) { c.preset = b.dataset.preset; const eqKeep = c.chain.eq, eq5Keep = c.chain.eq5; c.chain = C.defaultChain(c.preset, { boom: c.A.boom }); c.chain.eq = eqKeep; c.chain.eq5 = eq5Keep; c.dirty = true; renderCleanup(); previewSoon(f); return; }
+    if (b.dataset.preset) { c.presetWhy = null; c.preset = b.dataset.preset; const eqKeep = c.chain.eq, eq5Keep = c.chain.eq5; c.chain = C.defaultChain(c.preset, { boom: c.A.boom }); c.chain.eq = eqKeep; c.chain.eq5 = eq5Keep; c.dirty = true; renderCleanup(); previewSoon(f); return; }
     if (b.dataset.eqpreset) { const p = EQ_PRESETS[b.dataset.eqpreset]; c.chain.eq.bands = clone(p.bands); if (p.bands.length) c.chain.eq.on = true; c.eqSel = -1; renderCleanup(); markDirty(f); return; }
     const a = b.dataset.act;
     if (a === 'before' || a === 'after') return abPlay(f, a);
     if (a === 'apply') return applyFile(f);
     if (a === 'apply-all') return applyAll(f);
+    if (a === 'match-all') return matchAllTo(f);
     if (a === 'revert') return revertFile(f);
     if (a === 'wav') return download(new Blob([C.wav24(f.y48)], { type: 'audio/wav' }), f.name.replace(/\.[^.]+$/, '') + '_чисто.wav');
     if (a === 'noise-here') { c.noiseOverride = C.noiseProfile(c.before); c.noiseFrom = c.at; if (!c.noiseOverride) return notify('В этом отрывке нет тихих мест, откуда взять профиль.'); renderCleanup(); markDirty(f); return; }

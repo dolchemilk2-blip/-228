@@ -158,10 +158,11 @@ async function dbRestore() {
   const st = sfxState(), db = dbState(), want = new Map();
   for (const e of S.sfxPendingDb || []) if (e && e.db) want.set(String(e.db), { id: String(e.db), text: e.text || '' });
   S.sfxPendingDb = [];
-  for (const c of Object.values(st.cues)) if (c.src && c.src.startsWith('lib:')) { const it = dbParse(c.src.slice(4)); if (it && !st.lib.some(x => x.name === c.src.slice(4))) want.set(it.id, it); }
+  const refs = [...Object.values(st.cues), ...(typeof ambState === 'function' ? Object.values(ambState().scenes) : [])];
+  for (const c of refs) if (c.src && c.src.startsWith('lib:')) { const it = dbParse(c.src.slice(4)); if (it && !st.lib.some(x => x.name === c.src.slice(4))) want.set(it.id, it); }
   const todo = [...want.values()].filter(it => !db.restoring.has(it.id));
   if (!todo.length) return;
   for (const it of todo) db.restoring.add(it.id);
   try { await Promise.all(todo.map(it => dbAdd(it).catch(e => console.warn('база:', e)))); }
-  finally { for (const it of todo) db.restoring.delete(it.id); S.result = null; renderSounds(); if (typeof renderMix === 'function') renderMix(); }
+  finally { for (const it of todo) db.restoring.delete(it.id); renderSounds(); if (S.result && typeof remixSoon === 'function') remixSoon(); }
 }

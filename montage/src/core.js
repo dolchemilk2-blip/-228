@@ -664,16 +664,17 @@ export function levelLines(items, { charLufs = -20, strength = 0.75, voiceMax = 
  * «пауза» +0,7, «долгая пауза» +1,5, «тишина» +1,0, прочие ремарки +0,15 (до +1,2), сцены 2,6 с.
  * cues — весь сценарий; audioOf(cue) → Float32Array | null. Незаписанная реплика — пауза.
  */
-export function layout(cues, audioOf, isVoiced, bedOf = null) {
-  const placed = [], sheet = [], rows = [];
-  let pend = { extra: 0, generic: 0, scene: null }, t = 0.6, prev = '', scene = '1', first = true;
+export function layout(cues, audioOf, isVoiced, bedOf = null, { tempo = 1, timing = {} } = {}) {
+  const placed = [], sheet = [], rows = [], scenes = [];
+  let pend = { extra: 0, generic: 0, scene: null, sceneCue: null }, t = 0.6, prev = '', scene = '1', first = true;
+  const tm = id => timing[id] || {};
   for (const c of cues) {
-    if (c.type === 'scene') { pend.scene = c.n; continue; }
+    if (c.type === 'scene') { pend.scene = c.n; pend.sceneCue = c; continue; }
     const bed = c.type === 'dir' && bedOf ? bedOf(c) : null;
     if (bed) {                                        // звук фоном: ложится с этого места, реплики не ждут
-      const at = t + (pend.scene != null ? (first ? 0 : 2.6) : 0);
+      const at = Math.max(0, t + (pend.scene != null ? (first ? 0 : 2.6 * tempo) : 0) + (tm(c.id).before || 0) + (tm(c.id).own || 0));
       placed.push({ at, audio: bed.audio, cue: c, bed: true });
-      rows.push({ cue: c, scene: pend.scene != null ? pend.scene : scene, at, dur: bed.audio.length / SR, recorded: true, sound: bed.name });
+      rows.push({ cue: c, scene: pend.scene != null ? pend.scene : scene, at, dur: bed.audio.length / SR, recorded: true, sound: bed.name, bed: true });
       continue;
     }
     if (c.type === 'dir' && !isVoiced(c)) {
@@ -685,19 +686,27 @@ export function layout(cues, audioOf, isVoiced, bedOf = null) {
       continue;
     }
     let gap;
-    if (pend.scene != null) { scene = pend.scene; gap = first ? 0 : 2.6; sheet.push({ scene, at: t + gap }); }
-    else gap = (/[—-]\s*$/.test(prev) ? 0.08 : 0.35) + pend.generic + pend.extra;
-    pend = { extra: 0, generic: 0, scene: null }; first = false;
-    t += gap;
+    if (pend.scene != null) { scene = pend.scene; gap = first ? 0 : 2.6 * tempo; scenes.push({ n: scene, start: t, cue: pend.sceneCue }); sheet.push({ scene, at: t + gap }); }
+    else if (/перебива/i.test(c.note || '')) gap = -0.25;                       // «(перебивая)»: реплика наезжает на предыдущую
+    else gap = ((/[—-]\s*$/.test(prev) ? 0.08 : 0.35) + (/\?\s*$/.test(prev) ? 0.15 : 0) + pend.generic + pend.extra) * tempo;
+    pend = { extra: 0, generic: 0, scene: null, sceneCue: null }; first = false;
+    gap += tm(c.id).before || 0;
+    t = Math.max(0, t + gap);
+    const own = tm(c.id).own || 0, at = Math.max(0, t + own);
     const y = audioOf(c);
     let dur;
-    if (y && y.audio) { placed.push({ at: t, audio: y.audio, cue: c }); dur = y.audio.length / SR; rows.push({ cue: c, scene, at: t, dur, recorded: true, sound: y.name }); t += dur; prev = c.text; continue; }
-    if (y) { placed.push({ at: t, audio: y, cue: c }); dur = y.length / SR; }
-    else { dur = estDuration(c.text); sheet.push({ cue: c, at: t, dur }); }
-    rows.push({ cue: c, scene, at: t, dur, recorded: !!y });
+    if (y && y.audio) {                                // {audio, name} — звук; {audio, core} — реплика с хвостом эффекта, следующая ждёт только core
+      placed.push({ at, audio: y.audio, cue: c }); dur = y.core != null ? y.core : y.audio.length / SR;
+      rows.push({ cue: c, scene, at, dur, gap, recorded: true, sound: y.name }); t += dur; prev = c.text; continue;
+    }
+    if (y) { placed.push({ at, audio: y, cue: c }); dur = y.length / SR; }
+    else { dur = estDuration(c.text); sheet.push({ cue: c, at, dur }); }
+    rows.push({ cue: c, scene, at, dur, gap, recorded: !!y });
     t += dur; prev = c.text;
   }
-  return { placed, sheet, rows, total: t + 1.5 };
+  const total = t + 1.5;
+  scenes.forEach((sc, i) => { sc.end = i + 1 < scenes.length ? scenes[i + 1].start : total; });
+  return { placed, sheet, rows, scenes, total };
 }
 
 /** Пиковый лимитер с заглядыванием вперёд (5 мс) и восстановлением 60 мс. */

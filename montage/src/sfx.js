@@ -45,6 +45,7 @@ const SYNTH = {
   whistle:   { name: 'свист', make: r => { const y = env(tone(sec(0.7), t => 1800 + 900 * Math.sin(Math.PI * t)), 0.03, 0.4); return peakTo(y, 0.3); } },
   keys:      { name: 'ключи', make: r => { const y = new Float32Array(sec(1.2)); for (let k = 0; k < 9; k++) add(y, env(tone(sec(0.15), 3500 + r() * 4000), 0.001, 0.02), r() * 1.0, 0.5); return peakTo(y, 0.3); } },
   creak:     { name: 'скрип', make: r => { const y = tone(sec(0.55), t => 2600 + 700 * Math.sin(t * 25), r, 0.05); for (let i = 0; i < y.length; i++) y[i] = Math.sign(y[i]) * Math.pow(Math.abs(y[i]), 0.5); env(y, 0.03, 0.2); return peakTo(bp(y, 2800, 1.5), 0.25); } },
+  room:      { name: 'тишина помещения', make: r => { const n = sec(12), y = lp(noise(n, r), 1200, 0.5); const m = lp(noise(n, r), 0.3); let mx = 0; for (const v of m) mx = Math.max(mx, Math.abs(v)); for (let i = 0; i < n; i++) y[i] *= 0.8 + 0.2 * m[i] / (mx || 1); add(y, lp(noise(n, r), 120, 0.7), 0, 0.6); return peakTo(y, 0.2); } },
   cough:     { name: 'кашель', make: r => { const y = new Float32Array(sec(0.9)); [0, 0.28].forEach((t, k) => add(y, env(bp(noise(sec(0.25), r), 700 + k * 200, 0.8), 0.01, 0.06), t, 1)); return peakTo(y, 0.4); } },
 };
 export const SFX_KEYS = Object.keys(SYNTH);

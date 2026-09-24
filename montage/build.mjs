@@ -17,8 +17,8 @@ self.onmessage = e => {
     else if (m.type === 'run') { const r = runChain(m.y, m.chain, m.aux || {}, p => self.postMessage({ id: m.id, type: 'progress', p })); self.postMessage({ id: m.id, type: 'done', y: r.y, log: r.log }, [r.y.buffer]); }
   } catch (err) { self.postMessage({ id: m.id, type: 'error', message: String(err && err.message || err) }); }
 };`;
-const app = strip(read('app.js')), cleanup = strip(read('cleanup.js')), sounds = strip(read('sounds.js')), sfxdb = strip(read('sfxdb.js'));
-const bundle = `${bundleLib}\nconst DSP_WORKER_SRC = ${JSON.stringify(workerSrc)};\n\n${cleanup}\n\n${sounds}\n\n${sfxdb}\n\n${app}`;
+const app = strip(read('app.js')), cleanup = strip(read('cleanup.js')), sounds = strip(read('sounds.js')), sfxdb = strip(read('sfxdb.js')), timeline = strip(read('timeline.js')), fx = strip(read('fx.js')), amb = strip(read('amb.js')), extras = strip(read('extras.js'));
+const bundle = `${bundleLib}\nconst DSP_WORKER_SRC = ${JSON.stringify(workerSrc)};\n\n${cleanup}\n\n${sounds}\n\n${sfxdb}\n\n${fx}\n\n${amb}\n\n${timeline}\n\n${extras}\n\n${app}`;
 const page = read('page.html').replace('/*BUNDLE*/', () => bundle);
 fs.writeFileSync(new URL('./index.html', import.meta.url), page);
 console.log(`index.html: ${(page.length / 1024).toFixed(0)} КБ, ядро: ${libNames.length} функций`);
