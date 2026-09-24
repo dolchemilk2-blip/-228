@@ -2994,6 +2994,10 @@ self.onmessage = async (e) => {
         : { device: 'wasm', dtype: 'q8' };
       pipe = await T.pipeline('automatic-speech-recognition', m.model, {
         ...opt, progress_callback: p => { if (p.status === 'progress') self.postMessage({ type: 'dl', file: p.file, loaded: p.loaded, total: p.total }); } });
+      // пустой отрезок (два штампа времени подряд, смена языка без текста) — у библиотеки это ошибка
+      // «token_ids must be a non-empty array», а для нас просто пустой текст
+      const tok = pipe.tokenizer, dec = tok.decode.bind(tok);
+      tok.decode = (ids, args) => Array.isArray(ids) && !ids.length ? '' : dec(ids, args);
       self.postMessage({ type: 'ready' });
     } else if (m.type === 'run') {
       const out = await pipe(m.audio, { language: 'russian', task: 'transcribe', return_timestamps: m.stamps,
@@ -3043,6 +3047,7 @@ async function getRecognizer(modelId, onDl) {
     catch { pipe = null; }
   }
   if (!pipe) { pipe = await T.pipeline('automatic-speech-recognition', modelId, { device: 'wasm', dtype: 'q8', progress_callback: dl }); workerDevice = 'процессор'; }
+  { const tok = pipe.tokenizer, dec = tok.decode.bind(tok); tok.decode = (ids, args) => Array.isArray(ids) && !ids.length ? '' : dec(ids, args); }
   rec = { model: modelId, run: async (audio, stamps) => {
     await new Promise(r => setTimeout(r, 0));          // дать странице отрисовать прогресс
     const out = await pipe(audio, { language: 'russian', task: 'transcribe', return_timestamps: stamps, chunk_length_s: 30, stride_length_s: 5, no_repeat_ngram_size: 4 });
@@ -3100,16 +3105,23 @@ async function analyze() {
       const cached = await idb.get(`${f.fkey}|${ck(s)}`);
       if (cached != null) { s.text = cached; s.by = S.preset; } else need.push({ f, s });
     }
+    let failed = 0;
     if (need.length) {
       progress('Загружаю распознавание речи — один раз, дальше из кэша браузера…', 0);
       const w = await getRecognizer(model, m => { if (m.total) progress(`Загружаю распознавание речи: ${m.file.split('/').pop()} — ${(m.loaded / 1e6).toFixed(0)} из ${(m.total / 1e6).toFixed(0)} МБ`, m.loaded / m.total); });
       const total = need.reduce((s, x) => s + x.s.b - x.s.a, 0); let done = 0; const t0 = performance.now();
+      // кусок, на котором распознаватель упал (редкие сбои декодера), пробуется ещё раз, потом остаётся пустым — разбор идёт дальше
+      const runSafe = async (buf, stamps) => {
+        try { return await w.run(buf, stamps); }
+        catch (e1) { console.warn('кусок не распознался, пробую ещё раз:', e1.message);
+          try { return await w.run(buf, !stamps); } catch (e2) { if (++failed > 8) throw e2; return { text: '', chunks: [], failed: true }; } }
+      };
       for (const f of files) {
         const mine = need.filter(x => x.f === f).map(x => x.s);
         const wins = PACK ? pack(mine, f.y16) : mine.map(sg => ({ parts: [{ seg: sg, off: 0, d: sg.b - sg.a }], len: sg.b - sg.a,
           buf: f.y16.slice(Math.round(sg.a * C.ASR_SR), Math.round(sg.b * C.ASR_SR)) }));
         for (const win of wins) {
-          const out = await w.run(win.buf, PACK);
+          const out = await runSafe(win.buf, PACK);
           if (DEBUG) (S.debug = S.debug || []).push({ file: f.name, parts: win.parts.map(p => ({ a: p.seg.a, b: p.seg.b, off: p.off, d: p.d })), chunks: out.chunks, text: out.text });
           const texts = PACK ? C.unpackWindow(win, out.chunks.length ? out.chunks : [{ timestamp: [0, win.len], text: out.text }]) : [out.text];
           // окно испорчено (зацикливание съело конец) или кусок остался без текста — такие
@@ -3120,12 +3132,12 @@ async function analyze() {
             if (PACK && (looped || !texts[i] || C.isLooped(texts[i]))) {
               if (p.d >= 0.25) {
                 const one = f.y16.slice(Math.round(p.seg.a * C.ASR_SR), Math.round(p.seg.b * C.ASR_SR));
-                const r = await w.run(one, false);
-                texts[i] = r.text;
+                const r = await runSafe(one, false);
+                texts[i] = r.text; if (r.failed) out.failed = true;
               }
             }
             p.seg.text = C.tameLoop((texts[i] || '').trim()); p.seg.by = S.preset;
-            idb.put(`${f.fkey}|${ck(p.seg)}`, p.seg.text);
+            if (!out.failed) idb.put(`${f.fkey}|${ck(p.seg)}`, p.seg.text);   // сбойный кусок не кэшируется — в следующий раз попробуется снова
           }
           done += win.parts.reduce((s, p) => s + p.d, 0);
           const el = (performance.now() - t0) / 1000, left = el / done * (total - done);
@@ -3136,6 +3148,7 @@ async function analyze() {
     progress('Сопоставляю со сценарием…', 1);
     matchAll();
     progress('', 0);
+    if (failed) notify(`${failed} ${failed === 1 ? 'кусок остался' : 'кусков остались'} без текста: распознаватель на них сбоил. Запустите разбор ещё раз — они попробуются снова.`);
   } catch (err) {
     console.error(err);
     notify('Не получилось: ' + err.message + '. Если это ошибка загрузки — проверьте интернет и попробуйте ещё раз; уже распознанное сохранилось.');
