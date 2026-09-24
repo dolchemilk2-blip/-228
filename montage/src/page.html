@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Монтажка</title>
+<meta name="description" content="Сборка радиоспектакля из сценария и записей актёров: находит реплики в записях, выравнивает громкость, сводит дорожку. Всё считается в браузере.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Unbounded:wght@600&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #F2F4F1; --surface: #FFFFFF; --ink: #18201D; --muted: #5E6A65; --line: #D9DFDB; --line2: #E8ECE9;
+  --accent: #0E7C6B; --accent-ink: #FFFFFF; --accent-soft: #D6ECE6;
+  --ok: #2E7D5B; --ok-soft: #DCEFE5; --warn: #93600F; --warn-soft: #F5E7CC; --bad: #A63D2B; --bad-soft: #F3DCD6;
+  --none: #6F7A75; --none-soft: #E6EAE7;
+  --c1: #2F5E9E; --c1s: #DCE6F4; --c2: #9C3F69; --c2s: #F2DDE7; --c3: #2E7D5B; --c3s: #D9EDE3; --c4: #6A4FA3; --c4s: #E6DFF3;
+  --c5: #A35E14; --c5s: #F6E6D2; --c6: #2C7489; --c6s: #D7EBF0; --c7: #85502F; --c7s: #EFE2D8; --c8: #5E6B1F; --c8s: #E8ECD3;
+  --shadow: 0 1px 2px rgb(20 30 25 / 6%), 0 4px 16px rgb(20 30 25 / 5%);
+  --sans: "Golos Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --display: "Unbounded", "Golos Text", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111614; --surface: #19201D; --ink: #E3E9E6; --muted: #95A29C; --line: #2A332F; --line2: #222A27;
+    --accent: #45C1A7; --accent-ink: #0B1411; --accent-soft: #16332C;
+    --ok: #6CCB9C; --ok-soft: #173026; --warn: #E3B05A; --warn-soft: #33291A; --bad: #E57A63; --bad-soft: #3A221C;
+    --none: #8C9893; --none-soft: #232A27;
+    --c1: #8DB1E6; --c1s: #1C2A3D; --c2: #E59ABD; --c2s: #3A2230; --c3: #7ED0A8; --c3s: #183228; --c4: #B9A3EA; --c4s: #2A2340;
+    --c5: #EDB072; --c5s: #3A2A18; --c6: #85CDE0; --c6s: #17303A; --c7: #DDAE8C; --c7s: #36271D; --c8: #C6D27C; --c8s: #2B3118;
+    --shadow: 0 1px 2px rgb(0 0 0 / 30%);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111614; --surface: #19201D; --ink: #E3E9E6; --muted: #95A29C; --line: #2A332F; --line2: #222A27;
+  --accent: #45C1A7; --accent-ink: #0B1411; --accent-soft: #16332C;
+  --ok: #6CCB9C; --ok-soft: #173026; --warn: #E3B05A; --warn-soft: #33291A; --bad: #E57A63; --bad-soft: #3A221C;
+  --none: #8C9893; --none-soft: #232A27;
+  --c1: #8DB1E6; --c1s: #1C2A3D; --c2: #E59ABD; --c2s: #3A2230; --c3: #7ED0A8; --c3s: #183228; --c4: #B9A3EA; --c4s: #2A2340;
+  --c5: #EDB072; --c5s: #3A2A18; --c6: #85CDE0; --c6s: #17303A; --c7: #DDAE8C; --c7s: #36271D; --c8: #C6D27C; --c8s: #2B3118;
+  --shadow: 0 1px 2px rgb(0 0 0 / 30%);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans); padding: 0 16px; padding-block: env(safe-area-inset-top, 0px) 96px; }
+[hidden] { display: none !important; }
+button, input, textarea, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 20px; }
+header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; padding-block: 28px 4px; }
+.mark { font: 600 26px/1.1 var(--display); letter-spacing: -0.01em; margin: 0; }
+.mark span { color: var(--accent); }
+.lede { margin: 0; color: var(--muted); max-width: 62ch; text-wrap: balance; }
+.privacy { font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.privacy::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+section.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.card.over { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.step { display: flex; align-items: baseline; gap: 10px; margin: 0; font-size: 17px; font-weight: 600; }
+.step b { font: 500 12px/1 var(--mono); color: var(--accent); border: 1px solid var(--accent); border-radius: 20px; padding: 4px 7px; }
+.step small { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: auto; }
+textarea { width: 100%; min-height: 190px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 10px 12px; font: 13px/1.5 var(--mono); }
+.muted { color: var(--muted); margin: 0; }
+.pad { padding: 16px; }
+.stat { margin: 0; font-variant-numeric: tabular-nums; }
+.row-b { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; font-weight: 500; padding: 2px 9px; border-radius: 20px; background: var(--c1s); color: var(--c1); white-space: nowrap; }
+.chip i { font-style: normal; font-family: var(--mono); font-size: 12px; opacity: .8; }
+.chip.ghost { background: var(--none-soft); color: var(--none); }
+.c1 { --cc: var(--c1); --cs: var(--c1s); } .c2 { --cc: var(--c2); --cs: var(--c2s); } .c3 { --cc: var(--c3); --cs: var(--c3s); } .c4 { --cc: var(--c4); --cs: var(--c4s); }
+.c5 { --cc: var(--c5); --cs: var(--c5s); } .c6 { --cc: var(--c6); --cs: var(--c6s); } .c7 { --cc: var(--c7); --cs: var(--c7s); } .c8 { --cc: var(--c8); --cs: var(--c8s); }
+.chip[class*=" c"] { background: var(--cs); color: var(--cc); }
+.primary { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 10px 18px; font-weight: 600; cursor: pointer; }
+.primary:disabled { opacity: .45; cursor: default; }
+.ghost-b { background: transparent; border: 1px solid var(--line); border-radius: 7px; padding: 5px 10px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.ghost-b:hover { border-color: var(--muted); }
+.file-b { display: inline-flex; align-items: center; }
+.icon { width: 28px; height: 28px; border: 1px solid var(--line); background: transparent; border-radius: 6px; cursor: pointer; line-height: 1; }
+.icon:disabled { opacity: .35; cursor: default; }
+.pick-files { display: grid; place-items: center; text-align: center; gap: 6px; border: 1.5px dashed var(--line); border-radius: 10px; padding: 18px; cursor: pointer; color: var(--muted); }
+.pick-files:hover { border-color: var(--accent); color: var(--ink); }
+.pick-files strong { color: var(--ink); font-weight: 600; }
+.files { display: grid; gap: 10px; }
+.file { border: 1px solid var(--line2); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; }
+.fhead { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.fname { font-weight: 600; overflow-wrap: anywhere; }
+.fmeta { font: 12px var(--mono); color: var(--muted); }
+.fbtn { margin-left: auto; display: flex; gap: 4px; }
+.bad { color: var(--bad); }
+.who { display: flex; flex-wrap: wrap; gap: 6px; }
+.tog { font-size: 13px; padding: 3px 10px; border-radius: 20px; border: 1px solid var(--line); cursor: pointer; user-select: none; color: var(--muted); }
+.tog input { position: absolute; opacity: 0; pointer-events: none; }
+.tog.on { background: var(--cs); color: var(--cc); border-color: transparent; font-weight: 500; }
+.tog:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+#lonely { font-size: 13px; color: var(--muted); margin: 0; }
+.models { display: flex; flex-wrap: wrap; gap: 8px; }
+.models label { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; min-width: 120px; }
+.models label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.models input { position: absolute; opacity: 0; }
+.models b { font-weight: 600; font-size: 14px; }
+.models span { font-size: 12px; color: var(--muted); }
+details.how { font-size: 14px; color: var(--muted); }
+details.how summary { cursor: pointer; color: var(--ink); }
+details.how pre { background: var(--bg); border-radius: 8px; padding: 10px 12px; font: 12.5px/1.55 var(--mono); overflow-x: auto; color: var(--ink); }
+.sum { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pill { font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 20px; font-variant-numeric: tabular-nums; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); } .pill.check { background: var(--warn-soft); color: var(--warn); }
+.pill.miss { background: var(--bad-soft); color: var(--bad); } .pill.none { background: var(--none-soft); color: var(--none); }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.filters button { border: 1px solid var(--line); background: transparent; border-radius: 20px; padding: 4px 12px; font-size: 13px; cursor: pointer; }
+.filters button.on { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.filters label { margin-left: auto; font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+#rv-list { display: grid; border-top: 1px solid var(--line2); }
+.scene { font: 600 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 18px 0 8px; }
+.dir { font-size: 13px; color: var(--muted); font-style: italic; padding: 2px 0 2px 56px; }
+.row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 12px; padding: 10px 0 10px 10px; border-bottom: 1px solid var(--line2); border-left: 3px solid transparent; }
+.row.st-ok, .row.st-own { border-left-color: var(--ok); } .row.st-check { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn-soft) 45%, transparent); }
+.row.st-miss { border-left-color: var(--bad); } .row.st-none { border-left-color: var(--line); }
+.row.off { opacity: .55; }
+.num { font: 12px var(--mono); color: var(--muted); padding-top: 3px; }
+.body { display: grid; gap: 3px; min-width: 0; }
+.line1 { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.txt { overflow-wrap: anywhere; }
+.note { font-size: 13px; color: var(--muted); font-style: italic; }
+.line2 { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; }
+.st { font-weight: 600; }
+.st-ok .st, .st-own .st { color: var(--ok); } .st-check .st { color: var(--warn); } .st-miss .st { color: var(--bad); } .st-none .st { color: var(--none); }
+.where { font-family: var(--mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.heard { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; justify-content: flex-end; max-width: 380px; }
+.play { width: 32px; height: 28px; border-radius: 7px; border: 1px solid var(--accent); background: transparent; color: var(--accent); cursor: pointer; font-size: 12px; }
+.play.on { background: var(--accent); color: var(--accent-ink); }
+.mini { font-size: 13px; display: flex; gap: 4px; align-items: center; color: var(--muted); }
+.gain { display: inline-flex; align-items: center; gap: 4px; font: 12px var(--mono); color: var(--muted); }
+.gain span { min-width: 46px; text-align: center; }
+@media (max-width: 720px) {
+  .row { grid-template-columns: 36px minmax(0, 1fr); }
+  .acts { grid-column: 2; justify-content: flex-start; max-width: none; }
+  .dir { padding-left: 36px; }
+}
+.picker { margin-top: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: grid; gap: 6px; background: var(--bg); }
+.cand { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto auto; gap: 8px; align-items: center; font-size: 13px; }
+.ctime { font: 12px var(--mono); color: var(--muted); white-space: nowrap; }
+.ctext { overflow-wrap: anywhere; }
+.csim { font: 12px var(--mono); color: var(--muted); }
+@media (max-width: 720px) { .cand { grid-template-columns: auto minmax(0, 1fr) auto; } .ctime { grid-column: 2; } .ctext { grid-column: 1 / -1; } }
+.settings { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: end; }
+.settings label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.settings select, .settings input[type=range] { min-width: 150px; }
+.settings select { border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 6px 8px; }
+#mix-out { display: grid; gap: 12px; }
+#mix-out audio { width: 100%; }
+.levels { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.levels div { display: flex; gap: 8px; align-items: center; }
+.dl { display: flex; flex-wrap: wrap; gap: 8px; }
+#prog { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 5; }
+#prog .in { max-width: 1120px; margin: 0 auto; display: grid; gap: 8px; }
+#prog-t { font-size: 14px; }
+.bar { height: 6px; border-radius: 3px; background: var(--line2); overflow: hidden; }
+#prog-b { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+#msg { position: fixed; left: 50%; transform: translateX(-50%); bottom: 84px; max-width: min(640px, calc(100% - 32px)); background: var(--ink); color: var(--surface); border-radius: 10px; padding: 12px 16px; font-size: 14px; z-index: 6; box-shadow: var(--shadow); }
+footer { color: var(--muted); font-size: 13px; padding-block: 8px 0; }
+footer a { color: inherit; }
+@media (prefers-reduced-motion: reduce) { #prog-b { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1 class="mark">Монтаж<span>ка</span></h1>
+    <p class="lede">Сценарий и записи актёров — на входе, готовая дорожка — на выходе. Реплики находятся в записях сами, громкость выравнивается, паузы расставляются по ремаркам.</p>
+    <p class="privacy">Всё считается в этом браузере. Записи и сценарий никуда не отправляются.</p>
+  </header>
+
+  <div class="grid2">
+    <section class="card" id="s1">
+      <h2 class="step"><b>1</b> Сценарий <small><label class="ghost-b file-b">Открыть .txt<input type="file" id="script-file" accept=".txt,.md,text/plain" hidden></label></small></h2>
+      <textarea id="script" spellcheck="false" placeholder="СЦЕНА 1&#10;&#10;кабинет, идёт урок&#10;&#10;Кэфи:&#10;о нет.&#10;&#10;Энер (шёпотом):&#10;это второй вопрос!"></textarea>
+      <div id="script-sum"></div>
+      <details class="how"><summary>Как оформить сценарий</summary>
+        <p>Реплика — имя с двоеточием отдельной строкой, под ним текст до пустой строки. Ремарка к реплике — в скобках после имени. Всё остальное считается ремаркой; «(пауза)», «долгая пауза» и «тишина» становятся паузами в дорожке. Сцены — строки «СЦЕНА 1», «СЦЕНА 2»…</p>
+        <pre>СЦЕНА 2
+
+Флур (с сарказмом):
+слушай, я тебе честно скажу
+
+(пауза)
+
+Энер: а я тебе — нет.</pre>
+      </details>
+    </section>
+
+    <section class="card" id="s2">
+      <h2 class="step"><b>2</b> Записи <small>каждый актёр — сколько угодно файлов</small></h2>
+      <label class="pick-files"><strong>Выбрать файлы</strong>или перетащить сюда — можно все сразу<input type="file" id="audio-in" accept="audio/*,.m4a,.opus,.flac" multiple hidden></label>
+      <div id="files" class="files"></div>
+      <p id="lonely"></p>
+      <p class="muted" style="font-size:13px">Если у роли несколько файлов (например, основная запись и правки), нижний в списке считается свежее: где реплика есть в обоих, берётся из него.</p>
+    </section>
+  </div>
+
+  <section class="card" id="s3">
+    <h2 class="step"><b>3</b> Разбор <small>распознавание речи — в браузере, модель скачивается один раз</small></h2>
+    <div class="models" role="radiogroup" aria-label="Как распознавать">
+      <label><input type="radio" name="preset" value="draft"><b>Черновик</b><span>пачками, втрое быстрее · 75 МБ</span></label>
+      <label><input type="radio" name="preset" value="normal" checked><b>Обычно</b><span>каждый кусок отдельно · 75 МБ</span></label>
+      <label><input type="radio" name="preset" value="best"><b>Точнее</b><span>большая модель · 250 МБ</span></label>
+    </div>
+    <div class="row-b"><button class="primary" id="go">Разобрать записи</button>
+      <span class="muted" style="font-size:13px">В Chrome и Edge с видеокартой — несколько минут. Без неё «Обычно» разбирает 10 минут записей примерно за 12 минут, «Черновик» — за 4, но изредка путает соседние короткие реплики. Разобранное запоминается в браузере: второй раз не считается.</span></div>
+    <label class="ghost-b file-b" style="justify-self:start">Открыть сохранённый проект<input type="file" id="proj-in" accept=".json,application/json" hidden></label>
+  </section>
+
+  <section class="card" id="review" hidden>
+    <h2 class="step"><b>4</b> Проверка <small>▶ — послушать, «Другой кусок» — выбрать из записи</small></h2>
+    <div class="sum" id="rv-sum"></div>
+    <div class="filters" id="rv-filter">
+      <button data-f="all" class="on">Все</button><button data-f="check">Проверить</button><button data-f="miss">Нет записи</button><button data-f="dirs">Озвученные ремарки</button>
+      <label><input type="checkbox" id="dirs-t"> показывать ремарки</label>
+    </div>
+    <div id="rv-list"></div>
+  </section>
+
+  <section class="card" id="mix" hidden>
+    <h2 class="step"><b>5</b> Сведение <small>меняется только громкость — звук записей не обрабатывается</small></h2>
+    <div class="settings">
+      <label for="lvl">Выравнивание реплик: <span id="lvl-v">0.75</span><input type="range" id="lvl" min="0" max="1" step="0.05" value="0.75"></label>
+      <label for="lufs">Итоговая громкость<select id="lufs"><option value="-16">−16 LUFS (подкасты)</option><option value="-18" selected>−18 LUFS</option><option value="-23">−23 LUFS (эфир)</option></select></label>
+      <label for="kbps">MP3<select id="kbps"><option value="160">160 кбит/с</option><option value="192">192 кбит/с</option><option value="256" selected>256 кбит/с</option><option value="320">320 кбит/с</option></select></label>
+      <button class="primary" id="mixgo">Свести</button>
+    </div>
+    <p class="muted" style="font-size:13px">Голоса сводятся к одному уровню, реплики подтягиваются к уровню своего голоса; шёпот остаётся тише, крик громче — по ремаркам «(шёпотом)», «(громко)» и капсу. Кнопки ± у реплики — ручная поправка в дБ.</p>
+    <div id="mix-out"></div>
+  </section>
+
+  <footer>Сопоставление: нарезка по паузам, распознавание Whisper, выравнивание текста по порядку сценария. Громкость — по ITU-R BS.1770.</footer>
+</div>
+<div id="prog" hidden><div class="in"><div id="prog-t"></div><div class="bar"><div id="prog-b"></div></div></div></div>
+<div id="msg" role="status" hidden></div>
+<script type="module">
+/*BUNDLE*/
+</script>
+</body>
+</html>
