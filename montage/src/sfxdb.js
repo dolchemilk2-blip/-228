@@ -89,7 +89,9 @@ const dbParse = name => { const m = /^BBC (\S+) — (.*)$/.exec(name || ''); ret
 /** Скачать и раскодировать звук из базы (кэш в памяти на время сеанса). */
 function dbFetch(it) {
   const db = dbState(); if (db.cache.has(it.id)) return db.cache.get(it.id);
-  const p = (async () => { const r = await fetch(DB_MEDIA(it.id)); if (!r.ok) throw new Error('звук ' + it.id + ' не скачался'); return decodeFile(await r.blob()); })();
+  // длиннее трёх минут не храним: фон всё равно зацикливается с перекрёстным переходом, а 10 минут стерео из базы —
+  // это 100+ МБ памяти на один звук
+  const p = (async () => { const r = await fetch(DB_MEDIA(it.id)); if (!r.ok) throw new Error('звук ' + it.id + ' не скачался'); const y = await decodeFile(await r.blob()), max = 180 * C.SR; return y.length > max ? y.slice(0, max) : y; })();
   db.cache.set(it.id, p); p.catch(() => db.cache.delete(it.id)); return p;
 }
 /** Звук из базы → в библиотеку (если ещё нет); возвращает имя. */
@@ -149,7 +151,7 @@ async function dbAutoAll() {
       done++;
     }
   } finally {
-    db.busy = false; progress('', 0); sfxSave(); S.result = null; renderSounds(); renderMix();
+    db.busy = false; progress('', 0); sfxSave(); renderSounds(); sfxChanged();
     notify(ok ? `Из базы подобрано ${ok} из ${cues.length}. Послушайте ▶ и поменяйте, где не подошло.` : 'База не ответила — проверьте интернет.');
   }
 }

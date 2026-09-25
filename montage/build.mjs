@@ -4,7 +4,7 @@ import fs from 'fs';
 const dir = new URL('./src/', import.meta.url);
 const read = f => fs.readFileSync(new URL(f, dir), 'utf8');
 const strip = src => src.replace(/^import [^\n]*\n/gm, '').replace(/^export /gm, '');
-const names = src => [...src.matchAll(/^export (?:const|function|let) (\w+)/gm)].map(m => m[1]);
+const names = src => [...src.matchAll(/^export (?:const|function\*?|let) ?(\w+)/gm)].map(m => m[1]);
 const core = read('core.js'), dsp = read('dsp.js'), master = read('master.js'), fxdsp = read('fxdsp.js'), sfx = read('sfx.js');
 const lib = strip(core) + '\n' + strip(dsp) + '\n' + strip(master) + '\n' + strip(fxdsp) + '\n' + strip(sfx), libNames = [...names(core), ...names(dsp), ...names(master), ...names(fxdsp), ...names(sfx)];
 const bundleLib = `const C = (() => {\n${lib}\nreturn { ${libNames.join(', ')} };\n})();`;

@@ -218,7 +218,12 @@ function motionTab(prev, next) {
 /** Смена вкладки через View Transitions: старая уезжает в сторону, новая приезжает с другой. */
 // Смена вкладки — без View Transitions: снимок всей длинной страницы стоил сотни миллисекунд на слабых машинах.
 // Новая вкладка просто приезжает с той стороны, куда нажали (paneIn: сдвиг и прозрачность — только композитор).
-function motionTabSwitch(next, apply) { apply(); }
+function motionTabSwitch(next, apply) {
+  // высота страницы меняется вместе с вкладкой — подвал доезжает до нового места, а не прыгает
+  const ft = document.querySelector('footer'), r0 = ft && MOTION.ready && !MOTION.reduce ? ft.getBoundingClientRect().top : null;
+  apply();
+  if (r0 != null && r0 < innerHeight) { const r1 = ft.getBoundingClientRect().top, dy = r0 - r1; if (Math.abs(dy) > 2 && r1 < innerHeight) { const T = tform(ft); mvSet(T.y, dy); mvTo(T.y, 0, { damping: 0.92, response: 0.4 }); } }
+}
 /** Подложка вкладок на пружине: при движении тянется в сторону хода, как капля; её можно схватить и протащить. */
 const PILL = { drag: null, suppress: false };
 PILL.render = () => {
@@ -487,6 +492,9 @@ function themeApply(mode) {
 }
 function initTheme() {
   const b = document.getElementById('theme-b'); themeApply(themeMode()); if (!b) return;
+  // подпись «авто» / «светлая» / «тёмная» разной ширины: без запаса по самой длинной стрелка уровня рядом дёргается
+  const fit = () => { const l = b.querySelector('.theme-l'); if (!l || !l.offsetParent) return; const cur = l.textContent; l.style.minWidth = ''; let w = 0; for (const t of Object.values(THEME_NAMES)) { l.textContent = t; w = Math.max(w, l.getBoundingClientRect().width); } l.textContent = cur; l.style.minWidth = Math.ceil(w) + 'px'; };
+  fit(); if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
   b.addEventListener('click', e => {
     const order = ['auto', 'light', 'dark'], next = order[(order.indexOf(themeMode()) + 1) % 3];
     try { localStorage.setItem(THEME_KEY, next); } catch {}

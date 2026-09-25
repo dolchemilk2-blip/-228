@@ -578,27 +578,38 @@ export const tameLoop = t => String(t).replace(/(.)\1{3,}/g, '$1$1').replace(/((
 const KB1 = [1.53512485958697, -2.69169618940638, 1.19839281085285], KA1 = [1, -1.69065929318241, 0.73248077421585];
 const KB2 = [1, -2, 1], KA2 = [1, -1.99004745483398, 0.99007225036621];
 /** Оба звена K-фильтра и энергии подблоков за один проход, без временных массивов размером с сигнал. */
-function gatedLoudness(x, block, hop) {
-  const w = Math.round(block * SR), h = Math.round(hop * SR), n = x.length;
+/** Громкость по кускам: состояние фильтра и накопители переносятся от куска к куску, поэтому итог тот же, что и
+ *  за один проход. Нужна длинным дорожкам: между кусками главный поток успевает отдать кадр. */
+export function loudnessMeter(n, block = 0.4, hop = 0.1) {
+  const w = Math.round(block * SR), h = Math.round(hop * SR);
   const b10 = KB1[0], b11 = KB1[1], b12 = KB1[2], a11 = KA1[1], a12 = KA1[2], b20 = KB2[0], b21 = KB2[1], b22 = KB2[2], a21 = KA2[1], a22 = KA2[2];
-  let x1 = 0, x2 = 0, y1 = 0, y2 = 0, u1 = 0, u2 = 0, z1 = 0, z2 = 0;
-  const nSub = Math.floor(n / h), sub = new Float64Array(Math.max(1, nSub)); let acc = 0, cnt = 0, k = 0, all = 0;
-  for (let i = 0; i < n; i++) {
-    // +1e-18: в паузах из чистых нулей состояние фильтра иначе уходит в денормализованные числа, на которых процессор в сто раз медленнее
-    const xi = x[i], y = b10 * xi + b11 * x1 + b12 * x2 - a11 * y1 - a12 * y2 + 1e-18; x2 = x1; x1 = xi; y2 = y1; y1 = y;
-    const z = b20 * y + b21 * u1 + b22 * u2 - a21 * z1 - a22 * z2 + 1e-18; u2 = u1; u1 = y; z2 = z1; z1 = z;
-    const e = z * z; all += e; acc += e;
-    if (++cnt === h) { if (k < nSub) sub[k++] = acc; acc = 0; cnt = 0; }
-  }
-  if (n < w) return 10 * Math.log10(all / Math.max(1, n) + 1e-14) - 0.691;
-  const m = Math.round(w / h), nb = nSub - m + 1, p = []; let run = 0;
-  for (let j = 0; j < m; j++) run += sub[j];
-  for (let q = 0; q < nb; q++) { if (q) run += sub[q + m - 1] - sub[q - 1]; const e = run / w; if (10 * Math.log10(e + 1e-14) - 0.691 > -70) p.push(e); }
-  if (!p.length) return -70;
-  const rel = 10 * Math.log10(p.reduce((s, v) => s + v, 0) / p.length) - 0.691 - 10;
-  const g = p.filter(e => 10 * Math.log10(e) - 0.691 > rel);
-  return 10 * Math.log10(g.reduce((s, v) => s + v, 0) / g.length) - 0.691;
+  const nSub = Math.floor(n / h), sub = new Float64Array(Math.max(1, nSub));
+  const st = { x1: 0, x2: 0, y1: 0, y2: 0, u1: 0, u2: 0, z1: 0, z2: 0, acc: 0, cnt: 0, k: 0, all: 0 };
+  return {
+    push(x, from, to) {
+      let { x1, x2, y1, y2, u1, u2, z1, z2, acc, cnt, k, all } = st;
+      for (let i = from; i < to; i++) {
+        // +1e-18: в паузах из чистых нулей состояние фильтра иначе уходит в денормализованные числа, на которых процессор в сто раз медленнее
+        const xi = x[i], y = b10 * xi + b11 * x1 + b12 * x2 - a11 * y1 - a12 * y2 + 1e-18; x2 = x1; x1 = xi; y2 = y1; y1 = y;
+        const z = b20 * y + b21 * u1 + b22 * u2 - a21 * z1 - a22 * z2 + 1e-18; u2 = u1; u1 = y; z2 = z1; z1 = z;
+        const e = z * z; all += e; acc += e;
+        if (++cnt === h) { if (k < nSub) sub[k++] = acc; acc = 0; cnt = 0; }
+      }
+      Object.assign(st, { x1, x2, y1, y2, u1, u2, z1, z2, acc, cnt, k, all });
+    },
+    result() {
+      if (n < w) return 10 * Math.log10(st.all / Math.max(1, n) + 1e-14) - 0.691;
+      const m = Math.round(w / h), nb = nSub - m + 1, p = []; let run = 0;
+      for (let j = 0; j < m; j++) run += sub[j];
+      for (let q = 0; q < nb; q++) { if (q) run += sub[q + m - 1] - sub[q - 1]; const e = run / w; if (10 * Math.log10(e + 1e-14) - 0.691 > -70) p.push(e); }
+      if (!p.length) return -70;
+      const rel = 10 * Math.log10(p.reduce((s, v) => s + v, 0) / p.length) - 0.691 - 10;
+      const g = p.filter(e => 10 * Math.log10(e) - 0.691 > rel);
+      return 10 * Math.log10(g.reduce((s, v) => s + v, 0) / g.length) - 0.691;
+    },
+  };
 }
+function gatedLoudness(x, block, hop) { const m = loudnessMeter(x.length, block, hop); m.push(x, 0, x.length); return m.result(); }
 /** Интегральная громкость, LUFS (окна 400 мс, как в стандарте). */
 export const integratedLufs = x => gatedLoudness(x, 0.4, 0.1);
 /** Громкость реплики на слух: то же, но окна 100 мс — реплики бывают короче секунды. */
@@ -627,17 +638,23 @@ export function trimSilence(y) {
  * Выравнивание громкости — только громкость: у реплики одно постоянное усиление.
  * items: [{id, voice, text, note, audio(Float32Array)}] → проставляет level, fix, audio (с усилением).
  */
-export function levelLines(items, { charLufs = -20, strength = 0.75, voiceMax = 6, maxUp = 6, maxDown = 8, manual = {} } = {}) {
+export function levelLines(items, opt = {}) {
+  const it = levelLinesSteps(items, opt, 1 << 30); let r; while (!(r = it.next()).done); return r.value;
+}
+/** То же по шагам (генератор): на странице между шагами рисуются кадры. */
+export function* levelLinesSteps(items, { charLufs = -20, strength = 0.75, voiceMax = 6, maxUp = 6, maxDown = 8, manual = {} } = {}, chunk = 1 << 18) {
+  const scale = (a, g) => { const y = new Float32Array(a.length); for (let i = 0; i < a.length; i++) y[i] = a[i] * g; return y; };   // как a.map(v => v * g), но в разы быстрее
   const byVoice = new Map();
   for (const it of items) { if (!byVoice.has(it.voice)) byVoice.set(it.voice, []); byVoice.get(it.voice).push(it); }
   for (const [, list] of byVoice) {                  // шаг 1: голос целиком к charLufs
     const total = list.reduce((s, it) => s + it.audio.length, 0), cat = new Float32Array(total);
     let o = 0; for (const it of list) { cat.set(it.audio, o); o += it.audio.length; }
-    const L = integratedLufs(cat), g = isFinite(L) && L > -69 ? Math.pow(10, (charLufs - L) / 20) : 1;
-    for (const it of list) it.audio = it.audio.map(v => v * g);
+    const m = loudnessMeter(total, 0.4, 0.1); for (let a = 0; a < total; a += chunk) { m.push(cat, a, Math.min(total, a + chunk)); yield; }
+    const L = m.result(), g = isFinite(L) && L > -69 ? Math.pow(10, (charLufs - L) / 20) : 1;
+    for (const it of list) { it.audio = scale(it.audio, g); yield; }
   }
   const verbal = it => !NONVERBAL_RE.test(it.text);
-  for (const it of items) it.level = lineLoudness(it.audio);
+  for (const it of items) { it.level = lineLoudness(it.audio); yield; }
   const med = new Map();
   for (const [v, list] of byVoice) {
     const lv = list.filter(verbal).map(it => it.level).sort((a, b) => a - b);
@@ -652,9 +669,9 @@ export function levelLines(items, { charLufs = -20, strength = 0.75, voiceMax = 
     if (!verbal(it)) up = down = 3;
     const lf = Math.max(-down, Math.min(up, strength * ((med.get(it.voice) ?? common) - it.level)));
     it.fix = (voiceFix.get(it.voice) || 0) + lf + (manual[it.id] || 0);
-    const g = Math.pow(10, it.fix / 20);
-    it.audio = it.audio.map(v => v * g);
+    it.audio = scale(it.audio, Math.pow(10, it.fix / 20));
     it.levelAfter = it.level + it.fix;
+    yield;
   }
   return { med, common, voiceFix };
 }
@@ -737,36 +754,59 @@ function limitSpan(x, y, a, b, ceil) {
  * отпускание возвращает усиление к 1 с точностью 0,03 %), остальное копируется как есть — в разы быстрее.
  */
 export function limit(x, ceil = 0.84, inPlace = false) {
-  const n = x.length, la = Math.round(0.005 * SR), settle = Math.round(0.5 * SR), y = inPlace ? x : x.slice();
-  let a = -1, last = -Infinity;
-  for (let k = 0; k < n; k++) {
-    const v = x[k]; if (v <= ceil && v >= -ceil) continue;
-    if (a < 0) a = Math.max(0, k - la);
-    else if (k - last > settle + la) { limitSpan(x, y, a, Math.min(n, last + settle), ceil); a = Math.max(0, k - la); }
-    last = k;
-  }
-  if (a >= 0) limitSpan(x, y, a, Math.min(n, last + settle), ceil);
-  return y;
+  const y = inPlace ? x : x.slice(), L = limiterStream(y, ceil); L.step(0, y.length); L.finish(); return y;
 }
-
+/**
+ * Лимитер по кускам, на месте, с общим усилением g впереди (как «умножить всё на g, потом limit»): step(a, b) —
+ * очередной кусок, finish() — хвост; возвращает пик до усиления. Отрезки с превышением обрабатываются, когда
+ * они закончились, — к этому времени всё, что лимитер видит впереди, уже умножено.
+ */
+export function limiterStream(x, ceil = 0.84, g = 1) {
+  const n = x.length, la = Math.round(0.005 * SR), settle = Math.round(0.5 * SR);
+  let a = -1, last = -Infinity, pk = 0;
+  return {
+    step(from, to) {
+      for (let k = from; k < to; k++) {
+        let v = x[k]; const av = v < 0 ? -v : v; if (av > pk) pk = av;
+        if (g !== 1) { v *= g; x[k] = v; }
+        if (v <= ceil && v >= -ceil) continue;
+        if (a < 0) a = Math.max(0, k - la);
+        else if (k - last > settle + la) { limitSpan(x, x, a, Math.min(n, last + settle), ceil); a = Math.max(0, k - la); }
+        last = k;
+      }
+    },
+    finish() { if (a >= 0) limitSpan(x, x, a, Math.min(n, last + settle), ceil); a = -1; return pk; },
+  };
+}
 /** Мастеринг: подъём реплик, упёршихся в лимитер, забирается назад; общий уровень; лимитер. */
-export function master(mix, placed, { targetLufs = -18, ceil = 0.84 } = {}) {
-  let L = integratedLufs(mix), g = Math.pow(10, (targetLufs - L) / 20), held = 0;
+export function master(mix, placed, opt = {}) {
+  const it = masterSteps(mix, placed, opt, Math.max(1, mix.length)); let r; while (!(r = it.next()).done); return r.value;
+}
+/**
+ * То же по шагам: генератор отдаёт управление (yield) после каждого куска в chunk отсчётов и каждой реплики —
+ * на странице между шагами рисуются кадры, 17 минут сведения не замораживают интерфейс на секунду. Итог — в return.
+ */
+export function* masterSteps(mix, placed, { targetLufs = -18, ceil = 0.84 } = {}, chunk = 1 << 18) {
+  const n = mix.length;
+  const lufs = function* () { const m = loudnessMeter(n, 0.4, 0.1); for (let a = 0; a < n; a += chunk) { m.push(mix, a, Math.min(n, a + chunk)); yield; } return m.result(); };
+  let L = yield* lufs(), g = Math.pow(10, (targetLufs - L) / 20), held = 0;
   for (const p of placed) {
-    let pk = 0; for (const v of p.audio) pk = Math.max(pk, Math.abs(v));
+    const au = p.audio; let pk = 0; for (let i = 0; i < au.length; i++) { const v = au[i] < 0 ? -au[i] : au[i]; if (v > pk) pk = v; }
     const over = 20 * Math.log10(pk * g / ceil + 1e-12);
     const fix = p.item ? p.item.fix : 0;
     if (over > 1 && fix > 0) {
-      const back = Math.min(over - 1, fix), k = Math.pow(10, -back / 20), i0 = Math.round(p.at * SR), heldAudio = new Float32Array(p.audio.length);
-      for (let i = 0; i < p.audio.length; i++) { mix[i0 + i] -= p.audio[i] * (1 - k); heldAudio[i] = p.audio[i] * k; }
+      const back = Math.min(over - 1, fix), k = Math.pow(10, -back / 20), i0 = Math.round(p.at * SR), heldAudio = new Float32Array(au.length);
+      for (let i = 0; i < au.length; i++) { mix[i0 + i] -= au[i] * (1 - k); heldAudio[i] = au[i] * k; }
       p.audio = heldAudio;                             // исходный массив реплики не трогается — сведение можно пересчитать
       p.item.fix -= back; p.item.levelAfter -= back; held++;
     }
+    yield;
   }
-  if (held) { L = integratedLufs(mix); g = Math.pow(10, (targetLufs - L) / 20); }   // без придержанных реплик громкость не менялась
-  let pk = 0; for (const v of mix) pk = Math.max(pk, Math.abs(v));
-  for (let i = 0; i < mix.length; i++) mix[i] *= g;   // на месте: mix — временный массив сведения
-  return { out: limit(mix, ceil, true), gainDb: 20 * Math.log10(g), peakBefore: 20 * Math.log10(pk * g + 1e-12), held };
+  if (held) { L = yield* lufs(); g = Math.pow(10, (targetLufs - L) / 20); }   // без придержанных реплик громкость не менялась
+  const lim = limiterStream(mix, ceil, g);                // усиление и лимитер одним проходом, на месте: mix — временный массив
+  for (let a = 0; a < n; a += chunk) { lim.step(a, Math.min(n, a + chunk)); yield; }
+  const pk = lim.finish();
+  return { out: mix, gainDb: 20 * Math.log10(g), peakBefore: 20 * Math.log10(pk * g + 1e-12), held };
 }
 
 // ------------------------------------------------------------------ файлы

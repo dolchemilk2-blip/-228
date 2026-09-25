@@ -480,7 +480,7 @@ function renderCleanup() {
     <div class="cl-spec">
       <div class="specv-bar"><button class="ghost-b" data-act="spec-open">${c.specOpen ? 'Скрыть спектр файла' : 'Спектр всего файла'}</button>
         ${c.specOpen ? `<button class="ghost-b" data-act="spec-fit">Весь файл</button>${f.raw48 ? `<button class="ghost-b" data-act="spec-which">${c.specView.which === 'after' ? 'показано: стало' : 'показано: было'}</button>` : ''}<button class="play ab" data-act="spec-play">${ic('play')}8 с с курсора</button><span>колёсико — увеличить, тянуть — двигать, двойной щелчок — сюда отрывок</span><span id="spec-readout"></span>` : ''}</div>
-      ${c.specOpen ? '<canvas id="spec-view" class="specv" aria-label="Спектрограмма всего файла"></canvas>' : ''}
+      ${c.specOpen ? '<div class="specv-wrap"><canvas id="spec-view" class="specv" aria-label="Спектрограмма всего файла"></canvas></div>' : ''}
     </div>
     <div class="cl-actions">
       <button class="primary" data-act="apply" ${c.busy ? 'disabled' : ''}>${f.raw48 ? 'Применить заново ко всему файлу' : 'Применить ко всему файлу'}</button>
@@ -607,7 +607,20 @@ function bindCleanup() {
       let y = C.filt(c.before, co); if (band.type !== 'hp' && band.type !== 'lp') y = C.filt(y, co);
       const L = C.integratedLufs(y), g = isFinite(L) && L > -69 ? Math.pow(10, (-20 - L) / 20) : 1; y = y.map(v => v * g);
       abStop(); play(y, b); return; }
-    if (a === 'spec-open') { c.specView = c.specView || { zoom: 1, center: srcOf(f).length / C.SR / 2, which: 'before' }; c.specOpen = !c.specOpen; renderCleanup(); return; }
+    if (a === 'spec-open') {
+      c.specView = c.specView || { zoom: 1, center: srcOf(f).length / C.SR / 2, which: 'before' }; c.specOpen = !c.specOpen;
+      // спектр выезжает шторкой вниз и так же уезжает — строки ниже не прыгают на 320 px
+      const w = $('#cl-body .specv-wrap');
+      if (!c.specOpen && w && typeof mOK === 'function' && mOK()) {
+        b.textContent = 'Спектр всего файла'; w.style.overflow = 'hidden';
+        const an = w.animate([{ height: w.offsetHeight + 'px', opacity: 1 }, { height: '0px', opacity: 0 }], { duration: 240, easing: EASE, fill: 'forwards' });
+        an.onfinish = () => { if (!c.specOpen) renderCleanup(); };
+        return;
+      }
+      renderCleanup();
+      if (c.specOpen && typeof foldIn === 'function') { const nw = $('#cl-body .specv-wrap'); if (nw) foldIn(nw); }
+      return;
+    }
     if (a === 'spec-which') { c.specView.which = c.specView.which === 'before' ? 'after' : 'before'; drawSpecView(f); return; }
     if (a === 'spec-fit') { c.specView.zoom = 1; c.specView.center = srcOf(f).length / C.SR / 2; drawSpecView(f); return; }
     if (a === 'spec-play') { const v = c.specView; if (playing && playing.btn === b) return stop(); const y = (v.which === 'after' && f.raw48 ? f.y48 : srcOf(f)), at = Math.round((v.cursor ?? v.center) * C.SR); abStop(); play(y.slice(at, at + 8 * C.SR), b); return; }

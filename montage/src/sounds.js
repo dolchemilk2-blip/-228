@@ -37,6 +37,9 @@ function sfxAudio(id) {
 }
 const sfxIsSeq = cue => { const c = sfxState().cues[cue.id]; return !!(c && c.on && c.src && c.mode === 'seq'); };
 const sfxBed = cue => { const c = sfxState().cues[cue.id]; return c && c.on && c.src && c.mode === 'bed' ? sfxAudio(cue.id) : null; };
+/** Звуки поменялись: готовое сведение пересчитывается само (как при смене фона сцены), а не сбрасывается —
+ *  иначе ради одного звука приходилось заново нажимать «Свести» и ждать секунды. */
+function sfxChanged() { if (S.result && S.result.out && typeof remixSoon === 'function') remixSoon('layout'); else { S.result = null; renderMix(); } }
 function sfxSave() { const st = sfxState(); S.sfxSaved = Object.fromEntries(Object.entries(st.cues).filter(([, c]) => c.manual).map(([k, c]) => [k, { src: c.src, mode: c.mode, gain: c.gain, on: c.on, manual: true }])); saveEdits(); }
 async function sfxAddFiles(list) {
   const st = sfxState();
@@ -45,7 +48,7 @@ async function sfxAddFiles(list) {
     try { const y = await decodeFile(file); st.lib.push({ name: file.name, y48: y, dur: y.length / C.SR }); }
     catch { notify('Не удалось прочитать ' + file.name); }
   }
-  sfxAuto(); S.result = null; renderSounds();
+  sfxAuto(); renderSounds(); sfxChanged();
 }
 const sfxDurNote = (d, cue) => ` <span class="muted">· ${fmt(d)}${cue.mode !== 'bed' && d > SFX_SEQ_MAX ? `, между репликами — первые ${SFX_SEQ_MAX} с` : ''}</span>`;
 /** Встроенные звуки-заглушки синтезируются в простое по одному, а не все разом при открытии вкладки. */
@@ -60,6 +63,20 @@ function sfxSynthIdle() {
     (typeof dspCall === 'function' ? dspCall({ type: 'synth', key: k }) : Promise.reject()).then(r => done(r.y), () => done(null)); };
   if (sfxLater.size) idle(next);
 }
+/** Все источники для списка у ремарки. В разметке списка — только выбранный: полный набор (библиотека × ремарки —
+ *  больше тысячи пунктов) собирается, когда список открывают, иначе каждая правка на вкладке перестраивала их все. */
+function sfxSrcOpts(cue) {
+  const st = sfxState();
+  return `<option value="">— нет —</option>` +
+    (st.lib.length ? `<optgroup label="Моя библиотека">${st.lib.map(f => `<option value="lib:${esc(f.name)}" ${cue.src === 'lib:' + f.name ? 'selected' : ''}>${esc(f.name)}</option>`).join('')}</optgroup>` : '') +
+    `<optgroup label="Встроенные (заглушки)">${C.SFX_KEYS.map(k => `<option value="synth:${k}" ${cue.src === 'synth:' + k ? 'selected' : ''}>${C.sfxName(k)}</option>`).join('')}</optgroup>`;
+}
+function sfxSrcOne(cue) { const src = cue.src || ''; return `<option value="${esc(src)}" selected>${esc(!src ? '— нет —' : src.startsWith('synth:') ? C.sfxName(src.slice(6)) : src.slice(4))}</option>`; }
+function sfxSrcFill(e) {
+  const sel = e.target && e.target.closest && e.target.closest('select[data-lazy]'); if (!sel) return;
+  const cue = sfxCue(sel.dataset.lazy); sel.removeAttribute('data-lazy'); sel.innerHTML = sfxSrcOpts(cue); sel.value = cue.src || '';
+}
+addEventListener('pointerdown', sfxSrcFill, true); addEventListener('focusin', sfxSrcFill, true);
 function renderSounds() {
   const el = $('#sfx-body'); if (!el) return;
   if (!S.P) { el.innerHTML = '<p class="muted">Сначала вставьте сценарий на вкладке «Сборка»: звуки берутся из его ремарок.</p>'; return; }
@@ -70,9 +87,6 @@ function renderSounds() {
   const dirs = S.P.cues.filter(c => c.type === 'dir' && !/^\(?(долгая )?пауза\)?\.?$/i.test(c.text.trim()));
   const rows = dirs.filter(c => st.showAll || auto.has(c.id) || (st.cues[c.id] && st.cues[c.id].src));
   const inTrack = Object.values(st.cues).filter(c => c.on && c.src).length;
-  const srcOpts = cue => `<option value="">— нет —</option>` +
-    (st.lib.length ? `<optgroup label="Моя библиотека">${st.lib.map(f => `<option value="lib:${esc(f.name)}" ${cue.src === 'lib:' + f.name ? 'selected' : ''}>${esc(f.name)}</option>`).join('')}</optgroup>` : '') +
-    `<optgroup label="Встроенные (заглушки)">${C.SFX_KEYS.map(k => `<option value="synth:${k}" ${cue.src === 'synth:' + k ? 'selected' : ''}>${C.sfxName(k)}</option>`).join('')}</optgroup>`;
   let scene = null; const list = [];
   for (const c of S.P.cues) {
     if (c.type === 'scene') { scene = c; continue; }
@@ -86,13 +100,16 @@ function renderSounds() {
     list.push(`<div class="srow ${cue.on && cue.src ? 'on' : ''}" data-id="${c.id}">
       <label class="mini"><input type="checkbox" data-p="on" ${cue.on ? 'checked' : ''} aria-label="в дорожку"></label>
       <div class="stext"><span class="num">${esc(c.id)}</span> ${esc(c.text)}${a && !cue.manual ? `<span class="muted"> · ${a.strong ? 'похоже на звук' : 'может быть звуком'}</span>` : ''}${durNote}</div>
-      <select data-p="src" aria-label="источник">${srcOpts(cue)}</select>
+      <select data-p="src" data-lazy="${esc(c.id)}" aria-label="источник">${sfxSrcOne(cue)}</select>
       <select data-p="mode" aria-label="как класть"><option value="seq" ${cue.mode === 'seq' ? 'selected' : ''}>между репликами</option><option value="bed" ${cue.mode === 'bed' ? 'selected' : ''}>фоном под следующими</option></select>
       <label class="gain"><input type="range" data-p="gain" min="-30" max="6" step="1" value="${cue.gain}" aria-label="громкость"><span class="gv" data-num="sfx:${cue.id}">${cue.gain > 0 ? '+' : ''}${cue.gain} дБ</span></label>
       <button class="play" data-act="play" ${cue.src ? '' : 'disabled'} aria-label="Слушать">▶</button>
       <button class="ghost-b tiny" data-act="db-for" title="Найти звук в базе BBC для этой ремарки">база</button>
     </div>`);
   }
+  // блоки вкладки (фоны, база, библиотека, ремарки) при перестройке доезжают до новых мест, а не прыгают
+  const BLK = '#sfx-body > .sfx-head, #sfx-body > .ambbox, #sfx-body > .dbbox, #sfx-body > .chips, #sfx-body > .srows', bkey = x => x.classList[0];
+  const before = typeof flipRecord === 'function' && typeof MOTION !== 'undefined' && MOTION.ready && !el.closest('[hidden]') ? flipRecord(BLK, bkey) : null;
   el.innerHTML = `
     <div class="sfx-head">
       <label class="ghost-b file-b">${ic('plus')}Загрузить свои звуки<input type="file" id="sfx-add" accept="audio/*,.m4a,.opus,.flac" multiple hidden></label>
@@ -104,6 +121,7 @@ function renderSounds() {
     ${dbBoxHtml(db)}
     ${st.lib.length ? `<div class="chips">${st.lib.map(f => `<span class="chip ghost">${esc(f.name)} <i>${fmt(f.dur)}</i> <button class="icon xs" data-act="lib-play" data-name="${esc(f.name)}" aria-label="Слушать">${ic('play')}</button><button class="icon xs" data-act="lib-rm" data-name="${esc(f.name)}" aria-label="Убрать">${ic('close')}</button></span>`).join('')}</div>` : ''}
     <div class="srows">${list.join('') || '<p class="muted pad">Звучащих ремарок не нашлось. Включите «показывать все ремарки» и назначьте звук вручную.</p>'}</div>`;
+  if (before) flipPlay(before, BLK, bkey, { damping: 0.9, response: 0.36 });
   sfxSynthIdle();
 }
 function dbBoxHtml(db) {
@@ -137,7 +155,7 @@ function bindSounds() {
     else if (p === 'src') { cue.src = x.value || null; if (cue.src && !cue.on) cue.on = true; }
     else if (p === 'mode') { cue.mode = x.value; if (!cue.manual || cue.gain === SFX_DEFAULT_GAIN[cue.mode === 'seq' ? 'bed' : 'seq']) cue.gain = SFX_DEFAULT_GAIN[cue.mode]; }
     else if (p === 'gain') cue.gain = +x.value;
-    cue.manual = true; S.result = null; sfxSave(); renderSounds(); renderMix();
+    cue.manual = true; sfxSave(); renderSounds(); sfxChanged();
   });
   el.addEventListener('input', e => { const x = e.target; if (x.dataset.p === 'gain') { x.closest('.gain').querySelector('.gv').textContent = `${x.value > 0 ? '+' : ''}${x.value} дБ`; } });
   el.addEventListener('click', e => {
@@ -154,7 +172,7 @@ function bindSounds() {
       b.classList.add('on'); dbFetch(it).then(y => { if (b.isConnected) play(y, b); }).catch(e => { b.classList.remove('on'); notify('Не скачался: ' + e.message); }); return; }
     if (a === 'db-add') { const it = dbState().res[+b.dataset.i]; if (!it) return; b.disabled = true; b.textContent = 'качаю…';
       dbAdd(it).then(name => { const db = dbState(); if (db.target) { const cue = sfxCue(db.target); cue.src = 'lib:' + name; cue.on = true; cue.manual = true; db.target = null; sfxSave(); }
-        S.result = null; renderSounds(); renderMix(); notify(`«${it.text.slice(0, 50)}» в библиотеке.`); }).catch(e => { notify('Не скачался: ' + e.message); renderSounds(); }); return; }
-    if (a === 'lib-rm') { const st = sfxState(); st.lib = st.lib.filter(x => x.name !== b.dataset.name); for (const c of Object.values(st.cues)) if (c.src === 'lib:' + b.dataset.name) { c.src = null; c.manual = false; } sfxAuto(); S.result = null; renderSounds(); return; }
+        renderSounds(); sfxChanged(); notify(`«${it.text.slice(0, 50)}» в библиотеке.`); }).catch(e => { notify('Не скачался: ' + e.message); renderSounds(); }); return; }
+    if (a === 'lib-rm') { const st = sfxState(); st.lib = st.lib.filter(x => x.name !== b.dataset.name); for (const c of Object.values(st.cues)) if (c.src === 'lib:' + b.dataset.name) { c.src = null; c.manual = false; } sfxAuto(); renderSounds(); sfxChanged(); return; }
   });
 }

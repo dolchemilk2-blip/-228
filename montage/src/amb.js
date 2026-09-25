@@ -62,41 +62,57 @@ async function ambNext(n) {
   st.scenes[n] = { ...cur, src: 'lib:' + name, on: true, pick, manual: true }; ambSave(); renderSounds(); if (S.result) remixSoon();
 }
 /** Звук фона сцены (48 кГц, −20 LUFS + поправка) или null. */
-function ambAudio(n) {
+function ambAudio(n) { const it = ambAudioSteps(n); let r; while (!(r = it.next()).done); return r.value; }
+/** Фон сцены к −20 LUFS (с поправкой), по шагам: длинная запись из базы меряется кусками, между ними — кадры. */
+function* ambAudioSteps(n) {
   const cfg = ambState().scenes[n]; if (!cfg || !cfg.on || !cfg.src) return null;
   let y = null;
   if (cfg.src.startsWith('synth:')) y = C.synthSound(cfg.src.slice(6));
   else { const f = sfxState().lib.find(x => x.name === cfg.src.slice(4)); if (f) y = f.y48; }
   if (!y || y.length < C.SR) return null;
   if (!cfg._norm || cfg._norm.src !== y || cfg._norm.gain !== cfg.gain) {
-    const L = C.integratedLufs(y), g = (isFinite(L) && L > -69 ? Math.pow(10, (-20 - L) / 20) : 1) * Math.pow(10, (cfg.gain || 0) / 20);
-    Object.defineProperty(cfg, '_norm', { value: { src: y, gain: cfg.gain, y: y.map(v => v * g) }, writable: true, configurable: true, enumerable: false });
+    const CH = 1 << 18, m = C.loudnessMeter(y.length, 0.4, 0.1); for (let a = 0; a < y.length; a += CH) { m.push(y, a, Math.min(y.length, a + CH)); yield; }
+    const L = m.result(), g = (isFinite(L) && L > -69 ? Math.pow(10, (-20 - L) / 20) : 1) * Math.pow(10, (cfg.gain || 0) / 20);
+    const out = new Float32Array(y.length); for (let i = 0; i < y.length; i++) out[i] = y[i] * g; yield;
+    Object.defineProperty(cfg, '_norm', { value: { src: y, gain: cfg.gain, y: out }, writable: true, configurable: true, enumerable: false });
   }
   return cfg._norm.y;
 }
 /** Фон на отрезок [a, b] секунд: зацикливание с перекрёстным переходом 2 с, вход и выход по 1,5 с. */
-function ambFill(y, dur) {
-  const n = Math.round(dur * C.SR), out = new Float32Array(n), xf = Math.min(Math.round(2 * C.SR), y.length >> 2);
+function ambFill(y, dur) { const it = ambFillSteps(y, dur); let r; while (!(r = it.next()).done); return r.value; }
+function* ambFillSteps(y, dur) {
+  const n = Math.round(dur * C.SR), out = new Float32Array(n), xf = Math.min(Math.round(2 * C.SR), y.length >> 2), CH = 1 << 18;
   let o = 0;
   while (o < n) {
     const len = Math.min(y.length, n - o);
-    for (let i = 0; i < len; i++) { let g = 1; if (o > 0 && i < xf) g = Math.sin(Math.PI / 2 * i / xf); if (o + y.length < n && i >= y.length - xf) g *= Math.cos(Math.PI / 2 * (i - (y.length - xf)) / xf); out[o + i] += y[i] * g; }
+    for (let c0 = 0; c0 < len; c0 += CH) {               // кусками: сцена в несколько минут — это миллионы отсчётов
+      for (let i = c0, c1 = Math.min(len, c0 + CH); i < c1; i++) { let g = 1; if (o > 0 && i < xf) g = Math.sin(Math.PI / 2 * i / xf); if (o + y.length < n && i >= y.length - xf) g *= Math.cos(Math.PI / 2 * (i - (y.length - xf)) / xf); out[o + i] += y[i] * g; }
+      yield;
+    }
     o += y.length - xf;
   }
   const f = Math.min(n >> 1, Math.round(1.5 * C.SR)); for (let i = 0; i < f; i++) { const g = i / f; out[i] *= g; out[n - 1 - i] *= g; }
   return out;
 }
 /** Фон всех сцен в микс с приглушением под репликами. Возвращает клипы для таймлайна. */
-function ambMix(mix, lay) {
+function ambMix(mix, lay) { const it = ambMixSteps(mix, lay); let r; while (!(r = it.next()).done); return r.value; }
+function* ambMixSteps(mix, lay) {
   const st = ambState(), clips = [], duck = st.duck || 0;
   const hop = Math.round(0.01 * C.SR), nH = Math.ceil(mix.length / hop), speech = new Uint8Array(nH);
   for (const p of lay.placed) if (p.item) { const a = Math.floor(p.at * C.SR / hop), b = Math.min(nH, Math.ceil((p.at * C.SR + p.audio.length) / hop)); speech.fill(1, Math.max(0, a), b); }
   const gdb = new Float32Array(nH); { const aA = 1 - Math.exp(-1 / 8), aR = 1 - Math.exp(-1 / 40); let v = 0; for (let k = nH - 1, look = 0; k >= 0; k--) { look = speech[k] ? 12 : Math.max(0, look - 1); if (look) speech[k] = 1; } for (let k = 0; k < nH; k++) { const t = speech[k] ? -duck : 0; v += (t - v) * (t < v ? aA : aR); gdb[k] = v; } }
+  // приглушение в разах — один раз на каждые 10 мс, а не Math.pow на каждый отсчёт (50 млн — это секунды)
+  const lin = new Float64Array(nH); for (let k = 0; k < nH; k++) lin[k] = Math.pow(10, gdb[k] / 20);
+  yield;
   for (const sc of lay.scenes || []) {
-    const y = ambAudio(sc.n); if (!y) continue;
+    const y = yield* ambAudioSteps(sc.n); if (!y) continue;
     const a = sc.start, dur = sc.end - sc.start; if (dur < 1) continue;
-    const bed = ambFill(y, dur), i0 = Math.round(a * C.SR);
-    for (let i = 0; i < bed.length && i0 + i < mix.length; i++) { const k = ((i0 + i) / hop) | 0; bed[i] *= Math.pow(10, gdb[k] / 20); mix[i0 + i] += bed[i]; }   // в клип — уже приглушённый: он же идёт в стемы
+    const bed = yield* ambFillSteps(y, dur), i0 = Math.round(a * C.SR);
+    const end = Math.min(bed.length, mix.length - i0), CH = 1 << 18;
+    for (let c0 = 0; c0 < end; c0 += CH) {                // в клип — уже приглушённый: он же идёт в стемы
+      for (let i = c0, c1 = Math.min(end, c0 + CH); i < c1; i++) { bed[i] *= lin[((i0 + i) / hop) | 0]; mix[i0 + i] += bed[i]; }
+      yield;
+    }
     const cfg = st.scenes[sc.n]; clips.push({ n: sc.n, at: a, dur, name: cfg.src.replace(/^lib:BBC \S+ — |^lib:|^synth:/, ''), audio: bed });
   }
   return clips;

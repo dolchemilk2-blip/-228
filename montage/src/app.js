@@ -64,8 +64,12 @@ async function decodeFile(file) {
   const buf = await file.arrayBuffer();
   const ctx = new OfflineAudioContext(1, 1, C.SR);
   const ab = await ctx.decodeAudioData(buf);
-  const n = ab.length, y = new Float32Array(n);
-  for (let ch = 0; ch < ab.numberOfChannels; ch++) { const d = ab.getChannelData(ch); for (let i = 0; i < n; i++) y[i] += d[i] / ab.numberOfChannels; }
+  // число каналов — в переменную: свойство аудиобуфера на каждом отсчёте читалось через браузер, и 5 минут стерео
+  // сводились в моно 3–4 секунды, с замершей страницей
+  const n = ab.length, nc = ab.numberOfChannels;
+  if (nc === 1) return ab.getChannelData(0).slice();
+  const y = new Float32Array(n), tick = budget(12), CH = 1 << 20;
+  for (let ch = 0; ch < nc; ch++) { const d = ab.getChannelData(ch); for (let a = 0; a < n; a += CH) { for (let i = a, b = Math.min(n, a + CH); i < b; i++) y[i] += d[i] / nc; await tick(); } }
   return y;
 }
 const slice = (f, a, b) => f.y48.subarray(Math.max(0, Math.round(a * C.SR)), Math.min(f.y48.length, Math.round(b * C.SR)));
@@ -348,9 +352,10 @@ async function mixdown() {
       if (y) items.push({ id: cue.id, cue, voice: voiceOf(cue), text: cue.text, note: cue.note || '', audio: y, raw: y, file: src && src.pieces ? src.pieces[src.pieces.length - 1].f : null, file0: src && src.pieces ? src.pieces[0].f : null });
     }
     if (!items.length && !(S.sfx && Object.values(S.sfx.cues).some(c => c.on && c.src))) throw new Error('нет ни одной реплики с записью');
-    C.levelLines(items, { strength, manual: S.gains });
+    const tick = budget(12);                             // выравнивание 17 минут — секунды счёта: кусками, остров прогресса живой
+    await runSteps(C.levelLinesSteps(items, { strength, manual: S.gains }), tick);
     const energy = a => { let s = 0; for (let i = 0; i < a.length; i += 4) s += a[i] * a[i]; return s; };
-    for (const it of items) { const e0 = energy(it.raw); it.lvlGain = e0 > 0 ? Math.sqrt(energy(it.audio) / e0) : 1; delete it.raw; }
+    for (const it of items) { const e0 = energy(it.raw); it.lvlGain = e0 > 0 ? Math.sqrt(energy(it.audio) / e0) : 1; delete it.raw; await tick(); }
     for (const it of items) { it.audio0 = it.audio; it.fix0 = it.fix; it.levelAfter0 = it.levelAfter; it.man0 = S.gains[it.id] || 0; }   // выровненный звук — основа для регуляторов персонажей
     const byId = new Map(items.map(it => [it.id, it]));
     if (S.result && S.result.url) URL.revokeObjectURL(S.result.url);
@@ -379,34 +384,58 @@ function itemAudio(it) {
  * 'layout' — сдвиги, темп, фон: раскладка и сумма заново, общее усиление прежнее, лимитер только у пиков.
  * 'lines' — эффект или громкость у части реплик: пересчитываются только их куски дорожки.
  */
+/** Отдать кадр: долгая работа режется на куски по ~12 мс; кусок — кадр — сразу следующий кусок (сообщение сразу
+ *  после кадра, без задержки таймера). scheduler.yield не годится: его продолжение важнее отрисовки, кадры ждут. */
+const yieldFrame = () => new Promise(res => {
+  let done = false; const go = () => { if (!done) { done = true; res(); } };
+  requestAnimationFrame(() => { const ch = new MessageChannel(); ch.port1.onmessage = go; ch.port2.postMessage(0); });
+  setTimeout(go, 100);                                     // кадр не пришёл (вкладку свернули) — не ждать
+});
+function budget(ms = 12) { let t = performance.now(); return async () => { if (document.hidden || performance.now() - t < ms) return; await yieldFrame(); t = performance.now(); }; }
+async function runSteps(it, tick) { let r; while (!(r = it.next()).done) await tick(); return r.value; }
+// сведения идут строго по очереди: пока одно режется на куски, другое не должно писать в тот же буфер
+let REMIX_Q = Promise.resolve();
 async function remix(mode = 'full', ids = null) {
+  const prev = REMIX_Q; let done; REMIX_Q = new Promise(res => { done = res; });
+  await prev;
+  try { return await remixInner(mode, ids); } finally { done(); }
+}
+/** Дождаться, пока сведение успокоится: отложенная правка и идущий пересчёт — до скачивания и видео. */
+async function mixSettled() {
+  for (let guard = 0; guard < 50 && (remixReq || remixRunning); guard++) { if (remixRunning) await remixRunning; else await new Promise(res => setTimeout(res, 140)); }
+  await REMIX_Q;
+}
+async function remixInner(mode, ids) {
   const r = S.result; if (!r) return;
+  const tick = budget(12);
   const T = [performance.now()], lap = k => { T.push(performance.now()); if (DEBUG) console.info(`сведение (${mode}): ${k} ${((T.at(-1) - T.at(-2)) / 1000).toFixed(2)} с`); };
   if (mode !== 'full' && (!r.lay || !r.out || r.gain == null)) mode = 'full';
   const items = mode === 'lines' && ids ? r.items.filter(it => ids.has(it.id)) : r.items;
   const fxN = typeof ensureFx === 'function' ? await ensureFx(items) : 0;
   lap(`эффекты (${fxN} реплик)`);
   const before = new Map(); if (mode === 'lines') for (const p of r.lay.placed) if (p.item && ids.has(p.item.id)) before.set(p.item.id, p.audio.length);
-  for (const it of items) itemAudio(it);
+  for (const it of items) { itemAudio(it); if (mode !== 'lines') await tick(); }
   lap('громкость');
   if (mode === 'lines') { if (remixLines(r, ids, before)) { lap('куски дорожки'); r.approx = true; S.tlTracks = null; return; } mode = 'layout'; }
   const lay = C.layout(S.P.cues, cue => { const it = r.byId.get(cue.id); if (it) return it.core != null ? { audio: it.audio, core: it.core } : it.audio; return cue.type === 'dir' && sfxIsSeq(cue) ? sfxAudio(cue.id) : null; },
     cue => isVoicedDir(cue) || sfxIsSeq(cue), sfxBed, { tempo: S.tempo || 1, timing: S.timing });
   lay.placed.forEach(p => { p.item = r.byId.get(p.cue.id); });
   r.lay = lay; S.tlTracks = null;
-  lap('раскладка');
+  lap('раскладка'); await tick();
   const N = Math.ceil(lay.total * C.SR);                // буфер дорожки переиспользуется, с запасом в минуту: выделять 200 МБ на каждую правку — долго
-  if (!r.mixBuf || r.mixBuf.length < N || r.mixBuf.length > N + 120 * C.SR) { r.out = null; r.mixBuf = null; r.mixBuf = new Float32Array(N + 60 * C.SR); }
-  const mix = r.mixBuf.subarray(0, N); mix.fill(0);
-  for (const p of lay.placed) { const i0 = Math.round(p.at * C.SR), n = Math.min(p.audio.length, Math.max(0, mix.length - i0)); for (let i = 0; i < n; i++) mix[i0 + i] += p.audio[i]; }   // всё суммой: реплики могут наезжать друг на друга
+  // прежний r.out живёт до конца пересчёта: пока сведение режется на куски, интерфейс читает его длину
+  if (!r.mixBuf || r.mixBuf.length < N || r.mixBuf.length > N + 120 * C.SR) { r.mixBuf = null; r.mixBuf = new Float32Array(N + 60 * C.SR); }
+  const mix = r.mixBuf.subarray(0, N), CH = 1 << 20;
+  for (let a = 0; a < N; a += CH) { mix.fill(0, a, Math.min(N, a + CH)); await tick(); }
+  for (const p of lay.placed) { const i0 = Math.round(p.at * C.SR), n = Math.min(p.audio.length, Math.max(0, mix.length - i0)), au = p.audio; for (let i = 0; i < n; i++) mix[i0 + i] += au[i]; await tick(); }   // всё суммой: реплики могут наезжать друг на друга
   lap('сумма');
   r.room = typeof roomToneMix === 'function' ? roomToneMix(mix, lay) : [];
-  r.amb = typeof ambMix === 'function' ? ambMix(mix, lay) : [];
+  r.amb = typeof ambMixSteps === 'function' ? await runSteps(ambMixSteps(mix, lay), tick) : [];
   lap('фон');
-  if (mode === 'full') { const m = C.master(mix, lay.placed, { targetLufs: r.target }); r.out = m.out; r.master = m; r.gain = Math.pow(10, m.gainDb / 20); r.approx = false; }
-  else { for (let i = 0; i < mix.length; i++) mix[i] *= r.gain; r.out = C.limit(mix, 0.84, true); r.approx = true; }
-  lap('мастер');
-  tpLoad(r.out);
+  if (mode === 'full') { const m = await runSteps(C.masterSteps(mix, lay.placed, { targetLufs: r.target }), tick); r.out = m.out; r.master = m; r.gain = Math.pow(10, m.gainDb / 20); r.approx = false; }
+  else { const L = C.limiterStream(mix, 0.84, r.gain); for (let a = 0; a < N; a += CH) { L.step(a, Math.min(N, a + CH)); await tick(); } L.finish(); r.out = mix; r.approx = true; }
+  lap('мастер'); await tick();
+  await tpLoad(r.out, tick);
   lap('плеер');
 }
 /** Пересчёт кусков дорожки под изменившимися репликами. false — изменений слишком много, проще целиком. */
@@ -445,10 +474,11 @@ function remixLinesInner(r, ids, before) {
 // ------------------------------------------------------------------ плеер из памяти: без сборки WAV, правки слышны сразу
 const TP = { buf: null, src: null, startAt: 0, offset: 0, playing: false, len: 0, hold: false, dirty: false };
 /** Буфер плеера с запасом в минуту: сдвиги меняют длину дорожки, а новый буфер на 200 МБ — это секунда. */
-function tpLoad(out) {
+async function tpLoad(out, tick = null) {
   const ctx = audioCtx(); TP.len = out.length;
   if (!TP.buf || TP.buf.length < out.length || TP.buf.length > out.length + 120 * C.SR) TP.buf = ctx.createBuffer(1, out.length + 60 * C.SR, C.SR);
-  TP.buf.copyToChannel(out, 0);
+  const CH = 1 << 21;                                      // 200 МБ одним копированием — 40 мс без кадра; кусками — незаметно
+  for (let a = 0; a < out.length; a += CH) { TP.buf.copyToChannel(out.subarray(a, Math.min(out.length, a + CH)), 0, a); if (tick) await tick(); }
   if (TP.buf.length > out.length) TP.buf.getChannelData(0).fill(0, out.length);
   TP.offset = Math.min(TP.offset, out.length / C.SR);
   if (TP.playing) tpPlay(tpTime());
@@ -520,7 +550,14 @@ function refreshMix() {
   const r = S.result, out = $('#mix-out'); if (!r || !r.out || !out.querySelector('#tl-cv')) return renderMix();
   S.tlTracks = null;
   const st = out.querySelector('.stat'); if (st) st.innerHTML = mixStatHtml(r);
-  const ms = $('#mix-status'); if (ms) ms.innerHTML = mixStatusHtml(r);
+  const ms = $('#mix-status');
+  if (ms) {                                               // строка состояния раскрывается и сворачивается — плеер под ней не прыгает
+    const html = mixStatusHtml(r), was = ms.innerHTML.trim() !== '', now = html.trim() !== '', anim = typeof MOTION !== 'undefined' && MOTION.ready && typeof foldIn === 'function';
+    if (ms.innerHTML !== html) {
+      if (was && !now && anim && mOK()) { const h = ms.offsetHeight; ms.style.overflow = 'hidden'; const a = ms.animate([{ height: h + 'px', opacity: 1 }, { height: '0px', opacity: 0 }], { duration: 200, easing: EASE }); a.onfinish = () => { ms.style.overflow = ''; if (ms.dataset.want === '') ms.innerHTML = ''; }; ms.dataset.want = ''; }
+      else { ms.dataset.want = html; ms.innerHTML = html; if (anim && !was && now) foldIn(ms); else if (anim && now) mIn(ms, { opacity: 0 }, [1, 0.25]); }
+    }
+  }
   const sk = $('#tp-seek'); if (sk) sk.max = (r.out.length / C.SR).toFixed(1);
   if ($('#tl-info')) tlRefreshInfo(); tlRefreshBar();
   const note = $('#vg-note'); if (note) note.textContent = '';
@@ -722,7 +759,14 @@ function renderReview() {
   $('#dirs-t').checked = S.showDirs;
   // список реплик свёрнут, пока его не откроют: не строится вовсе (337 строк — это сотни мс раскладки)
   const tg = $('#rv-toggle'), fold = $('#rv-fold');
-  tg.setAttribute('aria-expanded', String(!!S.rvOpen)); tg.querySelector('.rv-t').textContent = S.rvOpen ? 'Свернуть реплики' : 'Показать все реплики';
+  tg.setAttribute('aria-expanded', String(!!S.rvOpen));
+  const tt = tg.querySelector('.rv-t'), label = S.rvOpen ? 'Свернуть реплики' : 'Показать все реплики';
+  if (tt.textContent !== label) {
+    // подпись сменяется проявлением, а счётчик рядом доезжает до нового места, а не прыгает на 27 px
+    const nEl = tg.querySelector('.rv-n'), x0 = tt.textContent && typeof MOTION !== 'undefined' && MOTION.ready ? nEl.getBoundingClientRect().left : null;
+    tt.textContent = label;
+    if (x0 != null) { const dx = x0 - nEl.getBoundingClientRect().left; if (Math.abs(dx) > 1 && typeof tform === 'function') { const T = tform(nEl); mvSet(T.x, dx); mvTo(T.x, 0, { damping: 0.86, response: 0.32 }); } if (typeof mIn === 'function') mIn(tt, { opacity: 0, filter: 'blur(2px)' }, [1, 0.26]); }
+  }
   tg.querySelector('.rv-n').textContent = String(S.P.cues.filter(q => q.type === 'line').length);
   if (!S.rvOpen) { if (!fold._closing) fold.hidden = true; return; }
   fold.hidden = false;
@@ -745,7 +789,7 @@ function renderReview() {
     rows.push(rowHtml(cue, st, hasFile));
   }
   $('#rv-list').dataset.v = `${S.filter}|${S.showDirs}|${S.matches.size}`;
-  setHtml($('#rv-list'), rows.join('') || '<p class="muted pad">Здесь пусто — под этот фильтр ничего не подходит.</p>');
+  setRows($('#rv-list'), rows, '<p class="muted pad">Здесь пусто — под этот фильтр ничего не подходит.</p>');
   if (typeof segInd === 'function') segInd($('#rv-filter'), 'rv-filter');
 }
 /** Раскрыть или свернуть список реплик. Снизу («Свернуть реплики» в конце списка) — сначала вернуться к началу. */
@@ -761,6 +805,18 @@ function rvToggle(open, fromBottom) {
 /** Заменить содержимое, только если оно правда другое: пересборка списка на 337 строк стоит сотни миллисекунд
  *  раскладки, а после многих действий (темп, громкость, сведение) сам список не меняется. */
 function setHtml(el, html) { if (el._html === html && el.firstChild) return false; el._html = html; el.innerHTML = html; return true; }
+/** Длинный список — постепенно: первые 40 строк сразу (это больше экрана), остальные по 40 за кадр. Иначе раскрытие
+ *  разбора и смена фильтра — кадр в 150–200 мс: 337 строк разом разбираются и раскладываются. */
+function setRows(el, rows, empty = '') {
+  const html = rows.join('') || empty; if (el._html === html && el.firstChild) return false;
+  el._html = html; const tok = el._rowsTok = {}, FIRST = 40;
+  if (rows.length <= FIRST * 1.5) { el.innerHTML = html; return true; }
+  el.innerHTML = rows.slice(0, FIRST).join('');
+  let i = FIRST;
+  const step = () => { if (el._rowsTok !== tok || !el.isConnected) return; el.insertAdjacentHTML('beforeend', rows.slice(i, i + 40).join('')); i += 40; if (i < rows.length) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+  return true;
+}
 function rowHtml(cue, st, hasFile) {
   const src = sourceOf(cue), isDir = cue.type === 'dir';
   const who = isDir ? `<span class="chip ghost">ремарка</span>` : `<span class="chip ${colorOf(cue.spk)}">${esc(charName(cue.spk))}</span>`;
@@ -990,6 +1046,7 @@ function bind() {
       if (a === 'tp-play') { TP.playing ? tpPause() : tpPlay(); return; }
       if (a === 'read') { S.readOpen = !S.readOpen; renderMix(); return; }
       if (a === 'vg0') { histPush(`громкость персонажа ${charName(b.dataset.voice)} 0 дБ`); delete S.voiceGains[b.dataset.voice]; saveEdits(); const sl = $('#mix-out').querySelector(`input[data-voice="${CSS.escape(b.dataset.voice)}"]`); if (sl) { sl.value = 0; sl.closest('.vg').querySelector('b').textContent = '0 дБ'; } remixSoon('lines', voiceIds(b.dataset.voice)); return; }
+      if (['mp3', 'wav', 'stems', 'video'].includes(a)) await mixSettled();          // правка ещё считается — дождаться её
       if (['mp3', 'wav', 'stems'].includes(a) && S.result.approx) { b.disabled = true; await exactResult(); b.disabled = false; }
       if (a === 'mp3') { b.disabled = true; const blob = await encodeMp3(S.result.out, +$('#kbps').value); progress('', 0); const tag = typeof id3Chapters === 'function' ? id3Chapters((S.P.title || 'Радиоспектакль')) : null; download(tag && tag.length ? new Blob([tag, blob], { type: 'audio/mpeg' }) : blob, `сведение-${stamp}.mp3`); b.disabled = false; }
       if (a === 'stems') { b.disabled = true; try { const z = await exportStems(); if (z) download(z, `стемы-${stamp}.zip`); } catch (err) { progress('', 0); notify('Стемы не получились: ' + err.message); } b.disabled = false; }
