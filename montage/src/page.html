@@ -294,6 +294,7 @@ input[type=radio] { accent-color: var(--accent); }
 .pill b { font-weight: 700; display: inline-flex; }
 .pill.ok { background: var(--ok-soft); color: var(--ok); } .pill.check { background: var(--warn-soft); color: var(--warn); }
 .pill.miss { background: var(--bad-soft); color: var(--bad); } .pill.none { background: var(--none-soft); color: var(--none); }
+.pill.slips { background: var(--accent-soft); color: var(--accent-text); }
 /* цифры, которые поменялись, въезжают снизу (transitions.dev: number pop-in) */
 .digit { display: inline-block; }
 .digits.pop .digit { animation: t-digit-pop 420ms var(--ease-bounce) both; }
@@ -390,6 +391,11 @@ input[type=radio] { accent-color: var(--accent); }
 .st-ok .st, .st-own .st { color: var(--ok); } .st-check .st { color: var(--warn); } .st-miss .st { color: var(--bad); } .st-none .st { color: var(--none); }
 .where { font-family: var(--mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 .heard { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+/* оговорка: пропущенное зачёркнуто, сказанное иначе — подчёркнуто карандашом */
+.heard.slip { font-size: 13px; color: var(--ink); line-height: 1.6; }
+.slip-l { font-size: 11.5px; color: var(--muted); margin-right: 4px; }
+.heard.slip del { color: var(--bad); text-decoration-thickness: 1.5px; text-decoration-color: color-mix(in srgb, var(--bad) 70%, transparent); }
+.heard.slip ins { text-decoration: none; background: var(--accent-soft); color: var(--ink); border-radius: 3px; padding: 0 3px; box-shadow: inset 0 -2px 0 var(--accent); }
 .acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; justify-content: flex-end; max-width: 400px; }
 .mini { font-size: 13px; display: inline-flex; gap: 6px; align-items: center; color: var(--muted); cursor: pointer; }
 .gain { display: inline-flex; align-items: center; gap: 4px; font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -408,6 +414,7 @@ input[type=radio] { accent-color: var(--accent); }
 .settings label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
 .settings label span { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 .settings select, .settings input[type=range] { min-width: 160px; }
+.settings label.chk { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; color: var(--ink); font-size: 13.5px; cursor: pointer; }
 #mix-out { display: grid; gap: 16px; }
 #mix-out:empty { display: none; }
 #mix-top, #mix-rest { display: grid; gap: 14px; }
@@ -422,6 +429,21 @@ input[type=radio] { accent-color: var(--accent); }
 #mix-status { flex-basis: 100%; font-size: 12.5px; color: var(--deck-muted); }
 #mix-status:empty { display: none; }
 #mix-status .muted { color: var(--deck-muted); }
+/* читка: сценарий за плеером */
+.tp .tp-read { background: var(--deck-2); border-color: var(--deck-line); color: var(--deck-ink); }
+.tp .tp-read.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+#mix-read:empty { display: none; }
+.read { position: relative; max-height: 360px; overflow: auto; overscroll-behavior: contain; padding: 6px; border: 1px solid var(--line2); border-radius: var(--r-l); background: var(--well); scroll-behavior: auto; }
+.read-sc { position: sticky; top: -6px; z-index: 1; padding: 10px 10px 6px; font: 700 11.5px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: var(--well); }
+.read-row { display: grid; grid-template-columns: 58px auto minmax(0, 1fr); gap: 4px 10px; align-items: baseline; padding: 8px 10px; border-radius: var(--r-m); cursor: pointer; transition: background-color var(--duration-fast) ease, opacity var(--duration-fast) ease; }
+.read-row .read-t { font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.read-row .read-x { font-size: 15px; line-height: 1.45; color: var(--ink); overflow-wrap: anywhere; }
+.read-row .read-x i { color: var(--muted); font-size: 13px; }
+.read-row .read-x em { font-style: normal; font-size: 12px; color: var(--none); }
+.read-row.gap { opacity: .55; }
+.read-row.cur { background: var(--surface); box-shadow: var(--sh-1); opacity: 1; }
+.read-row.cur .rt { background: linear-gradient(90deg, var(--ink) var(--p, 0%), color-mix(in srgb, var(--muted) 70%, transparent) var(--p, 0%)); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; }
+@media (hover: hover) and (pointer: fine) { .read-row:not(.cur):hover { background: color-mix(in srgb, var(--surface) 60%, transparent); } }
 .levels { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 13px; font-variant-numeric: tabular-nums; }
 .levels div { display: flex; gap: 8px; align-items: center; }
 .vgains { display: grid; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line2); }
@@ -433,6 +455,11 @@ input[type=radio] { accent-color: var(--accent); }
 .vg select { font-size: 12.5px; min-height: 30px; }
 @media (max-width: 700px) { .vg { grid-template-columns: 1fr 56px 24px; } .vg input[type=range], .vg select { grid-column: 1 / -1; } }
 .dl { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line2); }
+.vid { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--line2); }
+.vid-h { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.vid-h > b { font: 600 15px var(--display); font-stretch: 95%; }
+.vid-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.vid-row input[type=text] { flex: 1 1 240px; min-width: 0; min-height: 38px; padding: 0 12px; font-size: 14px; }
 /* таймлайн — утопленный экран */
 .tl { position: relative; display: grid; gap: 8px; padding: 8px; border: 1px solid var(--line2); border-radius: var(--r-l); background: var(--well); }
 .tl-bar { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; font-size: 12.5px; color: var(--muted); }
@@ -587,6 +614,52 @@ body.tl-full-open { overflow: hidden; }
 @media (max-width: 860px) { .srow { grid-template-columns: auto minmax(0, 1fr) 34px auto; } .srow select, .srow .gain { grid-column: 2; } }
 
 /* ------------------------------------------------------------------ прогресс и сообщения */
+/* дозапись: лист с суфлёром снизу, затемнение; кнопка записи — как в диктофоне */
+/* шторки снизу (дозапись, «другой кусок» на телефоне): затемнение следует за шторкой, пока её тянут (--dim) */
+.sheetbox { position: fixed; inset: 0; z-index: 75; display: grid; align-items: end; justify-items: center; padding: 16px; background: rgb(10 8 6 / calc(0.55 * var(--dim, 1))); overscroll-behavior: contain; }
+.sheetbox[data-ghost] { z-index: 76; }
+.rec-grab, .sheet-grab { position: relative; }
+.rec-grab::after, .sheet-grab::after { content: ""; position: absolute; inset: -12px -40px; }   /* ручка маленькая, а браться за неё легко */
+.rec-head, .sheet-top { touch-action: none; }
+#sheet { padding: 0; z-index: 74; }
+.sheet-in { position: relative; width: 100%; max-height: min(82vh, calc(100vh - 24px)); overflow: auto; overscroll-behavior: contain; display: grid; align-content: start; gap: 4px; padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px)); border-radius: 22px 22px 0 0; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-bottom: 0; box-shadow: var(--sh-2); touch-action: pan-y; }
+.sheet-top { position: sticky; top: 0; z-index: 1; display: grid; gap: 6px; padding: 10px 0 8px; background: var(--surface); cursor: grab; }
+.sheet-grab { justify-self: center; width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
+.sheet-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.sheet-head > b { font: 600 17px var(--display); font-stretch: 95%; }
+.sheet-head > .icon { margin-left: auto; }
+.sheet-q { margin: 0 0 4px; font-size: 14px; color: var(--muted); }
+.sheet-body { display: grid; }
+.sheet-body > p.muted { margin: 4px 0; font-size: 13px; }
+.sheet-body .cand { padding: 10px 0; border-top: 1px solid var(--line2); }
+.rec-in { position: relative; width: min(680px, 100%); max-height: calc(100vh - 32px); overflow: auto; display: grid; gap: 16px; padding: 10px 22px 20px; border-radius: 22px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); box-shadow: var(--sh-2); touch-action: pan-y; }
+.rec-grab { justify-self: center; width: 40px; height: 5px; border-radius: 3px; background: var(--line); cursor: grab; touch-action: none; margin-bottom: 2px; }
+.rec-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.rec-head > b { font: 600 18px var(--display); font-stretch: 95%; }
+.rec-x { margin-left: auto; }
+.rec-prompt { display: grid; gap: 10px; }
+.rec-l { font-size: 14px; color: var(--muted); line-height: 1.45; }
+.rec-l i { color: var(--muted); }
+.rec-l.cur { font-size: 26px; line-height: 1.3; color: var(--ink); font-weight: 500; text-wrap: balance; padding: 6px 0; }
+.rec-l.cur i { font-size: 16px; font-weight: 400; display: block; margin-bottom: 4px; }
+.rec-meter { position: relative; height: 10px; border-radius: 5px; background: var(--well); overflow: visible; box-shadow: inset 0 1px 2px rgb(0 0 0 / 15%); }
+.rec-bar { position: absolute; inset: 0; border-radius: 5px; background: linear-gradient(90deg, var(--ok) 0 70%, var(--accent) 70% 88%, var(--onair) 88%); transform-origin: left; transform: scaleX(0.02); transition: transform 60ms linear; }
+.rec-time { position: absolute; right: 0; top: 14px; font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.rec-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 14px; min-height: 72px; padding-top: 8px; }
+.rec-btn { position: relative; display: grid; place-items: center; width: 68px; height: 68px; border-radius: 50%; border: 3px solid var(--ink); background: transparent; cursor: pointer; padding: 0; }
+.rec-btn span { width: 52px; height: 52px; border-radius: 50%; background: var(--onair); transition: width var(--spring-bouncy-dur, 300ms) var(--spring-bouncy, ease), height var(--spring-bouncy-dur, 300ms) var(--spring-bouncy, ease), border-radius var(--spring-bouncy-dur, 300ms) var(--spring-bouncy, ease); }
+.rec-btn.on span { width: 26px; height: 26px; border-radius: 6px; }
+.rec-btn.on::after { content: ""; position: absolute; inset: -8px; border-radius: 50%; border: 2px solid var(--onair); animation: t-rec-ring 1.4s ease-out infinite; }
+@keyframes t-rec-ring { from { transform: scale(0.9); opacity: 0.8; } to { transform: scale(1.25); opacity: 0; } }
+.play.big-take { width: 52px; height: 52px; border-radius: 50%; }
+.rec-busy { font-size: 14px; color: var(--muted); }
+.rec-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding-top: 12px; border-top: 1px solid var(--line2); }
+.rec-count { position: absolute; inset: 0; display: grid; place-items: center; font: 800 120px/1 var(--display); color: var(--onair); background: color-mix(in srgb, var(--surface) 70%, transparent); border-radius: inherit; animation: t-count 650ms var(--ease-smooth-out) both; pointer-events: none; }
+@keyframes t-count { from { transform: scale(1.4); opacity: 0; filter: blur(6px); } 30% { opacity: 1; filter: none; transform: scale(1); } to { opacity: 0.9; transform: scale(0.94); } }
+.rr { display: inline-flex; align-items: center; gap: 3px; }
+.rr-mic { color: var(--onair); }
+@media (max-width: 720px) { #rec { padding: 0; } .rec-grab { cursor: grab; } .rec-in { border-radius: 22px 22px 0 0; padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); } .rec-l.cur { font-size: 22px; } }
+@media (prefers-reduced-motion: reduce) { .rec-btn.on::after, .rec-count { animation: none; } }
 /* прогресс — «остров» в деке: вырастает из пилюли и сворачивается обратно */
 #prog { position: relative; z-index: 2; flex: 0 1 460px; min-width: 0; margin: 0 auto; height: 40px; padding: 0 18px; border-radius: 20px; background: #000; color: var(--deck-ink); border: 1px solid var(--deck-line); box-shadow: 0 1px 0 rgb(255 255 255 / 6%) inset, 0 6px 18px -6px rgb(0 0 0 / 60%); display: flex; align-items: center; }
 #prog .in { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 14px; align-items: center; width: 100%; }
@@ -692,7 +765,7 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
         </section>
         <section class="card" id="s2">
           <h2 class="step"><b>2</b> Записи <small>каждый актёр — сколько угодно файлов</small></h2>
-          <label class="pick-files"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h1.4M4.6 5.5v5M7 3.2v9.6M9.4 5v6M11.8 6.5v3M14 8h.1"/></svg><strong>Выбрать файлы</strong>или перетащить сюда — можно все сразу<input type="file" id="audio-in" accept="audio/*,.m4a,.opus,.flac" multiple hidden></label>
+          <label class="pick-files"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h1.4M4.6 5.5v5M7 3.2v9.6M9.4 5v6M11.8 6.5v3M14 8h.1"/></svg><strong>Выбрать файлы</strong>или перетащить сюда — можно все сразу<input type="file" id="audio-in" accept="audio/*,.m4a,.opus,.flac,.zip" multiple hidden></label>
           <div id="files" class="files"></div>
           <p id="lonely"></p>
           <p class="muted small">Если у роли несколько файлов (например, основная запись и правки), нижний в списке считается свежее: где реплика есть в обоих, берётся из него.</p>
@@ -714,7 +787,7 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
         <div class="sum" id="rv-sum"></div>
         <div id="rv-rerec"></div>
         <div class="filters" id="rv-filter">
-          <button data-f="all" class="on">Все</button><button data-f="check">Проверить</button><button data-f="miss">Нет записи</button><button data-f="dirs">Озвученные ремарки</button>
+          <button data-f="all" class="on">Все</button><button data-f="check">Проверить</button><button data-f="miss">Нет записи</button><button data-f="slips">Оговорки</button><button data-f="dirs">Озвученные ремарки</button>
           <label><input type="checkbox" id="dirs-t"> показывать ремарки</label>
         </div>
         <div id="rv-list"></div>
@@ -726,6 +799,7 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
           <label for="tempo">Темп пауз <span id="tempo-v">1×</span><input type="range" id="tempo" min="0.5" max="1.8" step="0.05" value="1"></label>
           <label for="lufs">Итоговая громкость<select id="lufs"><option value="-14">−14 LUFS (YouTube, стриминг)</option><option value="-16">−16 LUFS (подкасты)</option><option value="-18" selected>−18 LUFS</option><option value="-23">−23 LUFS (эфир)</option></select></label>
           <label for="kbps">MP3<select id="kbps"><option value="160">160 кбит/с</option><option value="192">192 кбит/с</option><option value="256" selected>256 кбит/с</option><option value="320">320 кбит/с</option></select></label>
+          <label class="chk" for="room" title="Паузы между репликами заполняются тихим звуком той же комнаты — без провалов в цифровую тишину"><input type="checkbox" id="room" checked> Комнатный тон в паузах</label>
           <button class="primary" id="mixgo">Свести</button>
         </div>
         <p class="muted small">Голоса сводятся к одному уровню, реплики подтягиваются к уровню своего голоса; шёпот остаётся тише, крик громче — по ремаркам «(шёпотом)», «(громко)» и капсу. Кнопки ± у реплики — ручная поправка в дБ.</p>

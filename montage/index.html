@@ -294,6 +294,7 @@ input[type=radio] { accent-color: var(--accent); }
 .pill b { font-weight: 700; display: inline-flex; }
 .pill.ok { background: var(--ok-soft); color: var(--ok); } .pill.check { background: var(--warn-soft); color: var(--warn); }
 .pill.miss { background: var(--bad-soft); color: var(--bad); } .pill.none { background: var(--none-soft); color: var(--none); }
+.pill.slips { background: var(--accent-soft); color: var(--accent-text); }
 /* цифры, которые поменялись, въезжают снизу (transitions.dev: number pop-in) */
 .digit { display: inline-block; }
 .digits.pop .digit { animation: t-digit-pop 420ms var(--ease-bounce) both; }
@@ -390,6 +391,11 @@ input[type=radio] { accent-color: var(--accent); }
 .st-ok .st, .st-own .st { color: var(--ok); } .st-check .st { color: var(--warn); } .st-miss .st { color: var(--bad); } .st-none .st { color: var(--none); }
 .where { font-family: var(--mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 .heard { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+/* оговорка: пропущенное зачёркнуто, сказанное иначе — подчёркнуто карандашом */
+.heard.slip { font-size: 13px; color: var(--ink); line-height: 1.6; }
+.slip-l { font-size: 11.5px; color: var(--muted); margin-right: 4px; }
+.heard.slip del { color: var(--bad); text-decoration-thickness: 1.5px; text-decoration-color: color-mix(in srgb, var(--bad) 70%, transparent); }
+.heard.slip ins { text-decoration: none; background: var(--accent-soft); color: var(--ink); border-radius: 3px; padding: 0 3px; box-shadow: inset 0 -2px 0 var(--accent); }
 .acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; justify-content: flex-end; max-width: 400px; }
 .mini { font-size: 13px; display: inline-flex; gap: 6px; align-items: center; color: var(--muted); cursor: pointer; }
 .gain { display: inline-flex; align-items: center; gap: 4px; font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -408,6 +414,7 @@ input[type=radio] { accent-color: var(--accent); }
 .settings label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
 .settings label span { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 .settings select, .settings input[type=range] { min-width: 160px; }
+.settings label.chk { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; color: var(--ink); font-size: 13.5px; cursor: pointer; }
 #mix-out { display: grid; gap: 16px; }
 #mix-out:empty { display: none; }
 #mix-top, #mix-rest { display: grid; gap: 14px; }
@@ -422,6 +429,21 @@ input[type=radio] { accent-color: var(--accent); }
 #mix-status { flex-basis: 100%; font-size: 12.5px; color: var(--deck-muted); }
 #mix-status:empty { display: none; }
 #mix-status .muted { color: var(--deck-muted); }
+/* читка: сценарий за плеером */
+.tp .tp-read { background: var(--deck-2); border-color: var(--deck-line); color: var(--deck-ink); }
+.tp .tp-read.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+#mix-read:empty { display: none; }
+.read { position: relative; max-height: 360px; overflow: auto; overscroll-behavior: contain; padding: 6px; border: 1px solid var(--line2); border-radius: var(--r-l); background: var(--well); scroll-behavior: auto; }
+.read-sc { position: sticky; top: -6px; z-index: 1; padding: 10px 10px 6px; font: 700 11.5px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: var(--well); }
+.read-row { display: grid; grid-template-columns: 58px auto minmax(0, 1fr); gap: 4px 10px; align-items: baseline; padding: 8px 10px; border-radius: var(--r-m); cursor: pointer; transition: background-color var(--duration-fast) ease, opacity var(--duration-fast) ease; }
+.read-row .read-t { font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.read-row .read-x { font-size: 15px; line-height: 1.45; color: var(--ink); overflow-wrap: anywhere; }
+.read-row .read-x i { color: var(--muted); font-size: 13px; }
+.read-row .read-x em { font-style: normal; font-size: 12px; color: var(--none); }
+.read-row.gap { opacity: .55; }
+.read-row.cur { background: var(--surface); box-shadow: var(--sh-1); opacity: 1; }
+.read-row.cur .rt { background: linear-gradient(90deg, var(--ink) var(--p, 0%), color-mix(in srgb, var(--muted) 70%, transparent) var(--p, 0%)); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; }
+@media (hover: hover) and (pointer: fine) { .read-row:not(.cur):hover { background: color-mix(in srgb, var(--surface) 60%, transparent); } }
 .levels { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 13px; font-variant-numeric: tabular-nums; }
 .levels div { display: flex; gap: 8px; align-items: center; }
 .vgains { display: grid; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line2); }
@@ -433,6 +455,11 @@ input[type=radio] { accent-color: var(--accent); }
 .vg select { font-size: 12.5px; min-height: 30px; }
 @media (max-width: 700px) { .vg { grid-template-columns: 1fr 56px 24px; } .vg input[type=range], .vg select { grid-column: 1 / -1; } }
 .dl { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line2); }
+.vid { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--line2); }
+.vid-h { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.vid-h > b { font: 600 15px var(--display); font-stretch: 95%; }
+.vid-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.vid-row input[type=text] { flex: 1 1 240px; min-width: 0; min-height: 38px; padding: 0 12px; font-size: 14px; }
 /* таймлайн — утопленный экран */
 .tl { position: relative; display: grid; gap: 8px; padding: 8px; border: 1px solid var(--line2); border-radius: var(--r-l); background: var(--well); }
 .tl-bar { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; font-size: 12.5px; color: var(--muted); }
@@ -587,6 +614,52 @@ body.tl-full-open { overflow: hidden; }
 @media (max-width: 860px) { .srow { grid-template-columns: auto minmax(0, 1fr) 34px auto; } .srow select, .srow .gain { grid-column: 2; } }
 
 /* ------------------------------------------------------------------ прогресс и сообщения */
+/* дозапись: лист с суфлёром снизу, затемнение; кнопка записи — как в диктофоне */
+/* шторки снизу (дозапись, «другой кусок» на телефоне): затемнение следует за шторкой, пока её тянут (--dim) */
+.sheetbox { position: fixed; inset: 0; z-index: 75; display: grid; align-items: end; justify-items: center; padding: 16px; background: rgb(10 8 6 / calc(0.55 * var(--dim, 1))); overscroll-behavior: contain; }
+.sheetbox[data-ghost] { z-index: 76; }
+.rec-grab, .sheet-grab { position: relative; }
+.rec-grab::after, .sheet-grab::after { content: ""; position: absolute; inset: -12px -40px; }   /* ручка маленькая, а браться за неё легко */
+.rec-head, .sheet-top { touch-action: none; }
+#sheet { padding: 0; z-index: 74; }
+.sheet-in { position: relative; width: 100%; max-height: min(82vh, calc(100vh - 24px)); overflow: auto; overscroll-behavior: contain; display: grid; align-content: start; gap: 4px; padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px)); border-radius: 22px 22px 0 0; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-bottom: 0; box-shadow: var(--sh-2); touch-action: pan-y; }
+.sheet-top { position: sticky; top: 0; z-index: 1; display: grid; gap: 6px; padding: 10px 0 8px; background: var(--surface); cursor: grab; }
+.sheet-grab { justify-self: center; width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
+.sheet-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.sheet-head > b { font: 600 17px var(--display); font-stretch: 95%; }
+.sheet-head > .icon { margin-left: auto; }
+.sheet-q { margin: 0 0 4px; font-size: 14px; color: var(--muted); }
+.sheet-body { display: grid; }
+.sheet-body > p.muted { margin: 4px 0; font-size: 13px; }
+.sheet-body .cand { padding: 10px 0; border-top: 1px solid var(--line2); }
+.rec-in { position: relative; width: min(680px, 100%); max-height: calc(100vh - 32px); overflow: auto; display: grid; gap: 16px; padding: 10px 22px 20px; border-radius: 22px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); box-shadow: var(--sh-2); touch-action: pan-y; }
+.rec-grab { justify-self: center; width: 40px; height: 5px; border-radius: 3px; background: var(--line); cursor: grab; touch-action: none; margin-bottom: 2px; }
+.rec-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.rec-head > b { font: 600 18px var(--display); font-stretch: 95%; }
+.rec-x { margin-left: auto; }
+.rec-prompt { display: grid; gap: 10px; }
+.rec-l { font-size: 14px; color: var(--muted); line-height: 1.45; }
+.rec-l i { color: var(--muted); }
+.rec-l.cur { font-size: 26px; line-height: 1.3; color: var(--ink); font-weight: 500; text-wrap: balance; padding: 6px 0; }
+.rec-l.cur i { font-size: 16px; font-weight: 400; display: block; margin-bottom: 4px; }
+.rec-meter { position: relative; height: 10px; border-radius: 5px; background: var(--well); overflow: visible; box-shadow: inset 0 1px 2px rgb(0 0 0 / 15%); }
+.rec-bar { position: absolute; inset: 0; border-radius: 5px; background: linear-gradient(90deg, var(--ok) 0 70%, var(--accent) 70% 88%, var(--onair) 88%); transform-origin: left; transform: scaleX(0.02); transition: transform 60ms linear; }
+.rec-time { position: absolute; right: 0; top: 14px; font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.rec-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 14px; min-height: 72px; padding-top: 8px; }
+.rec-btn { position: relative; display: grid; place-items: center; width: 68px; height: 68px; border-radius: 50%; border: 3px solid var(--ink); background: transparent; cursor: pointer; padding: 0; }
+.rec-btn span { width: 52px; height: 52px; border-radius: 50%; background: var(--onair); transition: width var(--spring-bouncy-dur, 300ms) var(--spring-bouncy, ease), height var(--spring-bouncy-dur, 300ms) var(--spring-bouncy, ease), border-radius var(--spring-bouncy-dur, 300ms) var(--spring-bouncy, ease); }
+.rec-btn.on span { width: 26px; height: 26px; border-radius: 6px; }
+.rec-btn.on::after { content: ""; position: absolute; inset: -8px; border-radius: 50%; border: 2px solid var(--onair); animation: t-rec-ring 1.4s ease-out infinite; }
+@keyframes t-rec-ring { from { transform: scale(0.9); opacity: 0.8; } to { transform: scale(1.25); opacity: 0; } }
+.play.big-take { width: 52px; height: 52px; border-radius: 50%; }
+.rec-busy { font-size: 14px; color: var(--muted); }
+.rec-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding-top: 12px; border-top: 1px solid var(--line2); }
+.rec-count { position: absolute; inset: 0; display: grid; place-items: center; font: 800 120px/1 var(--display); color: var(--onair); background: color-mix(in srgb, var(--surface) 70%, transparent); border-radius: inherit; animation: t-count 650ms var(--ease-smooth-out) both; pointer-events: none; }
+@keyframes t-count { from { transform: scale(1.4); opacity: 0; filter: blur(6px); } 30% { opacity: 1; filter: none; transform: scale(1); } to { opacity: 0.9; transform: scale(0.94); } }
+.rr { display: inline-flex; align-items: center; gap: 3px; }
+.rr-mic { color: var(--onair); }
+@media (max-width: 720px) { #rec { padding: 0; } .rec-grab { cursor: grab; } .rec-in { border-radius: 22px 22px 0 0; padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); } .rec-l.cur { font-size: 22px; } }
+@media (prefers-reduced-motion: reduce) { .rec-btn.on::after, .rec-count { animation: none; } }
 /* прогресс — «остров» в деке: вырастает из пилюли и сворачивается обратно */
 #prog { position: relative; z-index: 2; flex: 0 1 460px; min-width: 0; margin: 0 auto; height: 40px; padding: 0 18px; border-radius: 20px; background: #000; color: var(--deck-ink); border: 1px solid var(--deck-line); box-shadow: 0 1px 0 rgb(255 255 255 / 6%) inset, 0 6px 18px -6px rgb(0 0 0 / 60%); display: flex; align-items: center; }
 #prog .in { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 14px; align-items: center; width: 100%; }
@@ -692,7 +765,7 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
         </section>
         <section class="card" id="s2">
           <h2 class="step"><b>2</b> Записи <small>каждый актёр — сколько угодно файлов</small></h2>
-          <label class="pick-files"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h1.4M4.6 5.5v5M7 3.2v9.6M9.4 5v6M11.8 6.5v3M14 8h.1"/></svg><strong>Выбрать файлы</strong>или перетащить сюда — можно все сразу<input type="file" id="audio-in" accept="audio/*,.m4a,.opus,.flac" multiple hidden></label>
+          <label class="pick-files"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h1.4M4.6 5.5v5M7 3.2v9.6M9.4 5v6M11.8 6.5v3M14 8h.1"/></svg><strong>Выбрать файлы</strong>или перетащить сюда — можно все сразу<input type="file" id="audio-in" accept="audio/*,.m4a,.opus,.flac,.zip" multiple hidden></label>
           <div id="files" class="files"></div>
           <p id="lonely"></p>
           <p class="muted small">Если у роли несколько файлов (например, основная запись и правки), нижний в списке считается свежее: где реплика есть в обоих, берётся из него.</p>
@@ -714,7 +787,7 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
         <div class="sum" id="rv-sum"></div>
         <div id="rv-rerec"></div>
         <div class="filters" id="rv-filter">
-          <button data-f="all" class="on">Все</button><button data-f="check">Проверить</button><button data-f="miss">Нет записи</button><button data-f="dirs">Озвученные ремарки</button>
+          <button data-f="all" class="on">Все</button><button data-f="check">Проверить</button><button data-f="miss">Нет записи</button><button data-f="slips">Оговорки</button><button data-f="dirs">Озвученные ремарки</button>
           <label><input type="checkbox" id="dirs-t"> показывать ремарки</label>
         </div>
         <div id="rv-list"></div>
@@ -726,6 +799,7 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
           <label for="tempo">Темп пауз <span id="tempo-v">1×</span><input type="range" id="tempo" min="0.5" max="1.8" step="0.05" value="1"></label>
           <label for="lufs">Итоговая громкость<select id="lufs"><option value="-14">−14 LUFS (YouTube, стриминг)</option><option value="-16">−16 LUFS (подкасты)</option><option value="-18" selected>−18 LUFS</option><option value="-23">−23 LUFS (эфир)</option></select></label>
           <label for="kbps">MP3<select id="kbps"><option value="160">160 кбит/с</option><option value="192">192 кбит/с</option><option value="256" selected>256 кбит/с</option><option value="320">320 кбит/с</option></select></label>
+          <label class="chk" for="room" title="Паузы между репликами заполняются тихим звуком той же комнаты — без провалов в цифровую тишину"><input type="checkbox" id="room" checked> Комнатный тон в паузах</label>
           <button class="primary" id="mixgo">Свести</button>
         </div>
         <p class="muted small">Голоса сводятся к одному уровню, реплики подтягиваются к уровню своего голоса; шёпот остаётся тише, крик громче — по ремаркам «(шёпотом)», «(громко)» и капсу. Кнопки ± у реплики — ручная поправка в дБ.</p>
@@ -2532,6 +2606,8 @@ const IC = {
   file: '<path d="M4 2.5h4.8L12 5.7v7.8H4z"/><path d="M8.6 2.6v3.3H12"/>',
   open: '<path d="M2.6 12.8V3.6h3.6l1.4 1.5h5.8v7.7z"/>',
   search: '<circle cx="7" cy="7" r="4"/><path d="M10 10l3.4 3.4"/>',
+  lines: '<path d="M3 4h10M3 8h10M3 12h6"/>',
+  mic: '<rect x="6" y="2.2" width="4" height="7.6" rx="2"/><path d="M3.8 7.6a4.2 4.2 0 0 0 8.4 0M8 11.8v2"/>',
   grip: '<circle class="f" cx="5.8" cy="4" r="1.15"/><circle class="f" cx="10.2" cy="4" r="1.15"/><circle class="f" cx="5.8" cy="8" r="1.15"/><circle class="f" cx="10.2" cy="8" r="1.15"/><circle class="f" cx="5.8" cy="12" r="1.15"/><circle class="f" cx="10.2" cy="12" r="1.15"/>',
   wave: '<path d="M2 8h1.4M4.6 5.5v5M7 3.2v9.6M9.4 5v6M11.8 6.5v3M14 8h.1"/>',
 };
@@ -2598,9 +2674,10 @@ function tform(el) {
 const project = (v, rate = 0.99) => (v / 1000) * rate / (1 - rate);
 /** Резиновый край: чем дальше за границу, тем меньше идёт следом. */
 const rubber = (over, dim = 200, c = 0.55) => (over * dim * c) / (dim + c * Math.abs(over));
-/** Скорость по последним точкам указателя: [{t, x, y}] → px/с. */
-function velocityOf(hist) {
-  const now = hist.length ? hist[hist.length - 1].t : 0, pts = hist.filter(p => now - p.t < 100);
+/** Скорость в момент отпускания по последним точкам указателя: [{t, x, y}] → px/с.
+ *  Считается от «сейчас», а не от последнего движения: палец остановился и потом отпустил — броска нет. */
+function velocityOf(hist, now = performance.now()) {
+  const pts = hist.filter(p => now - p.t < 100);
   if (pts.length < 2) return { x: 0, y: 0 };
   const a = pts[0], b = pts[pts.length - 1], dt = Math.max(1, b.t - a.t);
   return { x: (b.x - a.x) / dt * 1000, y: (b.y - a.y) / dt * 1000 };
@@ -3817,6 +3894,71 @@ function bindAmb(el) {
 }
 /** Для сохранения: без кэшей. */
 const ambSaved = () => { const st = ambState(); return { duck: st.duck, scenes: Object.fromEntries(Object.entries(st.scenes).map(([k, v]) => [k, { src: v.src, gain: v.gain, on: v.on, pick: v.pick, manual: v.manual }])), cands: st.cands }; };
+// ------------------------------------------------------------------ комнатный тон в паузах
+// Между репликами одной сцены — «дыхание» той же комнаты: самые ровные тихие места записи этого актёра,
+// на уровне реплики, со стыками по 40 мс. Звук не проваливается в цифровую тишину, паузы не «хлопают».
+// Если запись очищена — тон берётся из очищенной версии, так что лишнего шума не прибавляется.
+const ROOM = new WeakMap();
+function roomSample(f) {
+  if (!f || !f.y48 || !f.segs || f.segs.length < 2) return null;
+  const hit = ROOM.get(f); if (hit && hit.key === f.y48) return hit.val;
+  const SR = C.SR, y = f.y48, segs = f.segs, gaps = [];
+  const push = (a, b) => { a += 0.12; b -= 0.08; if (b - a >= 0.25) gaps.push([a, b]); };
+  push(0, segs[0].a); for (let i = 1; i < segs.length; i++) push(segs[i - 1].b, segs[i].a); push(segs[segs.length - 1].b, y.length / SR);
+  // комната — это ровный шум: окна по 20 мс без провалов в цифровой ноль (шумодав, гейт) и без хвостов речи и вдохов
+  const db = ([a, b]) => {
+    const w = Math.round(0.02 * SR), ws = []; let s = 0, n = 0;
+    for (let i = Math.round(a * SR), e = Math.min(y.length, Math.round(b * SR)); i + w <= e; i += w) { let q = 0; for (let j = i; j < i + w; j += 2) q += y[j] * y[j]; ws.push(10 * Math.log10(q / (w / 2) + 1e-20)); s += q; n += w / 2; }
+    if (ws.length < 5) return null; ws.sort((p, q) => p - q);
+    return ws[0] > -95 && ws[Math.floor(ws.length * 0.9)] - ws[Math.floor(ws.length * 0.1)] < 10 ? 10 * Math.log10(s / n + 1e-20) : null;
+  };
+  const list = gaps.map(g => ({ g, db: db(g) })).filter(x => x.db != null && x.db > -88).sort((p, q) => p.db - q.db);
+  let val = null;
+  if (list.length) {
+    const floor = list[0].db, pick = list.filter(x => x.db < floor + 5 && x.db < -38).slice(0, 12), xf = Math.round(0.02 * SR);
+    const parts = []; let len = 0;
+    for (const { g: [a, b] } of pick) { if (len > 4 * SR) break; const p = y.subarray(Math.round(a * SR), Math.round(b * SR)); parts.push(p); len += p.length - xf; }
+    if (len > 0.4 * SR) {
+      const out = new Float32Array(len + xf); let o = 0;
+      parts.forEach((p, k) => { for (let i = 0; i < p.length && o + i < out.length; i++) { const w = k && i < xf ? i / xf : 1, t = i >= p.length - xf && k < parts.length - 1 ? (p.length - i) / xf : 1; out[o + i] += p[i] * Math.min(w, t); } o += p.length - xf; });
+      val = { y: out.subarray(0, Math.max(0, o + xf)), db: floor };
+    }
+  }
+  ROOM.set(f, { key: f.y48, val }); return val;
+}
+/** Тон нужной длины: куски образца с перекрытием 30 мс, начало куска — псевдослучайно, но одинаково при каждом пересчёте. */
+function roomFill(smp, n, seed) {
+  const SR = C.SR, L = smp.length, xf = Math.round(0.03 * SR), out = new Float32Array(n); if (L < xf * 4) return null;
+  let o = 0, s = (seed * 2654435761) >>> 0;
+  while (o < n) {
+    s = (s * 1664525 + 1013904223) >>> 0; const st = Math.floor((s / 4294967296) * (L - xf * 3)), len = Math.min(L - st, n - o + xf);
+    for (let i = 0; i < len && o + i < n; i++) { const w = o && i < xf ? i / xf : 1, t = i >= len - xf ? (len - i) / xf : 1; out[o + i] += smp[st + i] * Math.min(w, t); }
+    o += len - xf; if (len <= xf) break;
+  }
+  const f = Math.min(Math.round(0.04 * SR), n >> 1); for (let i = 0; i < f; i++) { out[i] *= i / f; out[n - 1 - i] *= i / f; }
+  return out;
+}
+function roomToneMix(mix, lay) {
+  if (S.room === false) return [];
+  const SR = C.SR, out = [], voice = lay.placed.filter(p => p.item && !p.bed).sort((a, b) => a.at - b.at);
+  const sceneOf = t => { const sc = (lay.scenes || []).find(s => t >= s.start - 1e-6 && t < s.end); return sc ? sc.n : null; };
+  let reach = -1;
+  for (let k = 1; k < voice.length; k++) {
+    const A = voice[k - 1], B = voice[k], aEnd = A.at + A.audio.length / SR; reach = Math.max(reach, aEnd);
+    if (sceneOf(A.at) !== sceneOf(B.at)) continue;
+    const t0 = reach - 0.04, t1 = B.at + 0.04; if (t1 - t0 < 0.15) continue;
+    const sa = !A.item.fxKey ? roomSample(A.item.file) : null, sb = !B.item.fxKey ? roomSample(B.item.file0) : null;
+    const s = sa || sb; if (!s) continue;
+    const n = Math.round((t1 - t0) * SR), y = roomFill(s.y, n, k + 1); if (!y) continue;
+    const gA = (sa ? A.item : B.item).roomGain || 1, gB = sb && sb !== s ? B.item.roomGain || 1 : gA;
+    const yb = sb && sa && sb !== sa ? roomFill(sb.y, n, k + 7) : null;
+    for (let i = 0; i < n; i++) { const m = i / n; y[i] = yb ? y[i] * gA * (1 - m) + yb[i] * gB * m : y[i] * gA; }
+    const i0 = Math.round(t0 * SR); for (let i = 0; i < n && i0 + i < mix.length; i++) mix[i0 + i] += y[i];
+    out.push({ at: t0, audio: y });
+  }
+  return out;
+}
+
 
 
 // Монтажка — отмена и повтор правок сведения (Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y).
@@ -3873,6 +4015,8 @@ function tlFlash(t) {
 // эффект, громкость, сдвиг, выделение, отмена. Тянуть реплику — пауза перед ней (всё дальше едет следом);
 // с Alt или при нескольких выбранных — двигаются только они. Колёсико — масштаб, Shift+колёсико или
 // Alt+протяжка — прокрутка, мини-карта снизу — весь спектакль. «На весь экран» — таймлайн во весь монитор.
+// Щипок (тачпад или два пальца) — масштаб за пальцами, у пределов резина; линейку и курсор плеера тянут со звуком.
+// Пальцем: по пустому — листать, короткое касание реплики — выбрать, долгое — поднять и двигать.
 // Использует S, $, esc, fmt, charName, colorOf, cssVar, saveEdits, remixSoon, voiceIds, TP, tpTime, tpSeek,
 // tpPlay, tpPause из app.js; histPush, histUndo, histRedo, histUi, tlFlash из history.js; C — ядро.
 const TL = { HEAD: 150, RULER: 22, PAD: 6, MAX_ZOOM: 400, OV: 30 };
@@ -3916,8 +4060,10 @@ function drawTimeline() {
   const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
   const total = r.lay.total, areaW = W - TL.HEAD, minZoom = areaW / total;
   if (!st.zoom) st.zoom = minZoom;
-  st.zoom = Math.max(minZoom, Math.min(TL.MAX_ZOOM, st.zoom));
-  st.scroll = Math.max(0, Math.min(Math.max(0, total - areaW / st.zoom), st.scroll));
+  // во время щипка масштаб может зайти за предел (резина) — тогда и прокрутка отпускается, пока не отпружинит
+  st.zoom = st.elastic ? Math.max(minZoom * 0.5, Math.min(TL.MAX_ZOOM * 2, st.zoom)) : Math.max(minZoom, Math.min(TL.MAX_ZOOM, st.zoom));
+  const sMax = total - areaW / st.zoom;
+  st.scroll = st.elastic ? Math.max(Math.min(0, sMax), Math.min(Math.max(0, sMax), st.scroll)) : Math.max(0, Math.min(Math.max(0, sMax), st.scroll));
   const ink = cssVar('--ink'), muted = cssVar('--muted'), line = cssVar('--line'), line2 = cssVar('--line2'), bg = cssVar('--bg'), surface = cssVar('--surface'), accent = cssVar('--accent');
   g.fillStyle = bg; g.fillRect(0, 0, W, H);
   tracks.forEach((tr, i) => {
@@ -3930,11 +4076,12 @@ function drawTimeline() {
     g.save(); g.beginPath(); g.rect(6, y, TL.HEAD - 14, ROW); g.clip(); g.fillText(tr.name, 14, y + ROW / 2 + 0.5); g.restore();
     if (tr.voice && S.fxVoice && S.fxVoice[tr.voice] && S.fxVoice[tr.voice] !== 'none') { g.fillStyle = accent; g.beginPath(); g.arc(TL.HEAD - 14, y + ROW / 2 - ph / 2 + 4, 3.2, 0, Math.PI * 2); g.fill(); }
   });
+  if (st.elastic) { const xa = tlX(st, 0), xb = tlX(st, total); g.fillStyle = cssVar('--well'); if (xa > TL.HEAD) g.fillRect(TL.HEAD, TL.RULER, xa - TL.HEAD, H); if (xb < W) g.fillRect(xb, TL.RULER, W - xb, H); }
   g.fillStyle = surface; g.fillRect(TL.HEAD, 0, areaW, TL.RULER); g.strokeStyle = line; g.beginPath(); g.moveTo(TL.HEAD, TL.RULER + 0.5); g.lineTo(W, TL.RULER + 0.5); g.stroke();
   const steps = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600], step = steps.find(s => s * st.zoom >= 70) || 600;
   g.font = '11px ' + cssVar('--mono'); g.fillStyle = muted; g.textAlign = 'left';
   for (let t = Math.floor(st.scroll / step) * step; t <= st.scroll + areaW / st.zoom; t += step) {
-    const x = tlX(st, t); if (x < TL.HEAD) continue;
+    const x = tlX(st, t); if (x < TL.HEAD || t < 0 || t > total + 0.01) continue;
     g.strokeStyle = line2; g.beginPath(); g.moveTo(x + 0.5, TL.RULER - 6); g.lineTo(x + 0.5, H); g.stroke();
     g.fillText(C.ts(t), x + 3, 9);
   }
@@ -3993,6 +4140,7 @@ function tlPos(e) { const r = $('#tl-cv').getBoundingClientRect(); return { x: e
 function tlHit(e) {
   const st = tlState(), { x, y } = tlPos(e), tracks = S.tlTracks || [];
   if (y < TL.RULER) return { ruler: true, t: tlT(st, x) };
+  if (x >= TL.HEAD && TP.buf && S.result && S.result.out && Math.abs(x - tlX(st, tpTime())) <= (e.pointerType === 'touch' ? 10 : 4)) return { ruler: true, play: true, t: tlT(st, x) };   // за курсор плеера — как за линейку
   const ti = Math.floor((y - TL.RULER) / st.row), tr = tracks[ti];
   if (x < TL.HEAD) return tr ? { head: true, track: tr } : null;
   if (!tr) return { empty: true, t: tlT(st, x) };
@@ -4057,7 +4205,7 @@ function tlVoiceGain(voice, d) {
 }
 // ------------------------------------------------------------------ панели
 function tlInfoHtml() {
-  const st = tlState(), r = S.result; if (!r || !st.sel.size) return '<span class="muted">Щёлкните реплику · Ctrl или Shift+щелчок — добавить · протяжка по пустому месту — рамка · щелчок по имени дорожки — все реплики персонажа · <b>правый щелчок — меню</b> · тянуть реплику — двигать, с Alt — только её · колёсико — масштаб · пробел — играть · Ctrl+Z — отменить</span>';
+  const st = tlState(), r = S.result; if (!r || !st.sel.size) return '<span class="muted">Щёлкните реплику · Ctrl или Shift+щелчок — добавить · протяжка по пустому месту — рамка · щелчок по имени дорожки — все реплики персонажа · <b>правый щелчок — меню</b> · тянуть реплику — двигать, с Alt — только её · колёсико или щипок — масштаб · тянуть по линейке или за курсор — слышно, где вы · пробел — играть · Ctrl+Z — отменить</span>';
   const fxSel = (cur, auto) => `<label>эффект <select data-act="tl-fx"><option value="">${auto || 'как у персонажа'}</option>${Object.entries(FX_PRESETS).map(([k, p]) => `<option value="${k}" ${cur === k ? 'selected' : ''}>${p.name}</option>`).join('')}</select></label>`;
   const gainBtns = `<span class="gain">громкость <button class="icon" data-act="tl-g-" aria-label="Тише на 1 дБ">${ic('minus')}</button><button class="icon" data-act="tl-g+" aria-label="Громче на 1 дБ">${ic('plus')}</button></span>`;
   if (st.sel.size > 1) {
@@ -4098,7 +4246,7 @@ function tlFollow() {                                  // курсор плее�
   cancelAnimationFrame(tlRaf); drawTimeline();
   const step = () => {
     tlRaf = 0; const st = tlState(), total = S.result && S.result.out ? S.result.out.length / C.SR : 0;
-    tlHeadUpdate(); tlFrame++;
+    tlHeadUpdate(); tlFrame++; if (typeof readTick === 'function') readTick();
     const txt = `${fmt(tpTime())} / ${fmt(total)}`;
     document.querySelectorAll('#tp-time, .tp-time-txt').forEach(el => { if (el.textContent !== txt) el.textContent = txt; });
     const sk = $('#tp-seek'); if (sk && !sk.matches(':active') && tlFrame % 3 === 0) sk.value = tpTime();
@@ -4202,23 +4350,28 @@ function bindTimeline() {
     if (hit.clip) { const id = hit.clip.row.cue.id; if (!st.sel.has(id)) tlSelect([id]); tlMenuOpen(e.clientX, e.clientY, { ids: new Set(st.sel), t: hit.clip.row.at }); return; }
     tlMenuOpen(e.clientX, e.clientY, { ids: new Set(st.sel), t: hit.t != null ? Math.max(0, hit.t) : null });
   });
+  const touches = new Map();                           // пальцы на холсте: два — щипок
+  const panFrom = x => ({ x0: x, scroll0: tlState().scroll, hist: [{ t: performance.now(), x, y: 0 }] });
   host.addEventListener('pointerdown', e => {
     if (e.target.id === 'tl-ov') { const st = tlState(); st.ovDrag = true; tlOvSeek(e); try { e.target.setPointerCapture(e.pointerId); } catch {} return; }
     if (e.target.id !== 'tl-cv' || e.button === 2) return;
     tlMenuClose(false);
-    const st = tlState(), hit = tlHit(e), add = e.ctrlKey || e.metaKey || e.shiftKey, pos = tlPos(e); e.target.focus();
-    if (!hit) return;
-    if (e.button === 1 || (e.altKey && !hit.clip)) { tlCoastStop(); st.pan = { x0: e.clientX, scroll0: st.scroll, hist: [{ t: performance.now(), x: e.clientX, y: 0 }] }; }
-    else if (hit.ruler) { st.scrub = true; tlSeek(hit.t); }
-    else if (hit.head) { const ids = hit.track.clips.filter(c => !c.fixed).map(c => c.row.cue.id); tlSelect(ids, add); }
-    else if (hit.clip && add) { st.band = { x0: pos.x, y0: pos.y, x1: pos.x, y1: pos.y, add: true, base: new Set(st.sel), toggle: hit.clip.row.cue.id }; }
-    else if (hit.clip) {
-      const id = hit.clip.row.cue.id, inGroup = st.sel.size > 1 && st.sel.has(id);
-      const group = inGroup ? new Set(st.sel) : null, own = e.altKey || st.own || !!group;
-      const clips = group ? tlAllClips().filter(c => group.has(c.row.cue.id)) : [hit.clip];
-      const min = Math.max(...clips.map(c => tlMinDelta(c, own)));
-      st.drag = { clip: hit.clip, x0: e.clientX, delta: 0, own, moved: false, min, group, clips };
+    const st = tlState(), touch = e.pointerType === 'touch';
+    tlZoomStop(st);                                    // коснулись — инерция и пружина масштаба останавливаются там, где были
+    if (touch) {
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      try { e.target.setPointerCapture(e.pointerId); } catch {}
+      if (touches.size === 2) { tlPinchBegin(st, [...touches.values()]); return; }
+      if (touches.size > 2 || st.pinch || st.pinchRest) return;
     }
+    const hit = tlHit(e), add = e.ctrlKey || e.metaKey || e.shiftKey, pos = tlPos(e); e.target.focus();
+    if (!hit) return;
+    if (e.button === 1 || (e.altKey && !hit.clip) || (touch && hit.empty)) st.pan = panFrom(e.clientX);   // пальцем по пустому — листать
+    else if (hit.ruler) { st.scrub = true; tlSeek(hit.t); tlGrain(hit.t, true); }
+    else if (hit.head) { const ids = hit.track.clips.filter(c => !c.fixed).map(c => c.row.cue.id); tlSelect(ids, add); }
+    else if (hit.clip && touch) st.hold = { clip: hit.clip, x0: e.clientX, y0: e.clientY, x: e.clientX, timer: setTimeout(() => tlLift(st), 320) };   // пальцем: реплику берут долгим нажатием, иначе — листать
+    else if (hit.clip && add) { st.band = { x0: pos.x, y0: pos.y, x1: pos.x, y1: pos.y, add: true, base: new Set(st.sel), toggle: hit.clip.row.cue.id }; }
+    else if (hit.clip) st.drag = tlDragStart(hit.clip, e.clientX, e.altKey);
     else st.band = { x0: pos.x, y0: pos.y, x1: pos.x, y1: pos.y, add, base: new Set(add ? st.sel : []) };
     try { e.target.setPointerCapture(e.pointerId); } catch {}
   });
@@ -4226,6 +4379,16 @@ function bindTimeline() {
     if (e.target.id === 'tl-ov') { if (tlState().ovDrag) tlOvSeek(e); return; }
     if (e.target.id !== 'tl-cv') return;
     const st = tlState();
+    if (touches.has(e.pointerId)) {
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (st.pinch) { tlPinchMove(st, [...touches.values()]); return; }
+      if (st.pinchRest) return;
+      if (st.hold) {
+        st.hold.x = e.clientX;
+        if (Math.hypot(e.clientX - st.hold.x0, e.clientY - st.hold.y0) < 8) return;
+        clearTimeout(st.hold.timer); st.pan = panFrom(st.hold.x0); st.hold = null;
+      }
+    }
     if (st.drag) {
       const d = (e.clientX - st.drag.x0) / st.zoom; if (Math.abs(e.clientX - st.drag.x0) > 3) st.drag.moved = true;
       // упёрлась в соседнюю или в предел — не стоп, а резина: чем дальше тянешь, тем меньше идёт
@@ -4240,7 +4403,7 @@ function bindTimeline() {
       drawTimeline();
     }
     else if (st.pan) { st.pan.hist.push({ t: performance.now(), x: e.clientX, y: 0 }); if (st.pan.hist.length > 8) st.pan.hist.shift(); st.scroll = st.pan.scroll0 - (e.clientX - st.pan.x0) / st.zoom; drawTimeline(); }
-    else if (st.scrub) { const hit = tlHit(e); if (hit && hit.t != null) tlSeek(hit.t); }
+    else if (st.scrub) { const hit = tlHit(e); if (hit && hit.t != null) { tlSeek(hit.t); tlGrain(Math.max(0, hit.t)); } }
     else { const hit = tlHit(e); e.target.style.cursor = hit && hit.clip ? 'grab' : hit && hit.ruler ? 'col-resize' : hit && hit.head ? 'pointer' : 'crosshair'; }
   });
   const up = () => {
@@ -4260,15 +4423,30 @@ function bindTimeline() {
     if (st.pan && typeof velocityOf === 'function') tlCoast(-velocityOf(st.pan.hist).x / st.zoom);
     st.pan = null; st.scrub = false; drawTimeline();
   };
-  host.addEventListener('pointerup', e => { if (e.target.id === 'tl-cv' || e.target.id === 'tl-ov') up(); });
-  host.addEventListener('pointercancel', e => { if (e.target.id === 'tl-cv' || e.target.id === 'tl-ov') up(); });
+  const end = e => {
+    if (touches.has(e.pointerId)) {
+      touches.delete(e.pointerId); const st = tlState();
+      if (st.pinch) { tlPinchEnd(st); st.pinchRest = touches.size > 0; return; }
+      if (st.pinchRest) { st.pinchRest = touches.size > 0; return; }
+      if (st.hold) { clearTimeout(st.hold.timer); const id = st.hold.clip.row.cue.id; st.hold = null; if (e.type === 'pointerup') tlSelect([id]); return; }   // короткое касание — выбрать
+    }
+    if (e.target.id === 'tl-cv' || e.target.id === 'tl-ov') up();
+  };
+  host.addEventListener('pointerup', end);
+  host.addEventListener('pointercancel', end);
   host.addEventListener('dblclick', e => { if (e.target.id !== 'tl-cv') return; const hit = tlHit(e); if (hit && hit.clip) tlSeek(hit.clip.row.at, true); });
   host.addEventListener('wheel', e => {
     if (e.target.id !== 'tl-cv' && e.target.id !== 'tl-ov') return; e.preventDefault();
     const st = tlState(), mx = e.target.id === 'tl-cv' ? tlPos(e).x : null;
+    if (e.ctrlKey && mx != null && !e.shiftKey) { tlPinchWheel(st, e.deltaMode ? e.deltaY * 16 : e.deltaY, mx); return; }   // щипок на тачпаде приходит как Ctrl+колёсико
+    if (!st.pinchW) tlZoomStop(st);
     if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.target.id === 'tl-ov') { st.scroll += (e.deltaX || e.deltaY) / st.zoom; drawTimeline(); }
     else tlZoom(Math.pow(1.25, -e.deltaY / 100), mx);
   }, { passive: false });
+  // Safari на Mac: щипок приходит своими событиями жестов, со свойством scale
+  host.addEventListener('gesturestart', e => { if (e.target.id !== 'tl-cv') return; e.preventDefault(); const st = tlState(); if (st.pinch) return; const mx = tlPos(e).x; tlZoomStop(st); st.pinchG = { z0: st.zoom, mx, t: tlT(st, mx) }; });
+  host.addEventListener('gesturechange', e => { const st = tlState(), p = st.pinchG; if (!p) return; e.preventDefault(); tlPinchTo(st, p.z0 * e.scale, p.mx, p.t); });
+  host.addEventListener('gestureend', e => { const st = tlState(), p = st.pinchG; if (!p) return; e.preventDefault(); st.pinchG = null; tlZoomSettle(p.mx, tlT(st, p.mx)); });
   host.addEventListener('keydown', e => {
     if (e.target.closest && e.target.closest('#tl-menu')) {         // меню: стрелки, Enter, Esc
       const items = [...$('#tl-menu').querySelectorAll('button:not([disabled])')], i = items.indexOf(document.activeElement);
@@ -4334,6 +4512,91 @@ function tlSettle(d, over) {
   st.settle = { m: mv(over, 0.002, owner), ids: d.group ? new Set(d.group) : null, own: d.own, idx: d.clip.idx };
   mvTo(st.settle.m, 0, { damping: 0.62, response: 0.4 });
 }
+function tlDragStart(clip, x0, alt) {
+  const st = tlState(), id = clip.row.cue.id, inGroup = st.sel.size > 1 && st.sel.has(id);
+  const group = inGroup ? new Set(st.sel) : null, own = alt || st.own || !!group;
+  const clips = group ? tlAllClips().filter(c => group.has(c.row.cue.id)) : [clip];
+  return { clip, x0, delta: 0, own, moved: false, min: Math.max(...clips.map(c => tlMinDelta(c, own))), group, clips };
+}
+/** Долгое нажатие пальцем: реплика «поднимается» (выделяется, телефон коротко вздрагивает) и дальше идёт за пальцем. */
+function tlLift(st) {
+  const h = st.hold; if (!h) return; st.hold = null;
+  st.drag = tlDragStart(h.clip, h.x, false);
+  if (!st.sel.has(h.clip.row.cue.id)) tlSelect([h.clip.row.cue.id]); else drawTimeline();
+  try { navigator.vibrate && navigator.vibrate(8); } catch {}
+}
+// ------------------------------------------------------------------ щипок: масштаб за пальцами, у пределов — резина
+function tlZoomLimits(st) { return [((st.W || 800) - TL.HEAD) / S.result.lay.total, TL.MAX_ZOOM]; }
+/** За пределом масштаб идёт всё неохотнее (резина в логарифме: край ощущается одинаково на любом масштабе). */
+function tlElastic(st, raw) {
+  const [lo, hi] = tlZoomLimits(st), rb = o => typeof rubber === 'function' ? rubber(o, 0.6) : 0;
+  return raw < lo ? lo * Math.exp(-rb(Math.log(lo / raw))) : raw > hi ? hi * Math.exp(rb(Math.log(raw / hi))) : raw;
+}
+function tlZoomStop(st) {
+  tlCoastStop();
+  if (st.zSettle) { SPRING.live.delete(st.zSettle); st.zSettle = null; }
+  if (typeof MOTION !== 'undefined' && MOTION.view) { cancelAnimationFrame(MOTION.view); MOTION.view = 0; }
+}
+/** Точка под пальцами (время t) остаётся под пальцами — вид растягивается вокруг неё и едет вместе с ними. */
+function tlPinchTo(st, raw, mx, t) { st.elastic = true; st.zoom = tlElastic(st, raw); st.scroll = t - (mx - TL.HEAD) / st.zoom; drawTimeline(); }
+const tlMid = pts => { const r = $('#tl-cv').getBoundingClientRect(); return { mx: (pts[0].x + pts[1].x) / 2 - r.left, d: Math.max(20, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)) }; };
+function tlPinchBegin(st, pts) {
+  // второй палец: что начал первый — отменяется без следа (реплика не сдвигается, рамка не выделяет)
+  if (st.hold) { clearTimeout(st.hold.timer); st.hold = null; }
+  if (st.band) { st.sel = st.band.base; st.band = null; tlRefreshInfo(); }
+  st.drag = null; st.pan = null; st.scrub = false; tlZoomStop(st);
+  const { mx, d } = tlMid(pts);
+  st.pinch = { d0: d, z0: st.zoom, t: tlT(st, mx), mx, hist: [{ t: performance.now(), x: mx, y: 0 }] };
+  drawTimeline();
+}
+function tlPinchMove(st, pts) {
+  const p = st.pinch, { mx, d } = tlMid(pts); p.mx = mx;
+  p.hist.push({ t: performance.now(), x: mx, y: 0 }); if (p.hist.length > 8) p.hist.shift();
+  tlPinchTo(st, p.z0 * d / p.d0, mx, p.t);
+}
+function tlPinchEnd(st) {
+  const p = st.pinch; st.pinch = null; if (!p) return;
+  const [lo, hi] = tlZoomLimits(st);
+  if (st.zoom < lo * 0.999 || st.zoom > hi * 1.001) { tlZoomSettle(p.mx, tlT(st, p.mx)); return; }   // за пределом — отпружинит
+  st.elastic = false; drawTimeline();
+  if (typeof velocityOf === 'function') tlCoast(-velocityOf(p.hist).x / st.zoom);                     // отпустили на ходу — вид катится дальше
+}
+/** Щипок на тачпаде: поток Ctrl+колёсико. Конца жеста нет — считаем, что кончился, когда 160 мс тихо. */
+function tlPinchWheel(st, dy, mx) {
+  if (!st.pinchW || Math.abs(mx - st.pinchW.mx) > 40) { tlZoomStop(st); clearTimeout(st.pinchW && st.pinchW.timer); st.pinchW = { raw: st.zoom, mx, t: tlT(st, mx) }; }
+  const p = st.pinchW, [lo, hi] = tlZoomLimits(st);
+  p.raw = Math.max(lo * 0.25, Math.min(hi * 4, p.raw * Math.exp(-Math.max(-40, Math.min(40, dy)) * 0.01)));   // Chrome: exp(−deltaY/100) — ровно масштаб пальцев
+  tlPinchTo(st, p.raw, mx, p.t);
+  clearTimeout(p.timer); p.timer = setTimeout(() => { if (st.pinchW !== p) return; st.pinchW = null; tlZoomSettle(p.mx, tlT(st, p.mx)); }, 160);
+}
+/** Отпустили за пределом: масштаб возвращается на пружине, точка под пальцами — насколько позволяют края. */
+function tlZoomSettle(mx, t) {
+  const st = tlState(); if (!S.result || !S.result.lay) { st.elastic = false; return; }
+  const [lo, hi] = tlZoomLimits(st), z1 = Math.max(lo, Math.min(hi, st.zoom)), span = ((st.W || 800) - TL.HEAD) / z1;
+  const s1 = Math.max(0, Math.min(Math.max(0, S.result.lay.total - span), t - (mx - TL.HEAD) / z1)), t1 = s1 + (mx - TL.HEAD) / z1;
+  const L0 = Math.log(st.zoom), L1 = Math.log(z1);
+  if ((Math.abs(L1 - L0) < 0.002 && Math.abs(t1 - t) < 1e-3) || typeof mv !== 'function' || (typeof MOTION !== 'undefined' && MOTION.reduce)) { st.elastic = false; st.zoom = z1; st.scroll = s1; drawTimeline(); return; }
+  const owner = { render() { const k = m.v; st.zoom = Math.exp(L0 + (L1 - L0) * k); st.scroll = t + (t1 - t) * k - (mx - TL.HEAD) / st.zoom; if (!SPRING.live.has(m)) { st.elastic = false; st.zSettle = null; } drawTimeline(); } };
+  const m = mv(0, 0.001, owner); st.zSettle = m; mvTo(m, 1, { damping: 1, response: 0.36 });
+}
+// ------------------------------------------------------------------ звук при протяжке курсора
+/** Пока плеер стоит, под курсором звучат короткие кусочки — как лента, которую качают руками у головки:
+ *  тянешь быстрее — звучит быстрее и выше, назад — задом наперёд, остановился — тишина. */
+const SCRUB = { at: 0, t: -1 };
+function tlGrain(t, first = false) {
+  if (!TP.buf || TP.playing || !S.result || !S.result.out) return;
+  const now = performance.now(), dt = (now - SCRUB.at) / 1000;
+  if (!first && dt < 0.035) return;
+  const fresh = first || SCRUB.t < 0 || dt > 0.3, dir = fresh ? 1 : Math.sign(t - SCRUB.t), speed = fresh ? 1 : Math.abs(t - SCRUB.t) / dt;
+  SCRUB.at = now; SCRUB.t = t;
+  if (!dir || speed < 0.05) return;
+  const rate = Math.max(0.5, Math.min(2.5, speed)), n = Math.round(0.07 * rate * C.SR), a = Math.round((dir < 0 ? t - 0.07 * rate : t) * C.SR);
+  if (a < 0 || a + n > TP.len) return;
+  const ctx = audioCtx(); if (ctx.state === 'suspended') ctx.resume();
+  const all = TP.buf.getChannelData(0), buf = ctx.createBuffer(1, n, C.SR), y = buf.getChannelData(0), fade = Math.max(1, Math.min(n >> 2, Math.round(0.012 * rate * C.SR)));
+  for (let i = 0; i < n; i++) { const v = all[dir < 0 ? a + n - 1 - i : a + i]; y[i] = i < fade ? v * i / fade : i > n - fade ? v * (n - i) / fade : v; }
+  const src = ctx.createBufferSource(); src.buffer = buf; src.playbackRate.value = rate; src.connect(audioOut()); src.start();
+}
 function tlOvSeek(e) {                                 // мини-карта: щелчок и протяжка — сюда вид
   const cv = $('#tl-ov'), st = tlState(), r = cv.getBoundingClientRect(), W = r.width, total = S.result.lay.total;
   const t = (e.clientX - r.left - TL.HEAD) / (W - TL.HEAD) * total, span = ((st.W || W) - TL.HEAD) / st.zoom;
@@ -4391,10 +4654,91 @@ const atTop = el => el.getBoundingClientRect().top < innerHeight / 2;
 function appear(el) {
   if (el.id === 'prog') { cancelGhost(el); islandIn(el); return; }
   if (el.id === 'msg') { cancelGhost(el); toastReset(el); const dy = atTop(el) ? -22 : 22; mIn(el, { opacity: 0, transform: `translate(-50%, ${dy}px) scale(0.9)`, filter: 'blur(6px)' }, [0.7, 0.5], { rest: { transform: 'translate(-50%, 0px) scale(1)' } }); return; }
+  if (el.classList.contains('sheetbox')) { sheetIn(el); return; }
   if (el.id === 'tl-menu') { if (performance.now() - MOTION.kbd < 150) return; mIn(el, { opacity: 0, transform: 'scale(0.9)' }, [0.78, 0.34]); return; }
   if (el.classList.contains('picker')) { mIn(el, { opacity: 0, transform: 'translateY(-6px) scale(0.98)', filter: 'blur(2px)' }, [0.85, 0.36]); staggerList([...el.children].slice(0, 8), 30); return; }
   if (el.matches('section.card')) { if (MOTION.ready) mIn(el, { opacity: 0, transform: 'translateY(18px) scale(0.985)', filter: 'blur(3px)' }, [0.86, 0.55]); return; }
   if (el.matches('[data-tabpane]')) { paneIn(el); return; }
+}
+// ------------------------------------------------------------------ шторки снизу: дозапись и «другой кусок» на телефоне
+// Выезжает снизу на пружине; за ручку или шапку тянется 1:1, вверх — резина; бросок вниз или дальше половины —
+// уезжает с той же скоростью, иначе возвращается на пружине с лёгким перелётом. Затемнение следует за шторкой.
+const phoneUI = () => matchMedia('(max-width: 720px)').matches;
+const SHEET_IN = '.rec-in, .sheet-in';
+function sheetIn(el) {
+  cancelGhost(el); if (el._sheet) mvSet(el._sheet, 0);
+  const inn = el.querySelector(SHEET_IN); if (!mOK() || !inn) return;
+  el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' });
+  if (phoneUI()) mIn(inn, { transform: 'translateY(100%)' }, [0.9, 0.42]); else mIn(inn, { opacity: 0, transform: 'translateY(48px) scale(0.97)' }, [0.84, 0.5]);
+}
+/** Закрытие кнопкой, Esc или щелчком по затемнению: уходит копия — вниз, откуда пришла; настоящая скрыта сразу. */
+function sheetGhostOut(el) {
+  const inn = el && el.querySelector(SHEET_IN); if (!mOK() || !inn || el.hidden) return;
+  const tr = getComputedStyle(inn).transform, y0 = tr && tr !== 'none' ? new DOMMatrixReadOnly(tr).m42 : 0, bg = getComputedStyle(el).backgroundColor;
+  const g = el.cloneNode(true); g.removeAttribute('id'); g.querySelectorAll('[id]').forEach(x => x.removeAttribute('id'));
+  g.inert = true; g.setAttribute('aria-hidden', 'true'); g.dataset.ghost = el.id; g.style.pointerEvents = 'none'; g.hidden = false;
+  document.body.appendChild(g);
+  const gi = g.querySelector(SHEET_IN), phone = phoneUI(), ms = phone ? 260 : 200;
+  g.animate([{ backgroundColor: bg }, { backgroundColor: 'rgb(10 8 6 / 0)' }], { duration: ms, easing: 'ease-out', fill: 'forwards' });
+  const a = gi.animate(phone ? [{ transform: `translateY(${y0}px)` }, { transform: `translateY(${inn.offsetHeight + 24}px)` }]
+    : [{ opacity: 1, transform: 'none', filter: 'blur(0px)' }, { opacity: 0, transform: 'translateY(24px) scale(0.97)', filter: 'blur(3px)' }],
+    { duration: ms, easing: 'cubic-bezier(0.32, 0.72, 0, 1)', fill: 'forwards' });
+  a.onfinish = a.oncancel = () => g.remove();
+}
+/** Тянуть шторку. close(true) — её смахнули (уже за краем, копия не нужна). canClose() — можно ли закрыть сейчас. */
+function sheetDrag(el, grabSel, close, canClose = () => true) {
+  let d = null, out = false;
+  const inner = () => el.querySelector(SHEET_IN);
+  const owner = { render() {
+    const inn = inner(), y = m.v, h = (inn && inn.offsetHeight) || 400;
+    if (inn) inn.style.transform = Math.abs(y) < 0.05 ? '' : `translate3d(0, ${y.toFixed(2)}px, 0)`;
+    if (y > 0.5) el.style.setProperty('--dim', Math.max(0, 1 - y / h).toFixed(3)); else el.style.removeProperty('--dim');
+    if (out && !SPRING.live.has(m)) { out = false; el.style.pointerEvents = ''; close(true); mvSet(m, 0); }
+  } };
+  const m = mv(0, 0.3, owner); el._sheet = m;
+  el.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || out || !e.target.closest(grabSel) || e.target.closest('button, input, select, a, label')) return;
+    const inn = inner(); if (!inn) return;
+    const tr = getComputedStyle(inn).transform, cur = tr && tr !== 'none' ? new DOMMatrixReadOnly(tr).m42 : 0;   // перехват на лету — с того места, где она сейчас
+    inn.getAnimations().forEach(a => a.cancel()); mvSet(m, cur);
+    d = { id: e.pointerId, y0: e.clientY - cur, hist: [{ t: performance.now(), x: 0, y: e.clientY }] };
+    try { e.target.setPointerCapture(e.pointerId); } catch {}
+  });
+  el.addEventListener('pointermove', e => {
+    if (!d || d.id !== e.pointerId) return;
+    const y = e.clientY - d.y0; d.hist.push({ t: performance.now(), x: 0, y: e.clientY }); if (d.hist.length > 8) d.hist.shift();
+    mvSet(m, y < 0 ? -rubber(-y, 90) : canClose() ? y : rubber(y, 140));
+  });
+  const up = e => {
+    if (!d || d.id !== e.pointerId) return; const v = velocityOf(d.hist).y; d = null;
+    const inn = inner(), h = (inn && inn.offsetHeight) || 400;
+    // куда долетела бы (проекция Apple, как у прокрутки): дальше половины или бросок — закрыть
+    if (canClose() && m.v > 0 && (m.v + project(v, 0.998) > h * 0.5 || v > 900)) { out = true; el.style.pointerEvents = 'none'; mvTo(m, h + 24, { damping: 1, response: 0.28, velocity: Math.max(v, 400) }); }
+    else mvTo(m, 0, { damping: 0.8, response: 0.32, velocity: v });
+  };
+  el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+}
+/** Нижняя шторка общего вида: шапка, содержимое, свой обработчик щелчков. */
+const SHEET = { back: null, onClick: null };
+function sheetOpen(head, body, { label = '', onClick = null, id = '' } = {}) {
+  let el = document.getElementById('sheet');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'sheet'; el.className = 'sheetbox'; el.hidden = true; document.body.appendChild(el);
+    el.addEventListener('click', e => { if (e.target === el || e.target.closest('[data-sheet=close]')) sheetClose(); else if (SHEET.onClick) SHEET.onClick(e); });
+    sheetDrag(el, '.sheet-grab, .sheet-top', () => sheetClose(true));
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !el.hidden) sheetClose(); });
+  }
+  if (el.hidden) SHEET.back = document.activeElement;
+  SHEET.onClick = onClick; el.dataset.for = id;
+  el.innerHTML = `<div class="sheet-in" role="dialog" aria-modal="true" aria-label="${label}"><div class="sheet-top"><div class="sheet-grab" aria-hidden="true"></div><div class="sheet-head">${head}<button class="icon" data-sheet="close" aria-label="Закрыть">${ic('close')}</button></div></div><div class="sheet-body">${body}</div></div>`;
+  el.hidden = false; el.querySelector('[data-sheet=close]').focus({ preventScroll: true });
+}
+function sheetClose(swiped) {
+  const el = document.getElementById('sheet'); if (!el || el.hidden) return;
+  if (!swiped) sheetGhostOut(el);
+  if (typeof playing !== 'undefined' && playing && playing.btn && el.contains(playing.btn)) stop();   // кусок, который слушали в шторке, замолкает с ней
+  el.hidden = true; el.innerHTML = ''; SHEET.onClick = null;
+  if (SHEET.back && SHEET.back.isConnected) SHEET.back.focus({ preventScroll: true }); SHEET.back = null;
 }
 // ------------------------------------------------------------------ остров: прогресс вырастает из пилюли
 function islandIn(el) {
@@ -4725,7 +5069,7 @@ function initDeck() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) deckKick(); });
   deckKick();
 }
-function deckPlaying() { return !!((typeof playing !== 'undefined' && playing) || (typeof TP !== 'undefined' && TP.playing) || (typeof ab !== 'undefined' && ab)); }
+function deckPlaying() { return !!((typeof playing !== 'undefined' && playing) || (typeof TP !== 'undefined' && TP.playing) || (typeof ab !== 'undefined' && ab) || (typeof REC !== 'undefined' && REC.live)); }
 /** Разбудить деку: звук пошёл. Зовётся из audioOut(), так что любое «слушать» будит её само. */
 function deckKick() { if (!DECK.raf && DECK.needle) { DECK.t = performance.now(); DECK.raf = requestAnimationFrame(deckTick); } }
 function deckTick(now) {
@@ -4733,7 +5077,7 @@ function deckTick(now) {
   const dt = Math.min(0.05, Math.max(0.001, (now - DECK.t) / 1000)); DECK.t = now;
   const on = deckPlaying(), reduce = typeof MOTION !== 'undefined' && MOTION.reduce;
   if (on !== DECK.on) { DECK.on = on; document.getElementById('onair')?.classList.toggle('on', on); document.getElementById('vu')?.classList.toggle('lit', on); }
-  const lv = on && typeof audioLevel === 'function' ? audioLevel() : 0;
+  const lv = typeof REC !== 'undefined' && REC.live ? REC.level : on && typeof audioLevel === 'function' ? audioLevel() : 0;   // пишем — стрелка показывает микрофон
   const target = lv > 1e-5 ? vuAngle(20 * Math.log10(lv) + 18) : VU.min - 2;
   if (reduce) { DECK.ang = target; DECK.vel = 0; }
   else { const k = 160, c = 2 * Math.sqrt(k) * 0.7, acc = k * (target - DECK.ang) - c * DECK.vel; DECK.vel += acc * dt; DECK.ang += DECK.vel * dt; }
@@ -4826,11 +5170,55 @@ function rerecList() {
     const st = statusOf(c), src = sourceOf(c); let why = null;
     if (st.k === 'miss') why = 'нет записи';
     else if (st.k === 'check' && src && src.kind !== 'upload' && src.kind !== 'manual' && (src.sim ?? 1) < 0.45) why = `проверить: услышано «${(src.text || '').trim().slice(0, 80)}»`;
+    else { const d = slipOf(c); if (d && d.errs >= 2) why = `оговорка: услышано «${(src.text || '').trim().slice(0, 80)}»`; }
     if (!why) continue;
     if (!out.has(c.spk)) out.set(c.spk, []);
     out.get(c.spk).push({ cue: c, why });
   }
   return out;
+}
+// ------------------------------------------------------------------ оговорки: распознанное против сценария, по словам
+const slipNorm = w => w.toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]/g, '');
+function slipWords(s) { return String(s || '').split(/\s+/).map(raw => ({ raw, n: slipNorm(raw) })).filter(w => w.n); }
+/** Похожесть слов 0…1: расстояние Левенштейна к длине. «пошёл» и «пошел», «сделал» и «сделала» — одно слово. */
+function slipSim(a, b) {
+  if (a === b) return 1; const n = a.length, m = b.length; if (!n || !m) return 0;
+  let prev = Array.from({ length: m + 1 }, (_, j) => j), cur = new Array(m + 1);
+  for (let i = 1; i <= n; i++) { cur[0] = i; for (let j = 1; j <= m; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); [prev, cur] = [cur, prev]; }
+  return 1 - prev[m] / Math.max(n, m);
+}
+/**
+ * Пословное выравнивание сценария и услышанного: same / miss (пропущено) / add (лишнее) / sub (сказано иначе).
+ * Короткие служебные слова («и», «а», «ну», «же») в счёт оговорок не идут — распознавание их часто теряет.
+ */
+function slipDiff(script, heard) {
+  const A = slipWords(script), B = slipWords(heard), n = A.length, m = B.length;
+  if (!n || !m) return null;
+  const same = (i, j) => slipSim(A[i].n, B[j].n) >= 0.72;
+  const D = Array.from({ length: n + 1 }, (_, i) => { const r = new Float32Array(m + 1); r[0] = i; return r; });
+  for (let j = 1; j <= m; j++) D[0][j] = j;
+  for (let i = 1; i <= n; i++) for (let j = 1; j <= m; j++) D[i][j] = Math.min(D[i - 1][j] + 1, D[i][j - 1] + 1, D[i - 1][j - 1] + (same(i - 1, j - 1) ? 0 : 1.2));
+  const ops = []; let i = n, j = m;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && D[i][j] === D[i - 1][j - 1] + (same(i - 1, j - 1) ? 0 : 1.2)) { ops.push(same(i - 1, j - 1) ? { t: 'same', a: A[i - 1].raw } : { t: 'sub', a: A[i - 1].raw, b: B[j - 1].raw }); i--; j--; }
+    else if (i > 0 && D[i][j] === D[i - 1][j] + 1) { ops.push({ t: 'miss', a: A[i - 1].raw }); i--; }
+    else { ops.push({ t: 'add', b: B[j - 1].raw }); j--; }
+  }
+  ops.reverse();
+  const content = w => slipNorm(w || '').length >= 3;
+  const errs = ops.filter(o => o.t !== 'same' && (content(o.a) || content(o.b))).length;
+  return { ops, errs, same: ops.filter(o => o.t === 'same').length, total: n };
+}
+/** Оговорка — когда услышанное в целом то же (больше половины слов на месте), но есть расхождения по существу. */
+function slipOf(cue) {
+  if (!cue || cue.type !== 'line') return null;
+  const src = sourceOf(cue); if (!src || src.kind === 'upload' || !src.text || src.group > 1) return null;   // общий кусок на две реплики — не оговорка
+  const d = slipDiff(cue.text, C.cleanAsr(src.text)); if (!d || !d.errs) return null;
+  const adds = d.ops.filter(o => o.t === 'add').length;
+  return d.same / d.total >= 0.5 && adds <= Math.max(2, d.total * 0.5) ? d : null;
+}
+function slipHtml(d) {
+  return d.ops.map(o => o.t === 'same' ? esc(o.a) : o.t === 'miss' ? `<del title="пропущено">${esc(o.a)}</del>` : o.t === 'add' ? `<ins title="лишнее">${esc(o.b)}</ins>` : `<del title="в сценарии">${esc(o.a)}</del><ins title="сказано">${esc(o.b)}</ins>`).join(' ');
 }
 function rerecText(spk) {
   const all = rerecList(), keys = spk ? [spk] : [...all.keys()], cues = S.P.cues, lines = [];
@@ -4856,7 +5244,7 @@ function rerecHtml() {
   const all = rerecList(); if (!all.size) return '';
   const total = [...all.values()].reduce((s, l) => s + l.length, 0);
   return `<div class="rerec"><b>Дозапись</b><span class="muted small">по актёру: реплики без записи и те, где услышано не то, с соседними репликами для интонации</span>
-    <div class="chips">${[...all].map(([k, l]) => `<button class="chip ${colorOf(k)} as-btn" data-act="rerec" data-spk="${esc(k)}">${esc(charName(k))} <i>${l.length}</i> ${ic('download')}</button>`).join('')}
+    <div class="chips">${[...all].map(([k, l]) => `<span class="rr"><button class="chip ${colorOf(k)} as-btn" data-act="rerec" data-spk="${esc(k)}" title="Список для актёра (.txt)">${esc(charName(k))} <i>${l.length}</i> ${ic('download')}</button><button class="icon xs rr-mic" data-act="rec-spk" data-spk="${esc(k)}" title="Записать реплики ${esc(charName(k))} здесь, с суфлёром" aria-label="Записать реплики ${esc(charName(k))} здесь">${ic('mic')}</button></span>`).join('')}
     <button class="ghost-b tiny" data-act="rerec" data-spk="">все одним файлом (${total})</button></div></div>`;
 }
 
@@ -4893,6 +5281,7 @@ function buildStems() {
   const order = [...S.P.chars.map(c => charName(c.key)), 'остальные голоса', 'звуки', 'звуки фоном'].filter(k => groups.has(k));
   for (const k of groups.keys()) if (!order.includes(k)) order.push(k);
   const stems = order.map(k => ({ name: k, fill: y => { for (const p of groups.get(k)) { const i0 = Math.round(p.at * C.SR); for (let i = 0; i < p.audio.length && i0 + i < n; i++) y[i0 + i] += p.audio[i] * g; } } }));
+  if (r.room && r.room.length) stems.push({ name: 'комнатный тон', fill: y => { for (const a of r.room) { const i0 = Math.round(a.at * C.SR); for (let i = 0; i < a.audio.length && i0 + i < n; i++) y[i0 + i] += a.audio[i] * g; } } });
   if (r.amb && r.amb.length) stems.push({ name: 'фон сцен', fill: y => { for (const a of r.amb) { const i0 = Math.round(a.at * C.SR); for (let i = 0; i < a.audio.length && i0 + i < n; i++) y[i0 + i] += a.audio[i] * g; } } });
   return { stems, n };
 }
@@ -4951,6 +5340,456 @@ function id3Chapters(title) {
   return cat([enc.encode('ID3'), new Uint8Array([4, 0, 0, ...ss(body.length)]), body]);
 }
 
+// Монтажка — субтитры и видео для YouTube.
+// Субтитры (.srt, .vtt) — из раскладки сведения: реплика с именем говорящего, звук — в квадратных скобках
+// по тексту ремарки (как принято в субтитрах для слабослышащих). Длинное делится на куски по две строки
+// до 42 знаков, время делится по длине текста.
+// Видео — кадры рисуются на холсте и кодируются WebCodecs (H.264 + AAC в MP4, если браузер умеет; иначе
+// VP9 + Opus в WebM), упаковщик mp4-muxer / webm-muxer грузится с jsDelivr только при сборке.
+// Кадр — в мире Монтажки: тёмная дека, обложка или стрелочный индикатор, имя и реплика, сцена, волна всего
+// спектакля с курсором. Считается быстрее реального времени; прогресс — в «острове».
+// Использует S, C, $, esc, fmt, charName, colorOf, cssVar, progress, notify, download из app.js.
+const MP4_MUX = 'https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.2/+esm', WEBM_MUX = 'https://cdn.jsdelivr.net/npm/webm-muxer@5.1.4/+esm';
+const SUB_LINE = 42, SUB_MAX = 84;
+/** Реплики и звуки дорожки как куски субтитров: [{a, b, text, who, spk}]. */
+function subCues({ names = true } = {}) {
+  const r = S.result; if (!r || !r.lay) return [];
+  const out = [];
+  for (const row of r.lay.rows) {
+    if (!row.recorded || row.bed || row.dur < 0.15) continue;
+    const c = row.cue, line = c.type === 'line';
+    const body = row.sound ? `[${c.text.replace(/^[(\[]|[)\]]$/g, '')}]` : line ? c.text.replace(/^[—–-]\s*/, '') : `(${c.text.replace(/^[(]|[)]$/g, '')})`;
+    const parts = subSplit(body), total = parts.reduce((s, p) => s + p.length, 0);
+    let t = row.at;
+    parts.forEach((p, i) => {
+      const d = row.dur * p.length / total, who = line && i === 0 && names ? charName(c.spk) : '';
+      out.push({ a: t, b: t + Math.max(0.8, d), text: (who ? who + ': ' : '') + p, who: line ? charName(c.spk) : '', spk: line ? c.spk : null, id: c.id });
+      t += d;
+    });
+  }
+  for (let i = 1; i < out.length; i++) if (out[i].a < out[i - 1].b) out[i - 1].b = Math.max(out[i - 1].a + 0.3, out[i].a - 0.02);   // без наложений
+  return out;
+}
+/** Деление по фразам, потом по словам: куски не длиннее двух строк. */
+function subSplit(text) {
+  const bits = String(text).split(/(?<=[.!?…])\s+|(?<=[,;:—])\s+/), out = [];
+  let cur = '';
+  for (const b of bits) {
+    if ((cur + ' ' + b).trim().length <= SUB_MAX) { cur = (cur + ' ' + b).trim(); continue; }
+    if (cur) out.push(cur);
+    if (b.length <= SUB_MAX) { cur = b; continue; }
+    let w = ''; for (const word of b.split(/\s+/)) { if ((w + ' ' + word).trim().length > SUB_MAX) { out.push(w); w = word; } else w = (w + ' ' + word).trim(); }
+    cur = w;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+/** Перенос: разрыв у пробела ближе к середине, если строка длиннее 42. */
+function subWrap(s) {
+  if (s.length <= SUB_LINE) return s;
+  let best = -1; for (let i = 0; i < s.length; i++) if (s[i] === ' ' && (best < 0 || Math.abs(i - s.length / 2) < Math.abs(best - s.length / 2))) best = i;
+  return best < 0 ? s : s.slice(0, best) + '\n' + s.slice(best + 1);
+}
+const subTime = (t, sep) => { const ms = Math.max(0, Math.round(t * 1000)), h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, s = Math.floor(ms / 1000) % 60; return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}${sep}${String(ms % 1000).padStart(3, '0')}`; };
+function srtText() { return subCues().map((c, i) => `${i + 1}\n${subTime(c.a, ',')} --> ${subTime(c.b, ',')}\n${subWrap(c.text)}\n`).join('\n'); }
+function vttText() { return 'WEBVTT\n\n' + subCues().map((c, i) => `${i + 1}\n${subTime(c.a, '.')} --> ${subTime(c.b, '.')}\n${subWrap(c.text)}\n`).join('\n'); }
+// ------------------------------------------------------------------ видео
+/** Лучший формат, который браузер умеет кодировать. */
+async function videoFormat(W, H, fps) {
+  if (typeof VideoEncoder === 'undefined' || typeof AudioEncoder === 'undefined') return null;
+  const v = async c => { try { return (await VideoEncoder.isConfigSupported(c)).supported; } catch { return false; } };
+  const a = async c => { try { return (await AudioEncoder.isConfigSupported(c)).supported; } catch { return false; } };
+  const avc = { codec: 'avc1.4d0028', width: W, height: H, bitrate: 2_500_000, framerate: fps, avc: { format: 'avc' } };
+  const vp9 = { codec: 'vp09.00.31.08', width: W, height: H, bitrate: 2_000_000, framerate: fps };
+  const vp8 = { codec: 'vp8', width: W, height: H, bitrate: 2_000_000, framerate: fps };
+  const aac = { codec: 'mp4a.40.2', sampleRate: C.SR, numberOfChannels: 1, bitrate: 160_000 };
+  const opus = { codec: 'opus', sampleRate: C.SR, numberOfChannels: 1, bitrate: 128_000 };
+  if (await v(avc) && await a(aac)) return { ext: 'mp4', type: 'video/mp4', v: avc, a: aac, lib: MP4_MUX, vc: 'avc', ac: 'aac' };
+  if (await v(avc) && await a(opus)) return { ext: 'mp4', type: 'video/mp4', v: avc, a: opus, lib: MP4_MUX, vc: 'avc', ac: 'opus' };
+  if (await v(vp9) && await a(opus)) return { ext: 'webm', type: 'video/webm', v: vp9, a: opus, lib: WEBM_MUX, vc: 'V_VP9', ac: 'A_OPUS' };
+  if (await v(vp8) && await a(opus)) return { ext: 'webm', type: 'video/webm', v: vp8, a: opus, lib: WEBM_MUX, vc: 'V_VP8', ac: 'A_OPUS' };
+  return null;
+}
+/**
+ * Видео спектакля. opt: { title, cover (ImageBitmap|null), fps = 24, from = 0, to = конец } — from/to для пробы.
+ * Возвращает Blob.
+ */
+async function buildVideo(opt = {}) {
+  const r = S.result; if (!r || !r.out) throw new Error('сначала сведите спектакль');
+  const W = 1280, H = 720, fps = opt.fps || 24, SR = C.SR;
+  const fo = await videoFormat(W, H, fps); if (!fo) throw new Error('этот браузер не умеет собирать видео — нужен Chrome, Edge или Safari 17+');
+  progress('Видео: загружаю упаковщик…', 0.01);
+  const lib = await import(fo.lib);
+  const target = new lib.ArrayBufferTarget();
+  const muxer = fo.ext === 'mp4'
+    ? new lib.Muxer({ target, video: { codec: fo.vc, width: W, height: H }, audio: { codec: fo.ac, numberOfChannels: 1, sampleRate: SR }, fastStart: 'in-memory', firstTimestampBehavior: 'offset' })
+    : new lib.Muxer({ target, video: { codec: fo.vc, width: W, height: H, frameRate: fps }, audio: { codec: fo.ac, numberOfChannels: 1, sampleRate: SR }, firstTimestampBehavior: 'offset' });
+  let fail = null;
+  const ve = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: e => { fail = e; } }); ve.configure(fo.v);
+  const ae = new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: e => { fail = e; } }); ae.configure(fo.a);
+  const t0 = Math.max(0, opt.from || 0), t1 = Math.min(r.out.length / SR, opt.to || r.out.length / SR);
+  const a0 = Math.round(t0 * SR), a1 = Math.round(t1 * SR);
+  for (let i = a0; i < a1; i += SR) {
+    const n = Math.min(SR, a1 - i), data = r.out.slice(i, i + n);
+    const ad = new AudioData({ format: 'f32-planar', sampleRate: SR, numberOfFrames: n, numberOfChannels: 1, timestamp: Math.round((i - a0) / SR * 1e6), data });
+    ae.encode(ad); ad.close();
+  }
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d', { alpha: false }), draw = videoPainter(g, W, H, opt);
+  const frames = Math.ceil((t1 - t0) * fps), started = performance.now();
+  for (let k = 0; k < frames; k++) {
+    if (fail) throw fail;
+    if (VIDEO.cancel) throw new Error('остановлено');
+    draw(t0 + k / fps, 1 / fps);
+    const vf = new VideoFrame(cv, { timestamp: Math.round(k * 1e6 / fps), duration: Math.round(1e6 / fps) });
+    ve.encode(vf, { keyFrame: k % (fps * 2) === 0 }); vf.close();
+    if (ve.encodeQueueSize > 8) await new Promise(res => { const tick = () => ve.encodeQueueSize > 4 ? setTimeout(tick, 4) : res(); tick(); });
+    if (k % fps === 0) {
+      const p = k / frames, el = (performance.now() - started) / 1000, left = p > 0.02 ? el / p - el : null;
+      progress(`Видео: ${fmt(t0 + k / fps)} из ${fmt(t1)}${left != null ? ` · осталось ≈ ${Math.max(1, Math.round(left / 60))} мин` : ''}`, p);
+      await new Promise(res => setTimeout(res, 0));
+    }
+  }
+  await ve.flush(); await ae.flush(); if (fail) throw fail;
+  muxer.finalize(); ve.close(); ae.close();
+  return { blob: new Blob([target.buffer], { type: fo.type }), ext: fo.ext, codec: fo.vc + '+' + fo.ac };
+}
+const VIDEO = { cancel: false, busy: false };
+/** Рисовальщик кадра: всё тяжёлое (фон, волна) — один раз, на кадр — только то, что меняется. */
+function videoPainter(g, W, H, opt) {
+  const r = S.result, SR = C.SR, total = r.out.length / SR, cues = subCues({ names: false }), chs = typeof chapterList === 'function' ? chapterList() : [];
+  const DARK = { c1: '#8DB1E6', c2: '#E59ABD', c3: '#7ED0A8', c4: '#B9A3EA', c5: '#EDB072', c6: '#85CDE0', c7: '#DDAE8C', c8: '#C6D27C' }, amber = '#F2B233', ink = '#EFE9E2', muted = '#ABA197', deck = '#14110F', onair = '#E54B3D';
+  const disp = cssVar('--display') || 'sans-serif', sans = cssVar('--sans') || 'sans-serif', mono = cssVar('--mono') || 'monospace';
+  // фон
+  const bg = document.createElement('canvas'); bg.width = W; bg.height = H; const b = bg.getContext('2d');
+  b.fillStyle = deck; b.fillRect(0, 0, W, H);
+  const glow = b.createRadialGradient(W * 0.28, H * 0.42, 20, W * 0.28, H * 0.42, W * 0.6); glow.addColorStop(0, 'rgba(242,178,51,0.10)'); glow.addColorStop(1, 'rgba(242,178,51,0)'); b.fillStyle = glow; b.fillRect(0, 0, W, H);
+  b.fillStyle = '#0E0C0B'; b.fillRect(0, 0, W, 64); b.fillStyle = '#342C26'; b.fillRect(0, 64, W, 1);
+  b.font = `700 24px ${disp}`; b.fillStyle = ink; b.textBaseline = 'middle'; b.fillText(opt.title || 'Радиоспектакль', 40, 33);
+  // волна всего спектакля: серая и янтарная (сыгранное)
+  const WX = 40, WY = H - 96, WW = W - 80, WH = 44, peaks = new Float32Array(WW);
+  { const per = Math.max(1, Math.floor(r.out.length / WW)); for (let x = 0; x < WW; x++) { let m = 0; for (let i = x * per, e = Math.min(r.out.length, (x + 1) * per); i < e; i += 16) { const v = Math.abs(r.out[i]); if (v > m) m = v; } peaks[x] = m; } }
+  const wave = color => { const cc = document.createElement('canvas'); cc.width = WW; cc.height = WH; const q = cc.getContext('2d'); q.fillStyle = color; for (let x = 0; x < WW; x++) { const h = Math.max(1, Math.min(1, peaks[x] * 1.3) * WH); q.fillRect(x, (WH - h) / 2, 1, h); } return cc; };
+  const wGrey = wave('#3B332C'), wAmber = wave(amber);
+  for (const sc of r.lay.scenes || []) { b.fillStyle = '#4A4038'; b.fillRect(WX + sc.start / total * WW, WY - 6, 1, WH + 12); }
+  // обложка
+  const cover = opt.cover || null, CX = 60, CY = 120, CS = 380;
+  // стрелка VU — пружина по кадрам, как на деке
+  let ang = -50, vel = 0;
+  const vuA = db => { const v = Math.pow(10, Math.max(-20, Math.min(3, db)) / 20); return -48 + 96 * (v - 0.1) / (Math.pow(10, 0.15) - 0.1); };
+  const rms = (t, win = 0.3) => { const a = Math.max(0, Math.round((t - win) * SR)), e = Math.min(r.out.length, Math.round(t * SR)); let s = 0, n = 0; for (let i = a; i < e; i += 8) { s += r.out[i] * r.out[i]; n++; } return n ? Math.sqrt(s / n) : 0; };
+  const wrap = (text, maxW, font) => { g.font = font; const words = text.split(/\s+/), lines = []; let cur = ''; for (const w of words) { const t = cur ? cur + ' ' + w : w; if (g.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; } if (cur) lines.push(cur); return lines; };
+  return (t, dt) => {
+    g.drawImage(bg, 0, 0);
+    // сцена
+    const ch = chs.find(c => t >= c.start && t < c.end);
+    if (ch) { g.font = `700 15px ${disp}`; g.fillStyle = amber; g.textBaseline = 'middle'; g.textAlign = 'right'; g.fillText(ch.title.replace(' — ', ' · ').toUpperCase().slice(0, 64), W - 40, 33); g.textAlign = 'left'; }
+    // обложка или индикатор
+    if (cover) { g.save(); g.beginPath(); g.roundRect(CX, CY, CS, CS, 16); g.clip(); const k = Math.max(CS / cover.width, CS / cover.height); g.drawImage(cover, CX + (CS - cover.width * k) / 2, CY + (CS - cover.height * k) / 2, cover.width * k, cover.height * k); g.restore(); }
+    const lv = rms(t), target = lv > 1e-5 ? vuA(20 * Math.log10(lv) + 18) : -50;
+    const steps = 4; for (let i = 0; i < steps; i++) { const h = dt / steps, acc = 160 * (target - ang) - 2 * Math.sqrt(160) * 0.7 * vel; vel += acc * h; ang += vel * h; }
+    { const vx = cover ? CX + CS - 150 : CX, vy = cover ? CY + CS - 90 : CY + 70, vw = cover ? 150 : CS, vh = cover ? 90 : CS * 0.62, s = vw / 96;
+      g.save(); g.translate(vx, vy); g.scale(s, s);
+      g.fillStyle = '#2A221C'; g.strokeStyle = '#342C26'; g.lineWidth = 1 / s; g.beginPath(); g.roundRect(0.5, 0.5, 95, cover ? 56 : 58, 5); g.fill(); g.stroke();
+      const lamp = g.createRadialGradient(48, 60, 2, 48, 60, 60); lamp.addColorStop(0, `rgba(242,178,51,${0.12 + Math.min(0.3, lv * 2)})`); lamp.addColorStop(1, 'rgba(242,178,51,0)'); g.fillStyle = lamp; g.fillRect(1, 1, 94, 56);
+      g.strokeStyle = '#D9CBB3'; g.lineWidth = 0.8; g.beginPath(); g.arc(48, 50, 36, (-90 - 48) * Math.PI / 180, (-90 + 48) * Math.PI / 180); g.stroke();
+      g.strokeStyle = onair; g.lineWidth = 2; g.beginPath(); g.arc(48, 50, 36, (-90 + vuA(0)) * Math.PI / 180, (-90 + 48) * Math.PI / 180); g.stroke();
+      g.strokeStyle = ink; g.lineWidth = 1.2; g.lineCap = 'round'; const a = (ang - 90) * Math.PI / 180; g.beginPath(); g.moveTo(48, 50); g.lineTo(48 + 40 * Math.cos(a), 50 + 40 * Math.sin(a)); g.stroke();
+      g.restore(); }
+    // реплика
+    let cur = cues.find(c => t >= c.a && t < c.b), fade = 1;
+    const TX = CX + CS + 60, TW = W - TX - 60;
+    if (!cur) {                                        // пауза: прошлая реплика гаснет, потом — название сцены
+      const last = cues.filter(c => c.b <= t).pop(), since = last ? t - last.b : 99;
+      if (since < 1.2) { cur = last; fade = 1 - since / 1.2; }
+      else if (ch) { g.globalAlpha = Math.min(1, (since - 1.2) / 0.6) * 0.55; g.font = `600 30px ${disp}`; g.fillStyle = muted; g.textBaseline = 'middle'; wrap(ch.title, TW, `600 30px ${disp}`).slice(0, 3).forEach((ln, i) => g.fillText(ln, TX, 280 + i * 42)); g.globalAlpha = 1; }
+    }
+    if (cur) {
+      g.globalAlpha = fade;
+      let y = 250;
+      if (cur.who) { g.font = `700 22px ${disp}`; const wv = g.measureText(cur.who.toUpperCase()).width; g.fillStyle = cur.spk ? DARK[colorOf(cur.spk)] || amber : muted; g.globalAlpha = 0.18 * fade; g.beginPath(); g.roundRect(TX - 12, y - 20, wv + 24, 40, 20); g.fill(); g.globalAlpha = fade; g.fillText(cur.who.toUpperCase(), TX, y); y += 58; }
+      g.fillStyle = cur.spk ? ink : muted; const lines = wrap(cur.text, TW, `500 38px ${sans}`).slice(0, 4); for (const ln of lines) { g.fillText(ln, TX, y); y += 50; }
+      const p = Math.min(1, (t - cur.a) / Math.max(0.1, cur.b - cur.a)); g.fillStyle = amber; g.globalAlpha = 0.9 * fade; g.fillRect(TX, y - 12, Math.max(2, 120 * p), 3); g.globalAlpha = 1;
+    }
+    // волна и курсор
+    const px = Math.round(t / total * WW);
+    g.drawImage(wGrey, WX, WY); g.drawImage(wAmber, 0, 0, Math.max(1, px), WH, WX, WY, Math.max(1, px), WH);
+    g.fillStyle = onair; g.fillRect(WX + px - 1, WY - 10, 2, WH + 20);
+    g.font = `500 15px ${mono}`; g.fillStyle = muted; g.textBaseline = 'middle'; g.fillText(fmt(t), WX, WY + WH + 26); g.textAlign = 'right'; g.fillText(fmt(total), WX + WW, WY + WH + 26); g.textAlign = 'left';
+  };
+}
+/** Кнопка «Собрать видео». */
+async function exportVideo(from, to) {
+  if (VIDEO.busy) { VIDEO.cancel = true; return; }
+  VIDEO.busy = true; VIDEO.cancel = false; renderMix();
+  try {
+    if (S.result.approx && typeof exactResult === 'function') await exactResult();
+    const res = await buildVideo({ title: (S.videoTitle || '').trim() || 'Радиоспектакль', cover: S.videoCover || null, from, to });
+    progress('', 0);
+    const stamp = S.result.at.toISOString().slice(0, 16).replace(/[-:T]/g, '').replace(/^(\d{8})(\d{4})$/, '$1-$2');
+    download(res.blob, `видео-${stamp}.${res.ext}`);
+    notify(`Видео готово (${(res.blob.size / 1e6).toFixed(0)} МБ, ${res.ext.toUpperCase()}). Для YouTube: загрузите видео, субтитры (.srt) и главы из кнопки «Главы».`);
+    return res;
+  } catch (err) { progress('', 0); notify('Видео не собралось: ' + err.message); }
+  finally { VIDEO.busy = false; VIDEO.cancel = false; renderMix(); }
+}
+function videoHtml() {
+  return `<div class="vid">
+    <div class="vid-h"><b>Видео для YouTube</b><span class="muted small">1280×720, MP4 (или WebM, если браузер не умеет H.264): обложка, имя и реплика, сцена, волна спектакля. Субтитры и главы — отдельными файлами для описания и дорожки субтитров.</span></div>
+    <div class="vid-row">
+      <input type="text" id="vid-title" placeholder="Название спектакля" value="${esc(S.videoTitle || '')}" aria-label="Название спектакля">
+      <label class="ghost-b file-b">${ic('file')}${S.videoCover ? 'Обложка выбрана' : 'Обложка'}<input type="file" id="vid-cover" accept="image/*" hidden></label>
+      <button class="${VIDEO.busy ? 'ghost-b' : 'primary'}" data-act="video">${VIDEO.busy ? 'Остановить' : 'Собрать видео'}</button>
+      <button class="ghost-b" data-act="srt">Субтитры (.srt)</button>
+      <button class="ghost-b" data-act="vtt">.vtt</button>
+    </div>
+  </div>`;
+}
+function bindVideo() {
+  const out = $('#mix-out');
+  out.addEventListener('input', e => { if (e.target.id === 'vid-title') S.videoTitle = e.target.value; });
+  out.addEventListener('change', async e => {
+    if (e.target.id !== 'vid-cover') return; const f = e.target.files[0]; if (!f) return;
+    try { S.videoCover = await createImageBitmap(f); renderMix(); } catch { notify('Не получилось открыть картинку.'); }
+  });
+}
+
+// Монтажка — «читка»: сценарий идёт за плеером. Текущая реплика подсвечена и «прочитывается» слева направо,
+// лист сам держит её на виду (прокрутка на пружине), щелчок по строке — играть с неё. Если прокрутить лист
+// руками, он не мешает 4 секунды. Незаписанные реплики видны как паузы — сразу слышно, где дыры.
+// Использует S, C, $, esc, fmt, charName, colorOf, tpTime, tpSeek, TP из app.js; mv/mvTo/mvSet из spring.js.
+const READ = { key: null, rows: [], cur: -1, hold: 0, scroll: null };
+function readRows() {
+  const r = S.result; if (!r || !r.lay) return [];
+  const out = []; let scene = null;
+  for (const row of r.lay.rows) {
+    if (row.scene !== scene) { scene = row.scene; out.push({ scene }); }
+    if (row.bed) continue;
+    out.push({ row, at: row.at, end: row.at + row.dur });
+  }
+  return out;
+}
+function readHtml() {
+  const chs = typeof chapterList === 'function' ? chapterList() : [];
+  return `<div class="read" role="list" aria-label="Читка: сценарий за плеером">${READ.rows.map((x, i) => {
+    if (x.scene != null) { const ch = chs.find(c => c.title.startsWith('Сцена ' + x.scene)); return `<div class="read-sc">${esc(ch ? ch.title : 'Сцена ' + x.scene)}</div>`; }
+    const c = x.row.cue, line = c.type === 'line', who = x.row.sound ? 'звук' : line ? charName(c.spk) : 'ремарка';
+    return `<div class="read-row${x.row.recorded ? '' : ' gap'}" role="listitem" data-i="${i}" tabindex="-1">
+      <span class="read-t">${fmt(x.at)}</span>
+      <span class="chip ${line ? colorOf(c.spk) : 'ghost'}">${esc(who)}</span>
+      <span class="read-x">${c.note && line ? `<i>(${esc(c.note)})</i> ` : ''}<span class="rt">${esc(line ? c.text.replace(/^[—–-]\s*/, '') : c.text)}</span>${x.row.recorded ? '' : ' <em>нет записи — пауза</em>'}</span>
+    </div>`;
+  }).join('')}</div>`;
+}
+/** Панель читки: строится один раз на сведение, дальше меняются только классы. */
+function readRender() {
+  const box = $('#mix-read'); if (!box) return;
+  if (!S.readOpen || !S.result || !S.result.lay) { if (box.innerHTML) box.innerHTML = ''; READ.key = null; return; }
+  const key = S.result.lay;
+  if (READ.key === key && box.firstElementChild) { readTick(true); return; }
+  READ.key = key; READ.rows = readRows(); READ.cur = -1; box.innerHTML = readHtml();
+  const list = box.querySelector('.read');
+  const owner = { render() { list.scrollTop = READ.scroll.v; } };
+  READ.scroll = mv(list.scrollTop, 0.5, owner);
+  const hold = () => { READ.hold = performance.now(); mvSet(READ.scroll, list.scrollTop); SPRING.live.delete(READ.scroll); };
+  list.addEventListener('wheel', hold, { passive: true }); list.addEventListener('touchmove', hold, { passive: true });
+  list.addEventListener('pointerdown', e => { if (e.target === list) hold(); });
+  list.addEventListener('click', e => { const rowEl = e.target.closest('.read-row'); if (!rowEl) return; const x = READ.rows[+rowEl.dataset.i]; READ.hold = 0; tpSeek(x.at, true); });
+  readTick(true);
+}
+/** Каждый кадр, пока играет (и при остановке): какая реплика звучит, сколько прочитано, держать на виду. */
+function readTick(jump) {
+  if (!S.readOpen || !READ.rows.length) return;
+  const list = document.querySelector('#mix-read .read'); if (!list) return;
+  const t = tpTime();
+  let k = -1; for (let i = 0; i < READ.rows.length; i++) { const x = READ.rows[i]; if (x.row && x.at <= t + 0.02) { if (t < x.end + 0.25) k = i; } }
+  if (k !== READ.cur) {
+    const old = list.querySelector('.read-row.cur'); if (old) { old.classList.remove('cur'); old.querySelector('.rt').style.removeProperty('--p'); }
+    READ.cur = k;
+    const el = k >= 0 ? list.children[k] : null;
+    if (el) {
+      el.classList.add('cur');
+      if (performance.now() - READ.hold > 4000) {                  // держим текущую на трети высоты — на пружине
+        const to = Math.max(0, Math.min(list.scrollHeight - list.clientHeight, el.offsetTop - list.clientHeight * 0.33));
+        if (jump || typeof MOTION !== 'undefined' && MOTION.reduce) { mvSet(READ.scroll, to); list.scrollTop = to; } else { READ.scroll.v = list.scrollTop; mvTo(READ.scroll, to, { damping: 1, response: 0.55 }); }
+      }
+    }
+  }
+  if (k >= 0) { const x = READ.rows[k], p = Math.max(0, Math.min(1, (t - x.at) / Math.max(0.1, x.end - x.at))); list.children[k].querySelector('.rt').style.setProperty('--p', (p * 100).toFixed(1) + '%'); }
+}
+
+// Монтажка — дозапись прямо на сайте. Суфлёр (реплика до, эта — крупно, после), отсчёт 3-2-1, микрофон
+// без обработки браузера, уровень на стрелке деки и лампа «Эфир», пока пишет. Записанное обрезается по тишине,
+// чистится и подгоняется по тембру под основной файл актёра (та же цепочка чистки + «тембр как у образца») и
+// встаёт на место реплики как «своя запись». Очередь — все реплики роли, которые надо дозаписать, или одна.
+// Для актёра на расстоянии: «Скачать записи (.zip)» — файлы по номерам реплик; режиссёр перетаскивает ZIP или
+// файлы «004.wav» в «Записи», и они встают на место сами (recImport).
+// Использует S, C, $, esc, fmt, charName, colorOf, notify, render, decodeFile, download из app.js;
+// dspCall, cl, clone, refLtas, autoPreset из cleanup.js; rerecList, zipStore из extras.js; пружины и движение.
+const REC = { open: false, queue: [], i: 0, live: false, level: 0, stream: null, rec: null, chunks: [], take: null, t0: 0, raf: 0, count: 0, busy: false, done: 0, countdown: true, taken: new Map() };
+const recCue = () => REC.queue[REC.i] || null;
+function recNear(c, d) { const cues = S.P.cues; let i = cues.indexOf(c) + d; while (i >= 0 && i < cues.length && cues[i].type !== 'line') i += d; return cues[i] && cues[i].type === 'line' ? cues[i] : null; }
+/** Очередь: одна реплика или все реплики роли, которые надо дозаписать. */
+function recOpen(list) {
+  if (!list || !list.length) { notify('Для этой роли дозаписывать нечего.'); return; }
+  REC.queue = list; REC.i = 0; REC.take = null; REC.open = true; REC.done = 0; recRender();
+}
+function recOpenFor(spk) { const all = rerecList(); recOpen((all.get(spk) || []).map(x => x.cue)); }
+function recClose(swiped) { recStop(true); REC.open = false; const el = $('#rec'); if (el && !el.hidden) { if (!swiped && typeof sheetGhostOut === 'function') sheetGhostOut(el); el.hidden = true; } render(); }
+function recHtml() {
+  const c = recCue(); if (!c) return '';
+  const p = recNear(c, -1), n = recNear(c, 1), total = REC.queue.length, take = REC.take;
+  const line = (x, cls) => x ? `<div class="rec-l ${cls}"><span class="chip ${colorOf(x.spk)}">${esc(charName(x.spk))}</span> ${x.note ? `<i>(${esc(x.note)})</i> ` : ''}${esc(x.text)}</div>` : '';
+  return `<div class="rec-in" role="dialog" aria-modal="true" aria-label="Дозапись">
+    <div class="rec-grab" aria-hidden="true"></div>
+    <div class="rec-head"><b>Дозапись</b><span class="chip ${colorOf(c.spk)}">${esc(charName(c.spk))}</span><span class="muted small">${REC.i + 1} из ${total} · реплика ${esc(c.id)}</span>
+      <button class="icon rec-x" data-rec="close" aria-label="Закрыть">${ic('close')}</button></div>
+    <div class="rec-prompt">
+      ${line(p, 'prev')}
+      <div class="rec-l cur">${c.note ? `<i>(${esc(c.note)})</i> ` : ''}${esc(c.text.replace(/^[—–-]\s*/, ''))}</div>
+      ${line(n, 'next')}
+    </div>
+    <div class="rec-meter" aria-hidden="true"><span class="rec-bar"></span><span class="rec-time">${REC.live ? '0:00.0' : take ? fmt(take.y.length / C.SR) : ''}</span></div>
+    <div class="rec-ctl">
+      ${REC.busy ? `<span class="rec-busy">Обрабатываю: обрезаю тишину, подгоняю звук под запись актёра…</span>` : take ? `
+        <button class="play big-take" data-rec="play" aria-label="Послушать дубль">▶</button>
+        <button class="ghost-b" data-rec="again">${ic('mic')}Заново</button>
+        <button class="primary" data-rec="take">${REC.i + 1 < total ? 'Взять и дальше' : 'Взять'}</button>` : `
+        <button class="rec-btn${REC.live ? ' on' : ''}" data-rec="rec" aria-label="${REC.live ? 'Остановить' : 'Записать'}"><span></span></button>
+        <span class="muted small">${REC.live ? 'Идёт запись — нажмите, чтобы остановить' : REC.count ? 'Приготовьтесь…' : 'Нажмите и прочитайте реплику'}</span>`}
+      ${REC.i + 1 < total && !REC.live ? '<button class="ghost-b tiny" data-rec="skip">Пропустить</button>' : ''}
+    </div>
+    <div class="rec-foot">
+      <label class="mini"><input type="checkbox" data-rec="countdown" ${REC.countdown ? 'checked' : ''}> отсчёт 3-2-1</label>
+      ${REC.taken.size ? `<button class="ghost-b tiny" data-rec="zip">${ic('download')}Скачать записи (.zip, ${REC.taken.size})</button>` : ''}
+      <span class="muted small">Микрофон без обработки браузера: чистка — своя, под звук остальных записей.</span>
+    </div>
+    ${REC.count ? `<div class="rec-count" aria-live="assertive">${REC.count}</div>` : ''}
+  </div>`;
+}
+function recRender() {
+  let el = $('#rec');
+  if (!el) { el = document.createElement('div'); el.id = 'rec'; el.className = 'sheetbox'; el.hidden = true; document.body.appendChild(el); recBind(el); }
+  if (!REC.open) { el.hidden = true; return; }
+  el.innerHTML = recHtml(); el.hidden = false;
+}
+function recBind(el) {
+  el.addEventListener('click', async e => {
+    if (e.target === el) { if (!REC.live) recClose(); return; }                     // щелчок по затемнению
+    const b = e.target.closest('[data-rec]'); if (!b) return; const a = b.dataset.rec;
+    if (a === 'close') return recClose();
+    if (a === 'rec') return REC.live ? recStop() : recStart();
+    if (a === 'again') { REC.take = null; recRender(); return recStart(); }
+    if (a === 'skip') { REC.take = null; REC.i++; recRender(); return; }
+    if (a === 'play') { if (REC.take) { playing && playing.btn === b ? stop() : play(REC.take.y, b); } return; }
+    if (a === 'take') return recTake();
+    if (a === 'zip') return recZip();
+  });
+  el.addEventListener('change', e => { if (e.target.dataset.rec === 'countdown') REC.countdown = e.target.checked; });
+  if (typeof sheetDrag === 'function') sheetDrag(el, '.rec-grab, .rec-head', () => recClose(true), () => !REC.live && !REC.busy && !REC.count);   // смахнуть вниз; пока пишет — только резина
+  document.addEventListener('keydown', e => { if (REC.open && e.key === 'Escape' && !REC.live) recClose(); });
+}
+/** Микрофон: «сырой» звук — без эхоподавления, шумодава и автоусиления браузера. */
+async function recStart() {
+  if (REC.live || REC.count) return;
+  try {
+    if (!REC.stream) REC.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
+  } catch (err) { notify('Нет доступа к микрофону: ' + (err.message || err.name) + '. Разрешите микрофон для этого сайта.'); return; }
+  const ctx = audioCtx(); if (ctx.state === 'suspended') await ctx.resume();
+  if (!REC.an) { REC.src = ctx.createMediaStreamSource(REC.stream); REC.an = ctx.createAnalyser(); REC.an.fftSize = 1024; REC.src.connect(REC.an); REC.buf = new Float32Array(REC.an.fftSize); }
+  if (REC.countdown) { for (let k = 3; k >= 1; k--) { REC.count = k; recRender(); await new Promise(r => setTimeout(r, 650)); if (!REC.open) { REC.count = 0; return; } } REC.count = 0; }
+  const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/ogg'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
+  REC.chunks = []; REC.rec = new MediaRecorder(REC.stream, type ? { mimeType: type, audioBitsPerSecond: 192000 } : undefined);
+  REC.rec.ondataavailable = e => { if (e.data && e.data.size) REC.chunks.push(e.data); };
+  REC.rec.start(); REC.live = true; REC.t0 = performance.now(); recRender();
+  if (typeof deckKick === 'function') deckKick();
+  const tick = () => {
+    if (!REC.live) return;
+    REC.an.getFloatTimeDomainData(REC.buf); let s = 0; for (const v of REC.buf) s += v * v; REC.level = Math.sqrt(s / REC.buf.length);
+    const bar = document.querySelector('#rec .rec-bar'), tm = document.querySelector('#rec .rec-time');
+    if (bar) bar.style.transform = `scaleX(${Math.min(1, Math.max(0.02, (20 * Math.log10(REC.level + 1e-9) + 60) / 60)).toFixed(3)})`;
+    if (tm) tm.textContent = fmt((performance.now() - REC.t0) / 1000);
+    REC.raf = requestAnimationFrame(tick);
+  };
+  tick();
+}
+async function recStop(discard = false) {
+  REC.count = 0;
+  if (!REC.live) return;
+  REC.live = false; cancelAnimationFrame(REC.raf); REC.level = 0;
+  const stopped = new Promise(r => { REC.rec.onstop = r; }); REC.rec.stop(); await stopped;
+  if (discard) return;
+  const blob = new Blob(REC.chunks, { type: REC.rec.mimeType || 'audio/webm' });
+  try {
+    let y = await decodeFile(blob);
+    y = C.trimSilence(y); if (y.length < 0.2 * C.SR) throw new Error('почти тишина — проверьте микрофон');
+    REC.take = { y, raw: y };
+  } catch (err) { notify('Запись не получилась: ' + err.message); REC.take = null; }
+  recRender();
+}
+/** Взять дубль: подогнать под запись актёра и поставить на место реплики. */
+async function recTake() {
+  const c = recCue(); if (!c || !REC.take || REC.busy) return;
+  REC.busy = true; recRender();
+  let y = REC.take.y;
+  try { y = await recMatch(y, c.spk); } catch (err) { console.warn('дозапись: чистка не удалась, беру как есть —', err); }
+  S.uploads.set(c.id, { name: 'дозапись ' + new Date().toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }), y48: y, rec: true });
+  REC.taken.set(c.id, y); REC.done++; REC.busy = false; REC.take = null; S.result = null;
+  if (REC.i + 1 < REC.queue.length) { REC.i++; recRender(); render(); }
+  else { recClose(); notify(`Дозаписано реплик: ${REC.done}. Они уже на местах — сведите заново, чтобы услышать.`); }
+}
+/** Звук дубля — как у основной записи роли: та же чистка и тембр «как у образца». */
+async function recMatch(y, spk) {
+  const f = S.files.find(x => x.chars.has(spk) && x.y48 && !x.error);
+  if (!f || typeof dspCall !== 'function') return C.fade(y);
+  const an = await dspCall({ type: 'analyze', y: y.slice() }, []);
+  const base = cl(f).appliedChain ? clone(cl(f).appliedChain) : C.defaultChain(autoPreset(an.A).preset);
+  base.tone = { ...base.tone, on: true, mode: 'match', ref: f.name, strength: 0.8 };
+  const aux = { noise: an.noise, refLtas: await refLtas(f.name) }, seg = y.slice();
+  const r = await dspCall({ type: 'run', y: seg, chain: base, aux }, [seg.buffer]);
+  return C.fade(r.y);
+}
+/** Записи одним архивом: «004 Кэфи.wav» — режиссёр перетаскивает архив в «Записи». */
+function recZip() {
+  const files = [...REC.taken].map(([id, y]) => { const c = S.P.cues.find(q => q.id === id); return { name: `${id} ${c ? charName(c.spk) : ''}.wav`.trim(), data: new Uint8Array(C.wav24(y)) }; });
+  download(zipStore(files), `дозапись-${new Date().toISOString().slice(0, 10)}.zip`);
+}
+// ------------------------------------------------------------------ приём дозаписи: файлы «004.wav» и ZIP с ними
+/** Номер реплики из имени файла: «004.wav», «4 Кэфи.wav», «004_кэфи.m4a». */
+function recIdOf(name) {
+  if (!S.P) return null; const m = String(name).match(/^(\d{3,4})(?=[\s._-]|$)/); if (!m) return null;
+  const id = m[1].padStart(3, '0'); return S.P.cues.some(c => c.id === id && c.type === 'line') ? id : null;
+}
+/** Разобрать ZIP без сжатия (такой делает «Скачать записи»). */
+async function unzipStore(file) {
+  const buf = new Uint8Array(await file.arrayBuffer()), dv = new DataView(buf.buffer), out = [], dec = new TextDecoder();
+  let e = buf.length - 22; while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+  if (e < 0) throw new Error('это не ZIP');
+  let p = dv.getUint32(e + 16, true); const n = dv.getUint16(e + 10, true);
+  for (let k = 0; k < n; k++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const method = dv.getUint16(p + 10, true), size = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl2 = dv.getUint16(p + 32, true), off = dv.getUint32(p + 42, true);
+    const name = dec.decode(buf.subarray(p + 46, p + 46 + nl)); p += 46 + nl + xl + cl2;
+    if (method !== 0) throw new Error('архив сжат — распакуйте его и перетащите файлы');
+    const lnl = dv.getUint16(off + 26, true), lxl = dv.getUint16(off + 28, true), a = off + 30 + lnl + lxl;
+    if (!name.endsWith('/')) out.push(new File([buf.slice(a, a + size)], name.split('/').pop()));
+  }
+  return out;
+}
+/** Из пришедших файлов забрать дозапись: ZIP и файлы с номером реплики. Остальные — обычные записи. */
+async function recImport(list) {
+  const rest = [], got = [];
+  for (const f of list) {
+    try {
+      if (/\.zip$/i.test(f.name)) { for (const x of await unzipStore(f)) { const id = recIdOf(x.name); if (id) { await uploadFor(id, x); got.push(id); } } continue; }
+      const id = /^(audio\/|)/.test(f.type) && /\.(wav|mp3|m4a|aac|flac|ogg|opus|webm)$/i.test(f.name) ? recIdOf(f.name) : null;
+      if (id) { await uploadFor(id, f); got.push(id); } else rest.push(f);
+    } catch (err) { notify(`${f.name}: ${err.message}`); }
+  }
+  if (got.length) notify(`Дозапись встала на места: ${got.length} ${got.length === 1 ? 'реплика' : got.length < 5 ? 'реплики' : 'реплик'} (${got.slice(0, 6).join(', ')}${got.length > 6 ? '…' : ''}).`);
+  return rest;
+}
+
 
 // Монтажка — интерфейс: файлы, распознавание (в воркере), проверка, сведение, выгрузка.
 
@@ -4985,8 +5824,8 @@ const charName = key => (S.P && S.P.chars.find(c => c.key === key) || { name: ke
 
 // ------------------------------------------------------------------ состояние правок
 const editsKey = () => 'montage:' + hash(S.scriptText);
-function saveEdits() { store.set(editsKey(), { edits: S.edits, gains: S.gains, voiced: S.voiced, voiceGains: S.voiceGains, timing: S.timing, tempo: S.tempo, fxVoice: S.fxVoice, fxLine: S.fxLine, amb: ambSaved(), takes: S.takePick, sfx: S.sfxSaved || {} }); }
-function loadEdits() { const v = store.get(editsKey()); S.edits = v?.edits || {}; S.gains = v?.gains || {}; S.voiced = v?.voiced || {}; S.voiceGains = v?.voiceGains || {}; S.timing = v?.timing || {}; S.tempo = v?.tempo || 1; S.fxVoice = v?.fxVoice || {}; S.fxLine = v?.fxLine || {}; S.amb = v?.amb ? { duck: 8, scenes: {}, cands: {}, ...v.amb } : null; S.takePick = v?.takes || {}; S.sfxSaved = v?.sfx || {}; sfxState().cues = JSON.parse(JSON.stringify(S.sfxSaved)); }
+function saveEdits() { store.set(editsKey(), { room: S.room, edits: S.edits, gains: S.gains, voiced: S.voiced, voiceGains: S.voiceGains, timing: S.timing, tempo: S.tempo, fxVoice: S.fxVoice, fxLine: S.fxLine, amb: ambSaved(), takes: S.takePick, sfx: S.sfxSaved || {} }); }
+function loadEdits() { const v = store.get(editsKey()); S.room = v?.room !== false; S.edits = v?.edits || {}; S.gains = v?.gains || {}; S.voiced = v?.voiced || {}; S.voiceGains = v?.voiceGains || {}; S.timing = v?.timing || {}; S.tempo = v?.tempo || 1; S.fxVoice = v?.fxVoice || {}; S.fxLine = v?.fxLine || {}; S.amb = v?.amb ? { duck: 8, scenes: {}, cands: {}, ...v.amb } : null; S.takePick = v?.takes || {}; S.sfxSaved = v?.sfx || {}; sfxState().cues = JSON.parse(JSON.stringify(S.sfxSaved)); }
 
 // ------------------------------------------------------------------ звук
 let actx = null, playing = null;
@@ -5297,10 +6136,13 @@ async function mixdown() {
     for (const cue of S.P.cues) {
       if (cue.type === 'scene' || (cue.type === 'dir' && !isVoicedDir(cue))) continue;
       const y = audioOfSource(sourceOf(cue));
-      if (y) items.push({ id: cue.id, cue, voice: voiceOf(cue), text: cue.text, note: cue.note || '', audio: y });
+      const src = y ? sourceOf(cue) : null;
+      if (y) items.push({ id: cue.id, cue, voice: voiceOf(cue), text: cue.text, note: cue.note || '', audio: y, raw: y, file: src && src.pieces ? src.pieces[src.pieces.length - 1].f : null, file0: src && src.pieces ? src.pieces[0].f : null });
     }
     if (!items.length && !(S.sfx && Object.values(S.sfx.cues).some(c => c.on && c.src))) throw new Error('нет ни одной реплики с записью');
     C.levelLines(items, { strength, manual: S.gains });
+    const energy = a => { let s = 0; for (let i = 0; i < a.length; i += 4) s += a[i] * a[i]; return s; };
+    for (const it of items) { const e0 = energy(it.raw); it.lvlGain = e0 > 0 ? Math.sqrt(energy(it.audio) / e0) : 1; delete it.raw; }
     for (const it of items) { it.audio0 = it.audio; it.fix0 = it.fix; it.levelAfter0 = it.levelAfter; it.man0 = S.gains[it.id] || 0; }   // выровненный звук — основа для регуляторов персонажей
     const byId = new Map(items.map(it => [it.id, it]));
     if (S.result && S.result.url) URL.revokeObjectURL(S.result.url);
@@ -5316,7 +6158,7 @@ async function mixdown() {
 /** Звук реплики в дорожку: эффект (из кэша) × громкость персонажа × ручная поправка после выравнивания. */
 function itemAudio(it) {
   const vg = (S.voiceGains[it.voice] || 0) + ((S.gains[it.id] || 0) - (it.man0 || 0)), g = Math.pow(10, vg / 20);
-  it.fix = it.fix0 + vg; it.levelAfter = it.levelAfter0 + vg;
+  it.fix = it.fix0 + vg; it.levelAfter = it.levelAfter0 + vg; it.roomGain = (it.lvlGain || 1) * g;
   const fx = it.fxKey && it._fx && it._fx.k === it.fxKey ? it._fx : null;
   const base = fx ? fx.y : it.audio0;
   it.core = fx ? fx.core : null;
@@ -5350,6 +6192,7 @@ async function remix(mode = 'full', ids = null) {
   const mix = r.mixBuf.subarray(0, N); mix.fill(0);
   for (const p of lay.placed) { const i0 = Math.round(p.at * C.SR), n = Math.min(p.audio.length, Math.max(0, mix.length - i0)); for (let i = 0; i < n; i++) mix[i0 + i] += p.audio[i]; }   // всё суммой: реплики могут наезжать друг на друга
   lap('сумма');
+  r.room = typeof roomToneMix === 'function' ? roomToneMix(mix, lay) : [];
   r.amb = typeof ambMix === 'function' ? ambMix(mix, lay) : [];
   lap('фон');
   if (mode === 'full') { const m = C.master(mix, lay.placed, { targetLufs: r.target }); r.out = m.out; r.master = m; r.gain = Math.pow(10, m.gainDb / 20); r.approx = false; }
@@ -5379,7 +6222,7 @@ function remixLinesInner(r, ids, before) {
   const pre = (a, b) => {                              // сумма всего, что звучит на [a, b), до мастера
     const y = new Float32Array(b - a);
     for (const p of r.lay.placed) { const i0 = Math.round(p.at * SR), s0 = Math.max(a, i0), s1 = Math.min(b, i0 + p.audio.length); for (let i = s0; i < s1; i++) y[i - a] += p.audio[i - i0]; }
-    for (const c of r.amb || []) { const i0 = Math.round(c.at * SR), s0 = Math.max(a, i0), s1 = Math.min(b, i0 + c.audio.length); for (let i = s0; i < s1; i++) y[i - a] += c.audio[i - i0]; }
+    for (const c of [...(r.amb || []), ...(r.room || [])]) { const i0 = Math.round(c.at * SR), s0 = Math.max(a, i0), s1 = Math.min(b, i0 + c.audio.length); for (let i = s0; i < s1; i++) y[i - a] += c.audio[i - i0]; }
     return y;
   };
   for (let [a, b] of merged) {
@@ -5420,6 +6263,7 @@ function tpUi() {
   if (S.result && S.result.out) document.querySelectorAll('#tp-time, .tp-time-txt').forEach(tt => { tt.textContent = `${fmt(tpTime())} / ${fmt(S.result.out.length / C.SR)}`; });
   const sk = $('#tp-seek'); if (sk && !sk.matches(':active')) sk.value = tpTime();
   if (typeof drawTimeline === 'function') drawTimeline();
+  if (typeof readTick === 'function') readTick();
 }
 /** Перед скачиванием — точная громкость, если были быстрые правки. */
 async function exactResult() {
@@ -5452,7 +6296,7 @@ async function runRemix() {
 function mixStatusHtml(r) { return `${r.approx ? '<span class="muted small" title="После быстрых правок общее усиление прежнее; при скачивании громкость пересчитается точно">громкость уточнится при скачивании</span> ' : ''}${S.lastRemixMs ? `<span class="muted small">пересчёт ${(S.lastRemixMs / 1000).toFixed(1)} с</span>` : ''}`; }
 function mixStatHtml(r) {
   const sounds = r.lay.rows.filter(x => x.sound).length, recorded = r.lay.placed.length - sounds, paused = r.lay.sheet.filter(s => s.cue).length, voices = new Set(r.items.map(it => it.voice));
-  return `${fmt(r.out.length / C.SR)} · реплик со звуком ${recorded}${sounds ? ` · звуков ${sounds}` : ''} · пауз под незаписанное ${paused} · громкость ${r.target} LUFS${r.master.held ? ` · у ${r.master.held} реплик подъём придержан, чтобы не упирались в лимитер` : ''}${r.items.filter(it => it.fxKey).length ? ` · с эффектом ${r.items.filter(it => it.fxKey).length}` : ''}${r.amb && r.amb.length ? ` · фон в ${r.amb.length} сценах` : ''}${Object.keys(S.timing).length ? ` · сдвинуто ${Object.keys(S.timing).length}` : ''}${Object.keys(S.voiceGains).filter(v => voices.has(v)).length ? ' · поправки: ' + Object.entries(S.voiceGains).filter(([v]) => voices.has(v)).map(([v, g]) => `${charName(v)} ${g > 0 ? '+' : ''}${g} дБ`).join(', ') : ''}`;
+  return `${fmt(r.out.length / C.SR)} · реплик со звуком ${recorded}${sounds ? ` · звуков ${sounds}` : ''} · пауз под незаписанное ${paused} · громкость ${r.target} LUFS${r.master.held ? ` · у ${r.master.held} реплик подъём придержан, чтобы не упирались в лимитер` : ''}${r.items.filter(it => it.fxKey).length ? ` · с эффектом ${r.items.filter(it => it.fxKey).length}` : ''}${r.amb && r.amb.length ? ` · фон в ${r.amb.length} сценах` : ''}${r.room && r.room.length ? ` · комнатный тон в ${r.room.length} паузах` : ''}${Object.keys(S.timing).length ? ` · сдвинуто ${Object.keys(S.timing).length}` : ''}${Object.keys(S.voiceGains).filter(v => voices.has(v)).length ? ' · поправки: ' + Object.entries(S.voiceGains).filter(([v]) => voices.has(v)).map(([v, g]) => `${charName(v)} ${g > 0 ? '+' : ''}${g} дБ`).join(', ') : ''}`;
 }
 /** После быстрого пересчёта — только то, что поменялось: таймлайн, сводка, плеер. Выделение и фокус остаются. */
 function refreshMix() {
@@ -5521,7 +6365,7 @@ function reportCsv() {
 function projectJson() {
   return JSON.stringify({ app: 'montage', v: 1, script: S.scriptText,
     files: S.files.map(f => ({ name: f.name, size: f.size, chars: [...f.chars] })),
-    edits: S.edits, gains: S.gains, voiced: S.voiced, voiceGains: S.voiceGains, timing: S.timing, tempo: S.tempo, fxVoice: S.fxVoice, fxLine: S.fxLine, amb: ambSaved(), takes: S.takePick, sfx: S.sfxSaved || {}, sfxLib: (S.sfx ? S.sfx.lib : []).map(f => f.db ? { name: f.name, db: f.db, text: f.text || '' } : f.name),
+    room: S.room !== false, edits: S.edits, gains: S.gains, voiced: S.voiced, voiceGains: S.voiceGains, timing: S.timing, tempo: S.tempo, fxVoice: S.fxVoice, fxLine: S.fxLine, amb: ambSaved(), takes: S.takePick, sfx: S.sfxSaved || {}, sfxLib: (S.sfx ? S.sfx.lib : []).map(f => f.db ? { name: f.name, db: f.db, text: f.text || '' } : f.name),
     cleanup: S.files.filter(f => f.clean && f.clean.chain).map(f => ({ name: f.name, chain: f.clean.chain, preset: f.clean.preset, applied: !!f.raw48 })) }, null, 1);
 }
 
@@ -5546,6 +6390,7 @@ function guessChars(name) {
 }
 function autoAssign(f) { if (!f.manualChars) f.chars = guessChars(f.name); }
 async function addFiles(list) {
+  if (S.P && typeof recImport === 'function') list = await recImport([...list]);
   const audio = [...list].filter(f => /^audio\//.test(f.type) || /\.(wav|mp3|m4a|aac|flac|ogg|opus|aif|aiff|webm)$/i.test(f.name));
   const texts = [...list].filter(f => /\.(txt|md)$/i.test(f.name));
   if (texts.length) { setScript(await texts[0].text()); $('#script').value = S.scriptText; }
@@ -5634,6 +6479,7 @@ function counts() {
     const hasFile = S.files.some(f => f.chars.has(cue.spk));
     const st = statusOf(cue).k;
     if (st === 'miss' && !hasFile) c.none++; else c[st] = (c[st] || 0) + 1;
+    if (typeof slipOf === 'function' && slipOf(cue)) c.slips = (c.slips || 0) + 1;
   }
   return c;
 }
@@ -5645,7 +6491,8 @@ function renderReview() {
     <span class="pill ok" data-n="${c.ok + c.own}">найдено <b>${c.ok + c.own}</b></span>
     <span class="pill check" data-n="${c.check}">проверить <b>${c.check}</b></span>
     <span class="pill miss" data-n="${c.miss}">нет записи <b>${c.miss}</b></span>
-    ${c.none ? `<span class="pill none" data-n="${c.none}">роли без записей <b>${c.none}</b></span>` : ''}`;
+    ${c.none ? `<span class="pill none" data-n="${c.none}">роли без записей <b>${c.none}</b></span>` : ''}
+    ${c.slips ? `<span class="pill slips" data-n="${c.slips}">оговорки <b>${c.slips}</b></span>` : ''}`;
   if (typeof motionCount === 'function') $('#rv-sum').querySelectorAll('.pill').forEach(p => motionCount(p, p.classList[1]));
   if ($('#rv-rerec')) $('#rv-rerec').innerHTML = typeof rerecHtml === 'function' ? rerecHtml() : '';
   document.querySelectorAll('#rv-filter button').forEach(b => b.classList.toggle('on', b.dataset.f === S.filter));
@@ -5664,6 +6511,7 @@ function renderReview() {
     if (S.filter === 'check' && st.k !== 'check') continue;
     if (S.filter === 'miss' && !(st.k === 'miss' && hasFile)) continue;
     if (S.filter === 'dirs' && cue.type !== 'dir') continue;
+    if (S.filter === 'slips' && !(typeof slipOf === 'function' && slipOf(cue))) continue;
     if (scene) { rows.push(`<div class="scene">${esc(scene.text)}</div>`); scene = null; }
     rows.push(rowHtml(cue, st, hasFile));
   }
@@ -5675,7 +6523,8 @@ function rowHtml(cue, st, hasFile) {
   const who = isDir ? `<span class="chip ghost">ремарка</span>` : `<span class="chip ${colorOf(cue.spk)}">${esc(charName(cue.spk))}</span>`;
   const on = isDir ? isVoicedDir(cue) : true;
   const where = !src ? '' : src.kind === 'upload' ? esc(src.name) : src.pieces.map(p => `${esc(p.file)} ${fmt(p.a)}–${fmt(p.b)}`).join(' + ');
-  const heard = src && src.text ? `<div class="heard">услышано: «${esc(src.text.slice(0, 140))}»</div>` : '';
+  const slip = typeof slipOf === 'function' ? slipOf(cue) : null;
+  const heard = slip ? `<div class="heard slip"><span class="slip-l">как прочитано</span> ${slipHtml(slip)}</div>` : src && src.text ? `<div class="heard">услышано: «${esc(src.text.slice(0, 140))}»</div>` : '';
   const g = S.gains[cue.id] || 0;
   return `<div class="row st-${!hasFile && st.k === 'miss' ? 'none' : st.k}${on ? '' : ' off'}" data-id="${cue.id}">
     <div class="num">${esc(cue.id)}</div>
@@ -5690,6 +6539,7 @@ function rowHtml(cue, st, hasFile) {
       ${src && src.takes > 1 ? `<button class="ghost-b" data-act="take-next" title="Актёр прочёл реплику ${src.takes} раза; сначала стоит лучший">дубль ${src.take + 1}/${src.takes} ${ic('next')}</button>` : ''}
       ${isDir ? `<label class="mini"><input type="checkbox" data-act="voiced" ${on ? 'checked' : ''}> в дорожку</label>` : ''}
       <button class="ghost-b" data-act="pick">${src ? 'Другой кусок' : 'Найти'}</button>
+      ${!isDir ? `<button class="ghost-b" data-act="rec" title="Записать с микрофона — с суфлёром">${ic('mic')}Записать</button>` : ''}
       <label class="ghost-b file-b">Своя запись<input type="file" accept="audio/*" data-act="own" hidden></label>
       ${src ? `<button class="ghost-b" data-act="none">Без записи</button>` : ''}
       ${S.edits[cue.id] || S.uploads.has(cue.id) ? `<button class="ghost-b" data-act="reset">Как было</button>` : ''}
@@ -5709,7 +6559,7 @@ function openPicker(row, cue) {
   });
   cands.sort((a, b) => b.sim - a.sim);
   const top = cands.slice(0, 10);
-  box.innerHTML = top.length ? `<p class="muted">Куски из записей${spk ? ' ' + esc(charName(spk)) : ''}, самые похожие по тексту:</p>` + top.map(c => `
+  const html = top.length ? `<p class="muted">Куски из записей${spk ? ' ' + esc(charName(spk)) : ''}, самые похожие по тексту:</p>` + top.map(c => `
     <div class="cand" data-f="${c.fi}" data-a="${c.s.a}" data-b="${c.s.b}">
       <button class="play" data-act="cplay" aria-label="Слушать кусок">▶</button>
       <span class="ctime">${esc(c.f.name)} ${fmt(c.s.a)}–${fmt(c.s.b)}</span>
@@ -5718,22 +6568,52 @@ function openPicker(row, cue) {
       <button class="ghost-b" data-act="take">Взять</button>
       <button class="ghost-b" data-act="add">Добавить</button>
     </div>`).join('') : '<p class="muted">Нет разобранных записей для этой роли.</p>';
-  box.hidden = false;
+  // на телефоне — нижняя шторка: список не прыгает, её смахивают вниз
+  if (typeof sheetOpen === 'function' && phoneUI()) {
+    const who = cue.type === 'line' ? `<span class="chip ${colorOf(cue.spk)}">${esc(charName(cue.spk))}</span>` : '';
+    sheetOpen(`<b>Другой кусок</b>${who}<span class="muted small">реплика ${esc(cue.id)}</span>`, `<p class="sheet-q">${esc(cue.text.length > 160 ? cue.text.slice(0, 157).trimEnd() + '…' : cue.text)}</p>` + html, { label: 'Другой кусок', id: cue.id,
+      onClick: e => { const b = e.target.closest('button'); if (!b || !b.dataset.act) return; rvAct(b, cue.id); if (b.dataset.act === 'take' || b.dataset.act === 'add') sheetClose(); } });
+    return;
+  }
+  box.innerHTML = html; box.hidden = false;
+}
+/** Кнопки реплики в разборе — из строки списка или из шторки «Другой кусок» на телефоне. */
+function rvAct(b, id, row = null) {
+  row = row || document.querySelector(`#rv-list .row[data-id="${CSS.escape(id)}"]`);
+  const cue = S.P.cues.find(c => c.id === id), a = b.dataset.act; if (!cue) return;
+  if (a === 'play') { if (playing && playing.btn === b) return stop(); const y = audioOfSource(sourceOf(cue)); if (y) play(y, b); return; }
+  if (a === 'pick') return openPicker(row, cue);
+  if (a === 'rec') return recOpen([cue]);
+  if (a === 'cplay') { if (playing && playing.btn === b) return stop(); const cd = b.closest('.cand'); play(slice(S.files[+cd.dataset.f], +cd.dataset.a, +cd.dataset.b), b); return; }
+  if (a === 'take' || a === 'add') {
+    const cd = b.closest('.cand'), piece = { file: S.files[+cd.dataset.f].name, a: +cd.dataset.a, b: +cd.dataset.b };
+    const cur = sourceOf(cue);
+    const base = a === 'add' && cur && cur.pieces ? cur.pieces.map(p => ({ file: p.file, a: p.a, b: p.b })) : [];
+    S.edits[cue.id] = { pieces: [...base, piece].sort((x, y) => x.file === y.file ? x.a - y.a : 0) };
+    if (cue.type === 'dir') S.voiced[cue.id] = true;
+  }
+  if (a === 'take-next') { const tk = takeOf(cue.id); if (tk) { const nx = (tk.i + 1) % tk.n; if (nx === tk.best) delete S.takePick[cue.id]; else S.takePick[cue.id] = nx; } }
+  if (a === 'none') S.edits[cue.id] = { none: true };
+  if (a === 'reset') { delete S.edits[cue.id]; S.uploads.delete(cue.id); }
+  if (a === 'g+' || a === 'g-') { S.gains[cue.id] = (S.gains[cue.id] || 0) + (a === 'g+' ? 1 : -1); if (!S.gains[cue.id]) delete S.gains[cue.id]; }
+  saveEdits(); S.result = null; renderReview(); renderMix();
 }
 function renderMix() {
   const sec = $('#mix'); sec.hidden = !(S.matches.size || S.uploads.size || (S.P && S.sfx && Object.values(S.sfx.cues).some(c => c.on && c.src)));
   $('#mixgo').disabled = S.busy;
+  if ($('#room')) $('#room').checked = S.room !== false;
   $('#lvl-v').textContent = (+$('#lvl').value).toFixed(2).replace(/0$/, '');
   if ($('#tempo')) { $('#tempo').value = S.tempo || 1; $('#tempo-v').textContent = (S.tempo || 1).toFixed(2).replace(/0$/, '') + '×'; }
   const r = S.result, out = $('#mix-out');
   if (!r || !r.out) { if (tlState().full) tlSetFull(false); out.innerHTML = ''; if (typeof tpPause === 'function') tpPause(); return; }
-  if (!out.querySelector('#mix-tl')) out.innerHTML = '<div id="mix-top"></div><div id="mix-tl"></div><div id="mix-rest"></div>';
+  if (!out.querySelector('#mix-tl')) out.innerHTML = '<div id="mix-top"></div><div id="mix-read"></div><div id="mix-tl"></div><div id="mix-rest"></div>';
   const voices = new Map();
   for (const it of r.items) { if (!voices.has(it.voice)) voices.set(it.voice, []); voices.get(it.voice).push(it); }
   const spread = list => { const a = list.map(x => x.levelAfter).sort((x, y) => x - y), b = list.map(x => x.level).sort((x, y) => x - y); const p = (arr, q) => arr[Math.min(arr.length - 1, Math.floor(q * (arr.length - 1)))]; return [p(b, 0.9) - p(b, 0.1), p(a, 0.9) - p(a, 0.1)]; };
   $('#mix-top').innerHTML = `
     <div class="tp"><button class="play big" id="tp-play" data-act="tp-play" aria-label="${TP.playing ? 'Пауза' : 'Играть'}" title="Играть и пауза (пробел)">${tpIcon(TP.playing)}</button>
       <input type="range" id="tp-seek" min="0" max="${(r.out.length / C.SR).toFixed(1)}" step="0.1" value="${tpTime()}" aria-label="Позиция"><span class="tp-time" id="tp-time">${fmt(tpTime())} / ${fmt(r.out.length / C.SR)}</span>
+      <button class="ghost-b tp-read${S.readOpen ? ' on' : ''}" data-act="read" aria-pressed="${!!S.readOpen}" title="Сценарий идёт за плеером">${ic('lines')}Читка</button>
       <span id="mix-status">${mixStatusHtml(r)}</span></div>
 `;
   if (!$('#mix-tl .tl')) $('#mix-tl').innerHTML = `<div class="tl ${tlState().full ? 'full' : ''}" role="region" aria-label="Таймлайн сведения">
@@ -5760,8 +6640,10 @@ function renderMix() {
       <button class="ghost-b" data-act="stems" title="Дорожки по персонажам, звуки и фон отдельными WAV плюс проект для Reaper">Стемы для Reaper, Audacity (.zip${typeof buildStems === 'function' ? ', ≈ ' + Math.round(buildStems().stems.length * r.out.length * 2 / 1e6) + ' МБ' : ''})</button>
       ${r.lay.scenes && r.lay.scenes.length > 1 ? '<button class="ghost-b" data-act="chapters" title="Строки вида «00:00 Сцена 1 — кабинет» для описания на YouTube">Главы (.txt)</button>' : ''}
     </div>
-    ${r.lay.scenes && r.lay.scenes.length > 1 ? '<p class="muted small">В MP3 сцены записаны главами: в плеерах подкастов и VLC по ним можно прыгать.</p>' : ''}`;
+    ${r.lay.scenes && r.lay.scenes.length > 1 ? '<p class="muted small">В MP3 сцены записаны главами: в плеерах подкастов и VLC по ним можно прыгать.</p>' : ''}
+    ${typeof videoHtml === 'function' ? videoHtml() : ''}`;
   histUi();
+  if (typeof readRender === 'function') readRender();
   requestAnimationFrame(drawTimeline);
 }
 
@@ -5770,7 +6652,7 @@ function bind() {
   $('.tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
     const go = () => { S.tab = b.dataset.tab; stop(); history.replaceState(null, '', S.tab === 'clean' ? '#clean' : location.pathname); render(); };
     if (typeof motionTabSwitch === 'function' && e.detail !== 0) motionTabSwitch(b.dataset.tab, go); else go(); });
-  bindCleanup(); bindSounds();
+  bindCleanup(); bindSounds(); if (typeof bindVideo === 'function') bindVideo();
   const drop = (zone, fn) => {
     zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('over'); });
     zone.addEventListener('dragleave', () => zone.classList.remove('over'));
@@ -5785,7 +6667,7 @@ function bind() {
     try {
       const p = JSON.parse(await f.text());
       $('#script').value = p.script || ''; setScript(p.script || '');
-      S.edits = p.edits || {}; S.gains = p.gains || {}; S.voiced = p.voiced || {}; S.voiceGains = p.voiceGains || {}; S.timing = p.timing || {}; S.tempo = p.tempo || 1; S.fxVoice = p.fxVoice || {}; S.fxLine = p.fxLine || {}; S.amb = p.amb ? { duck: 8, scenes: {}, cands: {}, ...p.amb } : null; S.takePick = p.takes || {}; saveEdits();
+      S.room = p.room !== false; S.edits = p.edits || {}; S.gains = p.gains || {}; S.voiced = p.voiced || {}; S.voiceGains = p.voiceGains || {}; S.timing = p.timing || {}; S.tempo = p.tempo || 1; S.fxVoice = p.fxVoice || {}; S.fxLine = p.fxLine || {}; S.amb = p.amb ? { duck: 8, scenes: {}, cands: {}, ...p.amb } : null; S.takePick = p.takes || {}; saveEdits();
       S.pendingChars = new Map((p.files || []).map(x => [x.name, x.chars]));
       for (const f of S.files) if (S.pendingChars.has(f.name)) { f.chars = new Set(S.pendingChars.get(f.name)); f.manualChars = true; }
       S.sfxSaved = p.sfx || {}; sfxState().cues = JSON.parse(JSON.stringify(S.sfxSaved)); saveEdits();
@@ -5820,27 +6702,11 @@ function bind() {
   $('#go').addEventListener('click', analyze);
   $('#rv-filter').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { S.filter = b.dataset.f; renderReview(); } });
   $('#dirs-t').addEventListener('change', e => { S.showDirs = e.target.checked; renderReview(); });
-  $('#rv-rerec').addEventListener('click', e => { const b = e.target.closest('button[data-act=rerec]'); if (!b) return; const spk = b.dataset.spk || null;
+  $('#rv-rerec').addEventListener('click', e => { const r = e.target.closest('button[data-act=rec-spk]'); if (r) { recOpenFor(r.dataset.spk); return; } const b = e.target.closest('button[data-act=rerec]'); if (!b) return; const spk = b.dataset.spk || null;
     download(new Blob([rerecText(spk)], { type: 'text/plain;charset=utf-8' }), `дозапись${spk ? '-' + charName(spk) : ''}.txt`); });
   $('#rv-list').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
-    const row = b.closest('.row'); if (!row) return;
-    const cue = S.P.cues.find(c => c.id === row.dataset.id), a = b.dataset.act;
-    if (a === 'play') { if (playing && playing.btn === b) return stop(); const y = audioOfSource(sourceOf(cue)); if (y) play(y, b); return; }
-    if (a === 'pick') return openPicker(row, cue);
-    if (a === 'cplay') { if (playing && playing.btn === b) return stop(); const cd = b.closest('.cand'); play(slice(S.files[+cd.dataset.f], +cd.dataset.a, +cd.dataset.b), b); return; }
-    if (a === 'take' || a === 'add') {
-      const cd = b.closest('.cand'), piece = { file: S.files[+cd.dataset.f].name, a: +cd.dataset.a, b: +cd.dataset.b };
-      const cur = sourceOf(cue);
-      const base = a === 'add' && cur && cur.pieces ? cur.pieces.map(p => ({ file: p.file, a: p.a, b: p.b })) : [];
-      S.edits[cue.id] = { pieces: [...base, piece].sort((x, y) => x.file === y.file ? x.a - y.a : 0) };
-      if (cue.type === 'dir') S.voiced[cue.id] = true;
-    }
-    if (a === 'take-next') { const tk = takeOf(cue.id); if (tk) { const nx = (tk.i + 1) % tk.n; if (nx === tk.best) delete S.takePick[cue.id]; else S.takePick[cue.id] = nx; } }
-    if (a === 'none') S.edits[cue.id] = { none: true };
-    if (a === 'reset') { delete S.edits[cue.id]; S.uploads.delete(cue.id); }
-    if (a === 'g+' || a === 'g-') { S.gains[cue.id] = (S.gains[cue.id] || 0) + (a === 'g+' ? 1 : -1); if (!S.gains[cue.id]) delete S.gains[cue.id]; }
-    saveEdits(); S.result = null; renderReview(); renderMix();
+    const row = b.closest('.row'); if (row) rvAct(b, row.dataset.id, row);
   });
   $('#rv-list').addEventListener('change', e => {
     const x = e.target, row = x.closest('.row'); if (!row) return;
@@ -5848,6 +6714,7 @@ function bind() {
     if (x.dataset.act === 'voiced') { S.voiced[row.dataset.id] = x.checked; saveEdits(); S.result = null; renderReview(); renderMix(); }
   });
   $('#lvl').addEventListener('input', () => { $('#lvl-v').textContent = (+$('#lvl').value).toFixed(2).replace(/0$/, ''); });
+  $('#room').addEventListener('change', e => { S.room = e.target.checked; saveEdits(); if (S.result && S.result.out) remixSoon('layout'); });
   $('#tempo').addEventListener('input', () => { $('#tempo-v').textContent = (+$('#tempo').value).toFixed(2).replace(/0$/, '') + '×'; });
   $('#tempo').addEventListener('change', () => { if (+$('#tempo').value === (S.tempo || 1)) return; histPush(`темп пауз ${(+$('#tempo').value).toFixed(2)}×`); S.tempo = +$('#tempo').value; saveEdits(); if (S.result) remixSoon('layout'); });
   if (typeof bindTimeline === 'function') bindTimeline();
@@ -5856,7 +6723,7 @@ function bind() {
   $('#mix-out').addEventListener('change', e => { const x = e.target;
     if (x.dataset.fxvoice != null) { if ((x.value || undefined) === S.fxVoice[x.dataset.fxvoice]) return; histPush(`эффект персонажа ${charName(x.dataset.fxvoice)}: ${x.value ? FX_PRESETS[x.value].name : 'как по пометкам'}`); if (x.value) S.fxVoice[x.dataset.fxvoice] = x.value; else delete S.fxVoice[x.dataset.fxvoice]; saveEdits(); remixSoon('lines', voiceIds(x.dataset.fxvoice)); drawTimeline(); return; }
     if (x.dataset.voice == null) return; const v = +x.value; if (v === (S.voiceGains[x.dataset.voice] || 0)) return; histPush(`громкость персонажа ${charName(x.dataset.voice)} ${v > 0 ? '+' : ''}${v} дБ`); if (v) S.voiceGains[x.dataset.voice] = v; else delete S.voiceGains[x.dataset.voice]; saveEdits(); remixSoon('lines', voiceIds(x.dataset.voice)); });
-  $('#mix-out').addEventListener('input', e => { if (e.target.id === 'tp-seek') { TP.offset = +e.target.value; if (TP.playing) tpPlay(+e.target.value); else tpUi(); } });
+  $('#mix-out').addEventListener('input', e => { if (e.target.id === 'tp-seek') { TP.offset = +e.target.value; if (TP.playing) tpPlay(+e.target.value); else { tpUi(); if (typeof tlGrain === 'function') tlGrain(+e.target.value); } } });
   document.addEventListener('keydown', e => {                 // Ctrl+Z — отменить, Ctrl+Shift+Z или Ctrl+Y — повторить (в текстовых полях — их собственная отмена)
     if (!(e.ctrlKey || e.metaKey) || e.altKey || !S.result || S.tab !== 'build') return;
     if (/TEXTAREA/.test(e.target.tagName) || (e.target.tagName === 'INPUT' && /text|search|number/.test(e.target.type))) return;
@@ -5873,6 +6740,7 @@ function bind() {
     const a = b.dataset.act;
     try {
       if (a === 'tp-play') { TP.playing ? tpPause() : tpPlay(); return; }
+      if (a === 'read') { S.readOpen = !S.readOpen; renderMix(); return; }
       if (a === 'vg0') { histPush(`громкость персонажа ${charName(b.dataset.voice)} 0 дБ`); delete S.voiceGains[b.dataset.voice]; saveEdits(); const sl = $('#mix-out').querySelector(`input[data-voice="${CSS.escape(b.dataset.voice)}"]`); if (sl) { sl.value = 0; sl.nextElementSibling.textContent = '0 дБ'; } remixSoon('lines', voiceIds(b.dataset.voice)); return; }
       if (['mp3', 'wav', 'stems'].includes(a) && S.result.approx) { b.disabled = true; await exactResult(); b.disabled = false; }
       if (a === 'mp3') { b.disabled = true; const blob = await encodeMp3(S.result.out, +$('#kbps').value); progress('', 0); const tag = typeof id3Chapters === 'function' ? id3Chapters((S.P.title || 'Радиоспектакль')) : null; download(tag && tag.length ? new Blob([tag, blob], { type: 'audio/mpeg' }) : blob, `сведение-${stamp}.mp3`); b.disabled = false; }
@@ -5881,13 +6749,16 @@ function bind() {
       if (a === 'wav') download(new Blob([C.wav24(S.result.out)], { type: 'audio/wav' }), `сведение-${stamp}.wav`);
       if (a === 'pauses') download(new Blob([reportPauses()], { type: 'text/plain;charset=utf-8' }), `паузы-${stamp}.txt`);
       if (a === 'csv') download(new Blob([reportCsv()], { type: 'text/csv;charset=utf-8' }), `разметка-${stamp}.csv`);
+      if (a === 'srt') download(new Blob([srtText()], { type: 'text/plain;charset=utf-8' }), `субтитры-${stamp}.srt`);
+      if (a === 'vtt') download(new Blob([vttText()], { type: 'text/vtt;charset=utf-8' }), `субтитры-${stamp}.vtt`);
+      if (a === 'video') { await exportVideo(); return; }
       if (a === 'proj') download(new Blob([projectJson()], { type: 'application/json' }), `проект-${stamp}.json`);
     } catch (err) { b.disabled = false; progress('', 0); notify('Не получилось: ' + err.message); }
   });
 }
 
 // для проверки из консоли и автотестов
-window.montage = { S, C, PRESETS, play: (y, btn) => play(y, btn), stop: () => stop(), progress: (t, p) => progress(t, p), notify: t => notify(t), DECK: typeof DECK !== 'undefined' ? DECK : null, MOTION: typeof MOTION !== 'undefined' ? MOTION : null, audioLevel: () => audioLevel(), projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses };
+window.montage = { S, C, PRESETS, play: (y, btn) => play(y, btn), stop: () => stop(), progress: (t, p) => progress(t, p), notify: t => notify(t), DECK: typeof DECK !== 'undefined' ? DECK : null, MOTION: typeof MOTION !== 'undefined' ? MOTION : null, audioLevel: () => audioLevel(), projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses, recOpenFor: k => recOpenFor(k), recOpen: l => recOpen(l), REC: typeof REC !== 'undefined' ? REC : null, srtText: () => srtText(), vttText: () => vttText(), subCues: () => subCues(), buildVideo: o => buildVideo(o), videoFormat: () => videoFormat(1280, 720, 24), slipDiff: (a, b) => slipDiff(a, b), slipOf: c => slipOf(c) };
 bind(); render();
 if (typeof motionInit === 'function') motionInit();
 if (typeof initDeck === 'function') initDeck();

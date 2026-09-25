@@ -4,6 +4,8 @@
 // эффект, громкость, сдвиг, выделение, отмена. Тянуть реплику — пауза перед ней (всё дальше едет следом);
 // с Alt или при нескольких выбранных — двигаются только они. Колёсико — масштаб, Shift+колёсико или
 // Alt+протяжка — прокрутка, мини-карта снизу — весь спектакль. «На весь экран» — таймлайн во весь монитор.
+// Щипок (тачпад или два пальца) — масштаб за пальцами, у пределов резина; линейку и курсор плеера тянут со звуком.
+// Пальцем: по пустому — листать, короткое касание реплики — выбрать, долгое — поднять и двигать.
 // Использует S, $, esc, fmt, charName, colorOf, cssVar, saveEdits, remixSoon, voiceIds, TP, tpTime, tpSeek,
 // tpPlay, tpPause из app.js; histPush, histUndo, histRedo, histUi, tlFlash из history.js; C — ядро.
 const TL = { HEAD: 150, RULER: 22, PAD: 6, MAX_ZOOM: 400, OV: 30 };
@@ -47,8 +49,10 @@ function drawTimeline() {
   const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
   const total = r.lay.total, areaW = W - TL.HEAD, minZoom = areaW / total;
   if (!st.zoom) st.zoom = minZoom;
-  st.zoom = Math.max(minZoom, Math.min(TL.MAX_ZOOM, st.zoom));
-  st.scroll = Math.max(0, Math.min(Math.max(0, total - areaW / st.zoom), st.scroll));
+  // во время щипка масштаб может зайти за предел (резина) — тогда и прокрутка отпускается, пока не отпружинит
+  st.zoom = st.elastic ? Math.max(minZoom * 0.5, Math.min(TL.MAX_ZOOM * 2, st.zoom)) : Math.max(minZoom, Math.min(TL.MAX_ZOOM, st.zoom));
+  const sMax = total - areaW / st.zoom;
+  st.scroll = st.elastic ? Math.max(Math.min(0, sMax), Math.min(Math.max(0, sMax), st.scroll)) : Math.max(0, Math.min(Math.max(0, sMax), st.scroll));
   const ink = cssVar('--ink'), muted = cssVar('--muted'), line = cssVar('--line'), line2 = cssVar('--line2'), bg = cssVar('--bg'), surface = cssVar('--surface'), accent = cssVar('--accent');
   g.fillStyle = bg; g.fillRect(0, 0, W, H);
   tracks.forEach((tr, i) => {
@@ -61,11 +65,12 @@ function drawTimeline() {
     g.save(); g.beginPath(); g.rect(6, y, TL.HEAD - 14, ROW); g.clip(); g.fillText(tr.name, 14, y + ROW / 2 + 0.5); g.restore();
     if (tr.voice && S.fxVoice && S.fxVoice[tr.voice] && S.fxVoice[tr.voice] !== 'none') { g.fillStyle = accent; g.beginPath(); g.arc(TL.HEAD - 14, y + ROW / 2 - ph / 2 + 4, 3.2, 0, Math.PI * 2); g.fill(); }
   });
+  if (st.elastic) { const xa = tlX(st, 0), xb = tlX(st, total); g.fillStyle = cssVar('--well'); if (xa > TL.HEAD) g.fillRect(TL.HEAD, TL.RULER, xa - TL.HEAD, H); if (xb < W) g.fillRect(xb, TL.RULER, W - xb, H); }
   g.fillStyle = surface; g.fillRect(TL.HEAD, 0, areaW, TL.RULER); g.strokeStyle = line; g.beginPath(); g.moveTo(TL.HEAD, TL.RULER + 0.5); g.lineTo(W, TL.RULER + 0.5); g.stroke();
   const steps = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600], step = steps.find(s => s * st.zoom >= 70) || 600;
   g.font = '11px ' + cssVar('--mono'); g.fillStyle = muted; g.textAlign = 'left';
   for (let t = Math.floor(st.scroll / step) * step; t <= st.scroll + areaW / st.zoom; t += step) {
-    const x = tlX(st, t); if (x < TL.HEAD) continue;
+    const x = tlX(st, t); if (x < TL.HEAD || t < 0 || t > total + 0.01) continue;
     g.strokeStyle = line2; g.beginPath(); g.moveTo(x + 0.5, TL.RULER - 6); g.lineTo(x + 0.5, H); g.stroke();
     g.fillText(C.ts(t), x + 3, 9);
   }
@@ -124,6 +129,7 @@ function tlPos(e) { const r = $('#tl-cv').getBoundingClientRect(); return { x: e
 function tlHit(e) {
   const st = tlState(), { x, y } = tlPos(e), tracks = S.tlTracks || [];
   if (y < TL.RULER) return { ruler: true, t: tlT(st, x) };
+  if (x >= TL.HEAD && TP.buf && S.result && S.result.out && Math.abs(x - tlX(st, tpTime())) <= (e.pointerType === 'touch' ? 10 : 4)) return { ruler: true, play: true, t: tlT(st, x) };   // за курсор плеера — как за линейку
   const ti = Math.floor((y - TL.RULER) / st.row), tr = tracks[ti];
   if (x < TL.HEAD) return tr ? { head: true, track: tr } : null;
   if (!tr) return { empty: true, t: tlT(st, x) };
@@ -188,7 +194,7 @@ function tlVoiceGain(voice, d) {
 }
 // ------------------------------------------------------------------ панели
 function tlInfoHtml() {
-  const st = tlState(), r = S.result; if (!r || !st.sel.size) return '<span class="muted">Щёлкните реплику · Ctrl или Shift+щелчок — добавить · протяжка по пустому месту — рамка · щелчок по имени дорожки — все реплики персонажа · <b>правый щелчок — меню</b> · тянуть реплику — двигать, с Alt — только её · колёсико — масштаб · пробел — играть · Ctrl+Z — отменить</span>';
+  const st = tlState(), r = S.result; if (!r || !st.sel.size) return '<span class="muted">Щёлкните реплику · Ctrl или Shift+щелчок — добавить · протяжка по пустому месту — рамка · щелчок по имени дорожки — все реплики персонажа · <b>правый щелчок — меню</b> · тянуть реплику — двигать, с Alt — только её · колёсико или щипок — масштаб · тянуть по линейке или за курсор — слышно, где вы · пробел — играть · Ctrl+Z — отменить</span>';
   const fxSel = (cur, auto) => `<label>эффект <select data-act="tl-fx"><option value="">${auto || 'как у персонажа'}</option>${Object.entries(FX_PRESETS).map(([k, p]) => `<option value="${k}" ${cur === k ? 'selected' : ''}>${p.name}</option>`).join('')}</select></label>`;
   const gainBtns = `<span class="gain">громкость <button class="icon" data-act="tl-g-" aria-label="Тише на 1 дБ">${ic('minus')}</button><button class="icon" data-act="tl-g+" aria-label="Громче на 1 дБ">${ic('plus')}</button></span>`;
   if (st.sel.size > 1) {
@@ -229,7 +235,7 @@ function tlFollow() {                                  // курсор плее�
   cancelAnimationFrame(tlRaf); drawTimeline();
   const step = () => {
     tlRaf = 0; const st = tlState(), total = S.result && S.result.out ? S.result.out.length / C.SR : 0;
-    tlHeadUpdate(); tlFrame++;
+    tlHeadUpdate(); tlFrame++; if (typeof readTick === 'function') readTick();
     const txt = `${fmt(tpTime())} / ${fmt(total)}`;
     document.querySelectorAll('#tp-time, .tp-time-txt').forEach(el => { if (el.textContent !== txt) el.textContent = txt; });
     const sk = $('#tp-seek'); if (sk && !sk.matches(':active') && tlFrame % 3 === 0) sk.value = tpTime();
@@ -333,23 +339,28 @@ function bindTimeline() {
     if (hit.clip) { const id = hit.clip.row.cue.id; if (!st.sel.has(id)) tlSelect([id]); tlMenuOpen(e.clientX, e.clientY, { ids: new Set(st.sel), t: hit.clip.row.at }); return; }
     tlMenuOpen(e.clientX, e.clientY, { ids: new Set(st.sel), t: hit.t != null ? Math.max(0, hit.t) : null });
   });
+  const touches = new Map();                           // пальцы на холсте: два — щипок
+  const panFrom = x => ({ x0: x, scroll0: tlState().scroll, hist: [{ t: performance.now(), x, y: 0 }] });
   host.addEventListener('pointerdown', e => {
     if (e.target.id === 'tl-ov') { const st = tlState(); st.ovDrag = true; tlOvSeek(e); try { e.target.setPointerCapture(e.pointerId); } catch {} return; }
     if (e.target.id !== 'tl-cv' || e.button === 2) return;
     tlMenuClose(false);
-    const st = tlState(), hit = tlHit(e), add = e.ctrlKey || e.metaKey || e.shiftKey, pos = tlPos(e); e.target.focus();
-    if (!hit) return;
-    if (e.button === 1 || (e.altKey && !hit.clip)) { tlCoastStop(); st.pan = { x0: e.clientX, scroll0: st.scroll, hist: [{ t: performance.now(), x: e.clientX, y: 0 }] }; }
-    else if (hit.ruler) { st.scrub = true; tlSeek(hit.t); }
-    else if (hit.head) { const ids = hit.track.clips.filter(c => !c.fixed).map(c => c.row.cue.id); tlSelect(ids, add); }
-    else if (hit.clip && add) { st.band = { x0: pos.x, y0: pos.y, x1: pos.x, y1: pos.y, add: true, base: new Set(st.sel), toggle: hit.clip.row.cue.id }; }
-    else if (hit.clip) {
-      const id = hit.clip.row.cue.id, inGroup = st.sel.size > 1 && st.sel.has(id);
-      const group = inGroup ? new Set(st.sel) : null, own = e.altKey || st.own || !!group;
-      const clips = group ? tlAllClips().filter(c => group.has(c.row.cue.id)) : [hit.clip];
-      const min = Math.max(...clips.map(c => tlMinDelta(c, own)));
-      st.drag = { clip: hit.clip, x0: e.clientX, delta: 0, own, moved: false, min, group, clips };
+    const st = tlState(), touch = e.pointerType === 'touch';
+    tlZoomStop(st);                                    // коснулись — инерция и пружина масштаба останавливаются там, где были
+    if (touch) {
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      try { e.target.setPointerCapture(e.pointerId); } catch {}
+      if (touches.size === 2) { tlPinchBegin(st, [...touches.values()]); return; }
+      if (touches.size > 2 || st.pinch || st.pinchRest) return;
     }
+    const hit = tlHit(e), add = e.ctrlKey || e.metaKey || e.shiftKey, pos = tlPos(e); e.target.focus();
+    if (!hit) return;
+    if (e.button === 1 || (e.altKey && !hit.clip) || (touch && hit.empty)) st.pan = panFrom(e.clientX);   // пальцем по пустому — листать
+    else if (hit.ruler) { st.scrub = true; tlSeek(hit.t); tlGrain(hit.t, true); }
+    else if (hit.head) { const ids = hit.track.clips.filter(c => !c.fixed).map(c => c.row.cue.id); tlSelect(ids, add); }
+    else if (hit.clip && touch) st.hold = { clip: hit.clip, x0: e.clientX, y0: e.clientY, x: e.clientX, timer: setTimeout(() => tlLift(st), 320) };   // пальцем: реплику берут долгим нажатием, иначе — листать
+    else if (hit.clip && add) { st.band = { x0: pos.x, y0: pos.y, x1: pos.x, y1: pos.y, add: true, base: new Set(st.sel), toggle: hit.clip.row.cue.id }; }
+    else if (hit.clip) st.drag = tlDragStart(hit.clip, e.clientX, e.altKey);
     else st.band = { x0: pos.x, y0: pos.y, x1: pos.x, y1: pos.y, add, base: new Set(add ? st.sel : []) };
     try { e.target.setPointerCapture(e.pointerId); } catch {}
   });
@@ -357,6 +368,16 @@ function bindTimeline() {
     if (e.target.id === 'tl-ov') { if (tlState().ovDrag) tlOvSeek(e); return; }
     if (e.target.id !== 'tl-cv') return;
     const st = tlState();
+    if (touches.has(e.pointerId)) {
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (st.pinch) { tlPinchMove(st, [...touches.values()]); return; }
+      if (st.pinchRest) return;
+      if (st.hold) {
+        st.hold.x = e.clientX;
+        if (Math.hypot(e.clientX - st.hold.x0, e.clientY - st.hold.y0) < 8) return;
+        clearTimeout(st.hold.timer); st.pan = panFrom(st.hold.x0); st.hold = null;
+      }
+    }
     if (st.drag) {
       const d = (e.clientX - st.drag.x0) / st.zoom; if (Math.abs(e.clientX - st.drag.x0) > 3) st.drag.moved = true;
       // упёрлась в соседнюю или в предел — не стоп, а резина: чем дальше тянешь, тем меньше идёт
@@ -371,7 +392,7 @@ function bindTimeline() {
       drawTimeline();
     }
     else if (st.pan) { st.pan.hist.push({ t: performance.now(), x: e.clientX, y: 0 }); if (st.pan.hist.length > 8) st.pan.hist.shift(); st.scroll = st.pan.scroll0 - (e.clientX - st.pan.x0) / st.zoom; drawTimeline(); }
-    else if (st.scrub) { const hit = tlHit(e); if (hit && hit.t != null) tlSeek(hit.t); }
+    else if (st.scrub) { const hit = tlHit(e); if (hit && hit.t != null) { tlSeek(hit.t); tlGrain(Math.max(0, hit.t)); } }
     else { const hit = tlHit(e); e.target.style.cursor = hit && hit.clip ? 'grab' : hit && hit.ruler ? 'col-resize' : hit && hit.head ? 'pointer' : 'crosshair'; }
   });
   const up = () => {
@@ -391,15 +412,30 @@ function bindTimeline() {
     if (st.pan && typeof velocityOf === 'function') tlCoast(-velocityOf(st.pan.hist).x / st.zoom);
     st.pan = null; st.scrub = false; drawTimeline();
   };
-  host.addEventListener('pointerup', e => { if (e.target.id === 'tl-cv' || e.target.id === 'tl-ov') up(); });
-  host.addEventListener('pointercancel', e => { if (e.target.id === 'tl-cv' || e.target.id === 'tl-ov') up(); });
+  const end = e => {
+    if (touches.has(e.pointerId)) {
+      touches.delete(e.pointerId); const st = tlState();
+      if (st.pinch) { tlPinchEnd(st); st.pinchRest = touches.size > 0; return; }
+      if (st.pinchRest) { st.pinchRest = touches.size > 0; return; }
+      if (st.hold) { clearTimeout(st.hold.timer); const id = st.hold.clip.row.cue.id; st.hold = null; if (e.type === 'pointerup') tlSelect([id]); return; }   // короткое касание — выбрать
+    }
+    if (e.target.id === 'tl-cv' || e.target.id === 'tl-ov') up();
+  };
+  host.addEventListener('pointerup', end);
+  host.addEventListener('pointercancel', end);
   host.addEventListener('dblclick', e => { if (e.target.id !== 'tl-cv') return; const hit = tlHit(e); if (hit && hit.clip) tlSeek(hit.clip.row.at, true); });
   host.addEventListener('wheel', e => {
     if (e.target.id !== 'tl-cv' && e.target.id !== 'tl-ov') return; e.preventDefault();
     const st = tlState(), mx = e.target.id === 'tl-cv' ? tlPos(e).x : null;
+    if (e.ctrlKey && mx != null && !e.shiftKey) { tlPinchWheel(st, e.deltaMode ? e.deltaY * 16 : e.deltaY, mx); return; }   // щипок на тачпаде приходит как Ctrl+колёсико
+    if (!st.pinchW) tlZoomStop(st);
     if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.target.id === 'tl-ov') { st.scroll += (e.deltaX || e.deltaY) / st.zoom; drawTimeline(); }
     else tlZoom(Math.pow(1.25, -e.deltaY / 100), mx);
   }, { passive: false });
+  // Safari на Mac: щипок приходит своими событиями жестов, со свойством scale
+  host.addEventListener('gesturestart', e => { if (e.target.id !== 'tl-cv') return; e.preventDefault(); const st = tlState(); if (st.pinch) return; const mx = tlPos(e).x; tlZoomStop(st); st.pinchG = { z0: st.zoom, mx, t: tlT(st, mx) }; });
+  host.addEventListener('gesturechange', e => { const st = tlState(), p = st.pinchG; if (!p) return; e.preventDefault(); tlPinchTo(st, p.z0 * e.scale, p.mx, p.t); });
+  host.addEventListener('gestureend', e => { const st = tlState(), p = st.pinchG; if (!p) return; e.preventDefault(); st.pinchG = null; tlZoomSettle(p.mx, tlT(st, p.mx)); });
   host.addEventListener('keydown', e => {
     if (e.target.closest && e.target.closest('#tl-menu')) {         // меню: стрелки, Enter, Esc
       const items = [...$('#tl-menu').querySelectorAll('button:not([disabled])')], i = items.indexOf(document.activeElement);
@@ -464,6 +500,91 @@ function tlSettle(d, over) {
   const owner = { render() { if (!st.settle) return; drawTimeline(); if (!SPRING.live.has(st.settle.m)) st.settle = null; } };
   st.settle = { m: mv(over, 0.002, owner), ids: d.group ? new Set(d.group) : null, own: d.own, idx: d.clip.idx };
   mvTo(st.settle.m, 0, { damping: 0.62, response: 0.4 });
+}
+function tlDragStart(clip, x0, alt) {
+  const st = tlState(), id = clip.row.cue.id, inGroup = st.sel.size > 1 && st.sel.has(id);
+  const group = inGroup ? new Set(st.sel) : null, own = alt || st.own || !!group;
+  const clips = group ? tlAllClips().filter(c => group.has(c.row.cue.id)) : [clip];
+  return { clip, x0, delta: 0, own, moved: false, min: Math.max(...clips.map(c => tlMinDelta(c, own))), group, clips };
+}
+/** Долгое нажатие пальцем: реплика «поднимается» (выделяется, телефон коротко вздрагивает) и дальше идёт за пальцем. */
+function tlLift(st) {
+  const h = st.hold; if (!h) return; st.hold = null;
+  st.drag = tlDragStart(h.clip, h.x, false);
+  if (!st.sel.has(h.clip.row.cue.id)) tlSelect([h.clip.row.cue.id]); else drawTimeline();
+  try { navigator.vibrate && navigator.vibrate(8); } catch {}
+}
+// ------------------------------------------------------------------ щипок: масштаб за пальцами, у пределов — резина
+function tlZoomLimits(st) { return [((st.W || 800) - TL.HEAD) / S.result.lay.total, TL.MAX_ZOOM]; }
+/** За пределом масштаб идёт всё неохотнее (резина в логарифме: край ощущается одинаково на любом масштабе). */
+function tlElastic(st, raw) {
+  const [lo, hi] = tlZoomLimits(st), rb = o => typeof rubber === 'function' ? rubber(o, 0.6) : 0;
+  return raw < lo ? lo * Math.exp(-rb(Math.log(lo / raw))) : raw > hi ? hi * Math.exp(rb(Math.log(raw / hi))) : raw;
+}
+function tlZoomStop(st) {
+  tlCoastStop();
+  if (st.zSettle) { SPRING.live.delete(st.zSettle); st.zSettle = null; }
+  if (typeof MOTION !== 'undefined' && MOTION.view) { cancelAnimationFrame(MOTION.view); MOTION.view = 0; }
+}
+/** Точка под пальцами (время t) остаётся под пальцами — вид растягивается вокруг неё и едет вместе с ними. */
+function tlPinchTo(st, raw, mx, t) { st.elastic = true; st.zoom = tlElastic(st, raw); st.scroll = t - (mx - TL.HEAD) / st.zoom; drawTimeline(); }
+const tlMid = pts => { const r = $('#tl-cv').getBoundingClientRect(); return { mx: (pts[0].x + pts[1].x) / 2 - r.left, d: Math.max(20, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)) }; };
+function tlPinchBegin(st, pts) {
+  // второй палец: что начал первый — отменяется без следа (реплика не сдвигается, рамка не выделяет)
+  if (st.hold) { clearTimeout(st.hold.timer); st.hold = null; }
+  if (st.band) { st.sel = st.band.base; st.band = null; tlRefreshInfo(); }
+  st.drag = null; st.pan = null; st.scrub = false; tlZoomStop(st);
+  const { mx, d } = tlMid(pts);
+  st.pinch = { d0: d, z0: st.zoom, t: tlT(st, mx), mx, hist: [{ t: performance.now(), x: mx, y: 0 }] };
+  drawTimeline();
+}
+function tlPinchMove(st, pts) {
+  const p = st.pinch, { mx, d } = tlMid(pts); p.mx = mx;
+  p.hist.push({ t: performance.now(), x: mx, y: 0 }); if (p.hist.length > 8) p.hist.shift();
+  tlPinchTo(st, p.z0 * d / p.d0, mx, p.t);
+}
+function tlPinchEnd(st) {
+  const p = st.pinch; st.pinch = null; if (!p) return;
+  const [lo, hi] = tlZoomLimits(st);
+  if (st.zoom < lo * 0.999 || st.zoom > hi * 1.001) { tlZoomSettle(p.mx, tlT(st, p.mx)); return; }   // за пределом — отпружинит
+  st.elastic = false; drawTimeline();
+  if (typeof velocityOf === 'function') tlCoast(-velocityOf(p.hist).x / st.zoom);                     // отпустили на ходу — вид катится дальше
+}
+/** Щипок на тачпаде: поток Ctrl+колёсико. Конца жеста нет — считаем, что кончился, когда 160 мс тихо. */
+function tlPinchWheel(st, dy, mx) {
+  if (!st.pinchW || Math.abs(mx - st.pinchW.mx) > 40) { tlZoomStop(st); clearTimeout(st.pinchW && st.pinchW.timer); st.pinchW = { raw: st.zoom, mx, t: tlT(st, mx) }; }
+  const p = st.pinchW, [lo, hi] = tlZoomLimits(st);
+  p.raw = Math.max(lo * 0.25, Math.min(hi * 4, p.raw * Math.exp(-Math.max(-40, Math.min(40, dy)) * 0.01)));   // Chrome: exp(−deltaY/100) — ровно масштаб пальцев
+  tlPinchTo(st, p.raw, mx, p.t);
+  clearTimeout(p.timer); p.timer = setTimeout(() => { if (st.pinchW !== p) return; st.pinchW = null; tlZoomSettle(p.mx, tlT(st, p.mx)); }, 160);
+}
+/** Отпустили за пределом: масштаб возвращается на пружине, точка под пальцами — насколько позволяют края. */
+function tlZoomSettle(mx, t) {
+  const st = tlState(); if (!S.result || !S.result.lay) { st.elastic = false; return; }
+  const [lo, hi] = tlZoomLimits(st), z1 = Math.max(lo, Math.min(hi, st.zoom)), span = ((st.W || 800) - TL.HEAD) / z1;
+  const s1 = Math.max(0, Math.min(Math.max(0, S.result.lay.total - span), t - (mx - TL.HEAD) / z1)), t1 = s1 + (mx - TL.HEAD) / z1;
+  const L0 = Math.log(st.zoom), L1 = Math.log(z1);
+  if ((Math.abs(L1 - L0) < 0.002 && Math.abs(t1 - t) < 1e-3) || typeof mv !== 'function' || (typeof MOTION !== 'undefined' && MOTION.reduce)) { st.elastic = false; st.zoom = z1; st.scroll = s1; drawTimeline(); return; }
+  const owner = { render() { const k = m.v; st.zoom = Math.exp(L0 + (L1 - L0) * k); st.scroll = t + (t1 - t) * k - (mx - TL.HEAD) / st.zoom; if (!SPRING.live.has(m)) { st.elastic = false; st.zSettle = null; } drawTimeline(); } };
+  const m = mv(0, 0.001, owner); st.zSettle = m; mvTo(m, 1, { damping: 1, response: 0.36 });
+}
+// ------------------------------------------------------------------ звук при протяжке курсора
+/** Пока плеер стоит, под курсором звучат короткие кусочки — как лента, которую качают руками у головки:
+ *  тянешь быстрее — звучит быстрее и выше, назад — задом наперёд, остановился — тишина. */
+const SCRUB = { at: 0, t: -1 };
+function tlGrain(t, first = false) {
+  if (!TP.buf || TP.playing || !S.result || !S.result.out) return;
+  const now = performance.now(), dt = (now - SCRUB.at) / 1000;
+  if (!first && dt < 0.035) return;
+  const fresh = first || SCRUB.t < 0 || dt > 0.3, dir = fresh ? 1 : Math.sign(t - SCRUB.t), speed = fresh ? 1 : Math.abs(t - SCRUB.t) / dt;
+  SCRUB.at = now; SCRUB.t = t;
+  if (!dir || speed < 0.05) return;
+  const rate = Math.max(0.5, Math.min(2.5, speed)), n = Math.round(0.07 * rate * C.SR), a = Math.round((dir < 0 ? t - 0.07 * rate : t) * C.SR);
+  if (a < 0 || a + n > TP.len) return;
+  const ctx = audioCtx(); if (ctx.state === 'suspended') ctx.resume();
+  const all = TP.buf.getChannelData(0), buf = ctx.createBuffer(1, n, C.SR), y = buf.getChannelData(0), fade = Math.max(1, Math.min(n >> 2, Math.round(0.012 * rate * C.SR)));
+  for (let i = 0; i < n; i++) { const v = all[dir < 0 ? a + n - 1 - i : a + i]; y[i] = i < fade ? v * i / fade : i > n - fade ? v * (n - i) / fade : v; }
+  const src = ctx.createBufferSource(); src.buffer = buf; src.playbackRate.value = rate; src.connect(audioOut()); src.start();
 }
 function tlOvSeek(e) {                                 // мини-карта: щелчок и протяжка — сюда вид
   const cv = $('#tl-ov'), st = tlState(), r = cv.getBoundingClientRect(), W = r.width, total = S.result.lay.total;

@@ -48,10 +48,91 @@ const atTop = el => el.getBoundingClientRect().top < innerHeight / 2;
 function appear(el) {
   if (el.id === 'prog') { cancelGhost(el); islandIn(el); return; }
   if (el.id === 'msg') { cancelGhost(el); toastReset(el); const dy = atTop(el) ? -22 : 22; mIn(el, { opacity: 0, transform: `translate(-50%, ${dy}px) scale(0.9)`, filter: 'blur(6px)' }, [0.7, 0.5], { rest: { transform: 'translate(-50%, 0px) scale(1)' } }); return; }
+  if (el.classList.contains('sheetbox')) { sheetIn(el); return; }
   if (el.id === 'tl-menu') { if (performance.now() - MOTION.kbd < 150) return; mIn(el, { opacity: 0, transform: 'scale(0.9)' }, [0.78, 0.34]); return; }
   if (el.classList.contains('picker')) { mIn(el, { opacity: 0, transform: 'translateY(-6px) scale(0.98)', filter: 'blur(2px)' }, [0.85, 0.36]); staggerList([...el.children].slice(0, 8), 30); return; }
   if (el.matches('section.card')) { if (MOTION.ready) mIn(el, { opacity: 0, transform: 'translateY(18px) scale(0.985)', filter: 'blur(3px)' }, [0.86, 0.55]); return; }
   if (el.matches('[data-tabpane]')) { paneIn(el); return; }
+}
+// ------------------------------------------------------------------ шторки снизу: дозапись и «другой кусок» на телефоне
+// Выезжает снизу на пружине; за ручку или шапку тянется 1:1, вверх — резина; бросок вниз или дальше половины —
+// уезжает с той же скоростью, иначе возвращается на пружине с лёгким перелётом. Затемнение следует за шторкой.
+const phoneUI = () => matchMedia('(max-width: 720px)').matches;
+const SHEET_IN = '.rec-in, .sheet-in';
+function sheetIn(el) {
+  cancelGhost(el); if (el._sheet) mvSet(el._sheet, 0);
+  const inn = el.querySelector(SHEET_IN); if (!mOK() || !inn) return;
+  el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' });
+  if (phoneUI()) mIn(inn, { transform: 'translateY(100%)' }, [0.9, 0.42]); else mIn(inn, { opacity: 0, transform: 'translateY(48px) scale(0.97)' }, [0.84, 0.5]);
+}
+/** Закрытие кнопкой, Esc или щелчком по затемнению: уходит копия — вниз, откуда пришла; настоящая скрыта сразу. */
+function sheetGhostOut(el) {
+  const inn = el && el.querySelector(SHEET_IN); if (!mOK() || !inn || el.hidden) return;
+  const tr = getComputedStyle(inn).transform, y0 = tr && tr !== 'none' ? new DOMMatrixReadOnly(tr).m42 : 0, bg = getComputedStyle(el).backgroundColor;
+  const g = el.cloneNode(true); g.removeAttribute('id'); g.querySelectorAll('[id]').forEach(x => x.removeAttribute('id'));
+  g.inert = true; g.setAttribute('aria-hidden', 'true'); g.dataset.ghost = el.id; g.style.pointerEvents = 'none'; g.hidden = false;
+  document.body.appendChild(g);
+  const gi = g.querySelector(SHEET_IN), phone = phoneUI(), ms = phone ? 260 : 200;
+  g.animate([{ backgroundColor: bg }, { backgroundColor: 'rgb(10 8 6 / 0)' }], { duration: ms, easing: 'ease-out', fill: 'forwards' });
+  const a = gi.animate(phone ? [{ transform: `translateY(${y0}px)` }, { transform: `translateY(${inn.offsetHeight + 24}px)` }]
+    : [{ opacity: 1, transform: 'none', filter: 'blur(0px)' }, { opacity: 0, transform: 'translateY(24px) scale(0.97)', filter: 'blur(3px)' }],
+    { duration: ms, easing: 'cubic-bezier(0.32, 0.72, 0, 1)', fill: 'forwards' });
+  a.onfinish = a.oncancel = () => g.remove();
+}
+/** Тянуть шторку. close(true) — её смахнули (уже за краем, копия не нужна). canClose() — можно ли закрыть сейчас. */
+function sheetDrag(el, grabSel, close, canClose = () => true) {
+  let d = null, out = false;
+  const inner = () => el.querySelector(SHEET_IN);
+  const owner = { render() {
+    const inn = inner(), y = m.v, h = (inn && inn.offsetHeight) || 400;
+    if (inn) inn.style.transform = Math.abs(y) < 0.05 ? '' : `translate3d(0, ${y.toFixed(2)}px, 0)`;
+    if (y > 0.5) el.style.setProperty('--dim', Math.max(0, 1 - y / h).toFixed(3)); else el.style.removeProperty('--dim');
+    if (out && !SPRING.live.has(m)) { out = false; el.style.pointerEvents = ''; close(true); mvSet(m, 0); }
+  } };
+  const m = mv(0, 0.3, owner); el._sheet = m;
+  el.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || out || !e.target.closest(grabSel) || e.target.closest('button, input, select, a, label')) return;
+    const inn = inner(); if (!inn) return;
+    const tr = getComputedStyle(inn).transform, cur = tr && tr !== 'none' ? new DOMMatrixReadOnly(tr).m42 : 0;   // перехват на лету — с того места, где она сейчас
+    inn.getAnimations().forEach(a => a.cancel()); mvSet(m, cur);
+    d = { id: e.pointerId, y0: e.clientY - cur, hist: [{ t: performance.now(), x: 0, y: e.clientY }] };
+    try { e.target.setPointerCapture(e.pointerId); } catch {}
+  });
+  el.addEventListener('pointermove', e => {
+    if (!d || d.id !== e.pointerId) return;
+    const y = e.clientY - d.y0; d.hist.push({ t: performance.now(), x: 0, y: e.clientY }); if (d.hist.length > 8) d.hist.shift();
+    mvSet(m, y < 0 ? -rubber(-y, 90) : canClose() ? y : rubber(y, 140));
+  });
+  const up = e => {
+    if (!d || d.id !== e.pointerId) return; const v = velocityOf(d.hist).y; d = null;
+    const inn = inner(), h = (inn && inn.offsetHeight) || 400;
+    // куда долетела бы (проекция Apple, как у прокрутки): дальше половины или бросок — закрыть
+    if (canClose() && m.v > 0 && (m.v + project(v, 0.998) > h * 0.5 || v > 900)) { out = true; el.style.pointerEvents = 'none'; mvTo(m, h + 24, { damping: 1, response: 0.28, velocity: Math.max(v, 400) }); }
+    else mvTo(m, 0, { damping: 0.8, response: 0.32, velocity: v });
+  };
+  el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+}
+/** Нижняя шторка общего вида: шапка, содержимое, свой обработчик щелчков. */
+const SHEET = { back: null, onClick: null };
+function sheetOpen(head, body, { label = '', onClick = null, id = '' } = {}) {
+  let el = document.getElementById('sheet');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'sheet'; el.className = 'sheetbox'; el.hidden = true; document.body.appendChild(el);
+    el.addEventListener('click', e => { if (e.target === el || e.target.closest('[data-sheet=close]')) sheetClose(); else if (SHEET.onClick) SHEET.onClick(e); });
+    sheetDrag(el, '.sheet-grab, .sheet-top', () => sheetClose(true));
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !el.hidden) sheetClose(); });
+  }
+  if (el.hidden) SHEET.back = document.activeElement;
+  SHEET.onClick = onClick; el.dataset.for = id;
+  el.innerHTML = `<div class="sheet-in" role="dialog" aria-modal="true" aria-label="${label}"><div class="sheet-top"><div class="sheet-grab" aria-hidden="true"></div><div class="sheet-head">${head}<button class="icon" data-sheet="close" aria-label="Закрыть">${ic('close')}</button></div></div><div class="sheet-body">${body}</div></div>`;
+  el.hidden = false; el.querySelector('[data-sheet=close]').focus({ preventScroll: true });
+}
+function sheetClose(swiped) {
+  const el = document.getElementById('sheet'); if (!el || el.hidden) return;
+  if (!swiped) sheetGhostOut(el);
+  if (typeof playing !== 'undefined' && playing && playing.btn && el.contains(playing.btn)) stop();   // кусок, который слушали в шторке, замолкает с ней
+  el.hidden = true; el.innerHTML = ''; SHEET.onClick = null;
+  if (SHEET.back && SHEET.back.isConnected) SHEET.back.focus({ preventScroll: true }); SHEET.back = null;
 }
 // ------------------------------------------------------------------ остров: прогресс вырастает из пилюли
 function islandIn(el) {

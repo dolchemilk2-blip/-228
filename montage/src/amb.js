@@ -143,3 +143,68 @@ function bindAmb(el) {
 }
 /** Для сохранения: без кэшей. */
 const ambSaved = () => { const st = ambState(); return { duck: st.duck, scenes: Object.fromEntries(Object.entries(st.scenes).map(([k, v]) => [k, { src: v.src, gain: v.gain, on: v.on, pick: v.pick, manual: v.manual }])), cands: st.cands }; };
+// ------------------------------------------------------------------ комнатный тон в паузах
+// Между репликами одной сцены — «дыхание» той же комнаты: самые ровные тихие места записи этого актёра,
+// на уровне реплики, со стыками по 40 мс. Звук не проваливается в цифровую тишину, паузы не «хлопают».
+// Если запись очищена — тон берётся из очищенной версии, так что лишнего шума не прибавляется.
+const ROOM = new WeakMap();
+function roomSample(f) {
+  if (!f || !f.y48 || !f.segs || f.segs.length < 2) return null;
+  const hit = ROOM.get(f); if (hit && hit.key === f.y48) return hit.val;
+  const SR = C.SR, y = f.y48, segs = f.segs, gaps = [];
+  const push = (a, b) => { a += 0.12; b -= 0.08; if (b - a >= 0.25) gaps.push([a, b]); };
+  push(0, segs[0].a); for (let i = 1; i < segs.length; i++) push(segs[i - 1].b, segs[i].a); push(segs[segs.length - 1].b, y.length / SR);
+  // комната — это ровный шум: окна по 20 мс без провалов в цифровой ноль (шумодав, гейт) и без хвостов речи и вдохов
+  const db = ([a, b]) => {
+    const w = Math.round(0.02 * SR), ws = []; let s = 0, n = 0;
+    for (let i = Math.round(a * SR), e = Math.min(y.length, Math.round(b * SR)); i + w <= e; i += w) { let q = 0; for (let j = i; j < i + w; j += 2) q += y[j] * y[j]; ws.push(10 * Math.log10(q / (w / 2) + 1e-20)); s += q; n += w / 2; }
+    if (ws.length < 5) return null; ws.sort((p, q) => p - q);
+    return ws[0] > -95 && ws[Math.floor(ws.length * 0.9)] - ws[Math.floor(ws.length * 0.1)] < 10 ? 10 * Math.log10(s / n + 1e-20) : null;
+  };
+  const list = gaps.map(g => ({ g, db: db(g) })).filter(x => x.db != null && x.db > -88).sort((p, q) => p.db - q.db);
+  let val = null;
+  if (list.length) {
+    const floor = list[0].db, pick = list.filter(x => x.db < floor + 5 && x.db < -38).slice(0, 12), xf = Math.round(0.02 * SR);
+    const parts = []; let len = 0;
+    for (const { g: [a, b] } of pick) { if (len > 4 * SR) break; const p = y.subarray(Math.round(a * SR), Math.round(b * SR)); parts.push(p); len += p.length - xf; }
+    if (len > 0.4 * SR) {
+      const out = new Float32Array(len + xf); let o = 0;
+      parts.forEach((p, k) => { for (let i = 0; i < p.length && o + i < out.length; i++) { const w = k && i < xf ? i / xf : 1, t = i >= p.length - xf && k < parts.length - 1 ? (p.length - i) / xf : 1; out[o + i] += p[i] * Math.min(w, t); } o += p.length - xf; });
+      val = { y: out.subarray(0, Math.max(0, o + xf)), db: floor };
+    }
+  }
+  ROOM.set(f, { key: f.y48, val }); return val;
+}
+/** Тон нужной длины: куски образца с перекрытием 30 мс, начало куска — псевдослучайно, но одинаково при каждом пересчёте. */
+function roomFill(smp, n, seed) {
+  const SR = C.SR, L = smp.length, xf = Math.round(0.03 * SR), out = new Float32Array(n); if (L < xf * 4) return null;
+  let o = 0, s = (seed * 2654435761) >>> 0;
+  while (o < n) {
+    s = (s * 1664525 + 1013904223) >>> 0; const st = Math.floor((s / 4294967296) * (L - xf * 3)), len = Math.min(L - st, n - o + xf);
+    for (let i = 0; i < len && o + i < n; i++) { const w = o && i < xf ? i / xf : 1, t = i >= len - xf ? (len - i) / xf : 1; out[o + i] += smp[st + i] * Math.min(w, t); }
+    o += len - xf; if (len <= xf) break;
+  }
+  const f = Math.min(Math.round(0.04 * SR), n >> 1); for (let i = 0; i < f; i++) { out[i] *= i / f; out[n - 1 - i] *= i / f; }
+  return out;
+}
+function roomToneMix(mix, lay) {
+  if (S.room === false) return [];
+  const SR = C.SR, out = [], voice = lay.placed.filter(p => p.item && !p.bed).sort((a, b) => a.at - b.at);
+  const sceneOf = t => { const sc = (lay.scenes || []).find(s => t >= s.start - 1e-6 && t < s.end); return sc ? sc.n : null; };
+  let reach = -1;
+  for (let k = 1; k < voice.length; k++) {
+    const A = voice[k - 1], B = voice[k], aEnd = A.at + A.audio.length / SR; reach = Math.max(reach, aEnd);
+    if (sceneOf(A.at) !== sceneOf(B.at)) continue;
+    const t0 = reach - 0.04, t1 = B.at + 0.04; if (t1 - t0 < 0.15) continue;
+    const sa = !A.item.fxKey ? roomSample(A.item.file) : null, sb = !B.item.fxKey ? roomSample(B.item.file0) : null;
+    const s = sa || sb; if (!s) continue;
+    const n = Math.round((t1 - t0) * SR), y = roomFill(s.y, n, k + 1); if (!y) continue;
+    const gA = (sa ? A.item : B.item).roomGain || 1, gB = sb && sb !== s ? B.item.roomGain || 1 : gA;
+    const yb = sb && sa && sb !== sa ? roomFill(sb.y, n, k + 7) : null;
+    for (let i = 0; i < n; i++) { const m = i / n; y[i] = yb ? y[i] * gA * (1 - m) + yb[i] * gB * m : y[i] * gA; }
+    const i0 = Math.round(t0 * SR); for (let i = 0; i < n && i0 + i < mix.length; i++) mix[i0 + i] += y[i];
+    out.push({ at: t0, audio: y });
+  }
+  return out;
+}
+

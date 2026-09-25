@@ -26,7 +26,7 @@ function initDeck() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) deckKick(); });
   deckKick();
 }
-function deckPlaying() { return !!((typeof playing !== 'undefined' && playing) || (typeof TP !== 'undefined' && TP.playing) || (typeof ab !== 'undefined' && ab)); }
+function deckPlaying() { return !!((typeof playing !== 'undefined' && playing) || (typeof TP !== 'undefined' && TP.playing) || (typeof ab !== 'undefined' && ab) || (typeof REC !== 'undefined' && REC.live)); }
 /** Разбудить деку: звук пошёл. Зовётся из audioOut(), так что любое «слушать» будит её само. */
 function deckKick() { if (!DECK.raf && DECK.needle) { DECK.t = performance.now(); DECK.raf = requestAnimationFrame(deckTick); } }
 function deckTick(now) {
@@ -34,7 +34,7 @@ function deckTick(now) {
   const dt = Math.min(0.05, Math.max(0.001, (now - DECK.t) / 1000)); DECK.t = now;
   const on = deckPlaying(), reduce = typeof MOTION !== 'undefined' && MOTION.reduce;
   if (on !== DECK.on) { DECK.on = on; document.getElementById('onair')?.classList.toggle('on', on); document.getElementById('vu')?.classList.toggle('lit', on); }
-  const lv = on && typeof audioLevel === 'function' ? audioLevel() : 0;
+  const lv = typeof REC !== 'undefined' && REC.live ? REC.level : on && typeof audioLevel === 'function' ? audioLevel() : 0;   // пишем — стрелка показывает микрофон
   const target = lv > 1e-5 ? vuAngle(20 * Math.log10(lv) + 18) : VU.min - 2;
   if (reduce) { DECK.ang = target; DECK.vel = 0; }
   else { const k = 160, c = 2 * Math.sqrt(k) * 0.7, acc = k * (target - DECK.ang) - c * DECK.vel; DECK.vel += acc * dt; DECK.ang += DECK.vel * dt; }

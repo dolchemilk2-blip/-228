@@ -76,11 +76,55 @@ function rerecList() {
     const st = statusOf(c), src = sourceOf(c); let why = null;
     if (st.k === 'miss') why = 'нет записи';
     else if (st.k === 'check' && src && src.kind !== 'upload' && src.kind !== 'manual' && (src.sim ?? 1) < 0.45) why = `проверить: услышано «${(src.text || '').trim().slice(0, 80)}»`;
+    else { const d = slipOf(c); if (d && d.errs >= 2) why = `оговорка: услышано «${(src.text || '').trim().slice(0, 80)}»`; }
     if (!why) continue;
     if (!out.has(c.spk)) out.set(c.spk, []);
     out.get(c.spk).push({ cue: c, why });
   }
   return out;
+}
+// ------------------------------------------------------------------ оговорки: распознанное против сценария, по словам
+const slipNorm = w => w.toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]/g, '');
+function slipWords(s) { return String(s || '').split(/\s+/).map(raw => ({ raw, n: slipNorm(raw) })).filter(w => w.n); }
+/** Похожесть слов 0…1: расстояние Левенштейна к длине. «пошёл» и «пошел», «сделал» и «сделала» — одно слово. */
+function slipSim(a, b) {
+  if (a === b) return 1; const n = a.length, m = b.length; if (!n || !m) return 0;
+  let prev = Array.from({ length: m + 1 }, (_, j) => j), cur = new Array(m + 1);
+  for (let i = 1; i <= n; i++) { cur[0] = i; for (let j = 1; j <= m; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); [prev, cur] = [cur, prev]; }
+  return 1 - prev[m] / Math.max(n, m);
+}
+/**
+ * Пословное выравнивание сценария и услышанного: same / miss (пропущено) / add (лишнее) / sub (сказано иначе).
+ * Короткие служебные слова («и», «а», «ну», «же») в счёт оговорок не идут — распознавание их часто теряет.
+ */
+function slipDiff(script, heard) {
+  const A = slipWords(script), B = slipWords(heard), n = A.length, m = B.length;
+  if (!n || !m) return null;
+  const same = (i, j) => slipSim(A[i].n, B[j].n) >= 0.72;
+  const D = Array.from({ length: n + 1 }, (_, i) => { const r = new Float32Array(m + 1); r[0] = i; return r; });
+  for (let j = 1; j <= m; j++) D[0][j] = j;
+  for (let i = 1; i <= n; i++) for (let j = 1; j <= m; j++) D[i][j] = Math.min(D[i - 1][j] + 1, D[i][j - 1] + 1, D[i - 1][j - 1] + (same(i - 1, j - 1) ? 0 : 1.2));
+  const ops = []; let i = n, j = m;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && D[i][j] === D[i - 1][j - 1] + (same(i - 1, j - 1) ? 0 : 1.2)) { ops.push(same(i - 1, j - 1) ? { t: 'same', a: A[i - 1].raw } : { t: 'sub', a: A[i - 1].raw, b: B[j - 1].raw }); i--; j--; }
+    else if (i > 0 && D[i][j] === D[i - 1][j] + 1) { ops.push({ t: 'miss', a: A[i - 1].raw }); i--; }
+    else { ops.push({ t: 'add', b: B[j - 1].raw }); j--; }
+  }
+  ops.reverse();
+  const content = w => slipNorm(w || '').length >= 3;
+  const errs = ops.filter(o => o.t !== 'same' && (content(o.a) || content(o.b))).length;
+  return { ops, errs, same: ops.filter(o => o.t === 'same').length, total: n };
+}
+/** Оговорка — когда услышанное в целом то же (больше половины слов на месте), но есть расхождения по существу. */
+function slipOf(cue) {
+  if (!cue || cue.type !== 'line') return null;
+  const src = sourceOf(cue); if (!src || src.kind === 'upload' || !src.text || src.group > 1) return null;   // общий кусок на две реплики — не оговорка
+  const d = slipDiff(cue.text, C.cleanAsr(src.text)); if (!d || !d.errs) return null;
+  const adds = d.ops.filter(o => o.t === 'add').length;
+  return d.same / d.total >= 0.5 && adds <= Math.max(2, d.total * 0.5) ? d : null;
+}
+function slipHtml(d) {
+  return d.ops.map(o => o.t === 'same' ? esc(o.a) : o.t === 'miss' ? `<del title="пропущено">${esc(o.a)}</del>` : o.t === 'add' ? `<ins title="лишнее">${esc(o.b)}</ins>` : `<del title="в сценарии">${esc(o.a)}</del><ins title="сказано">${esc(o.b)}</ins>`).join(' ');
 }
 function rerecText(spk) {
   const all = rerecList(), keys = spk ? [spk] : [...all.keys()], cues = S.P.cues, lines = [];
@@ -106,7 +150,7 @@ function rerecHtml() {
   const all = rerecList(); if (!all.size) return '';
   const total = [...all.values()].reduce((s, l) => s + l.length, 0);
   return `<div class="rerec"><b>Дозапись</b><span class="muted small">по актёру: реплики без записи и те, где услышано не то, с соседними репликами для интонации</span>
-    <div class="chips">${[...all].map(([k, l]) => `<button class="chip ${colorOf(k)} as-btn" data-act="rerec" data-spk="${esc(k)}">${esc(charName(k))} <i>${l.length}</i> ${ic('download')}</button>`).join('')}
+    <div class="chips">${[...all].map(([k, l]) => `<span class="rr"><button class="chip ${colorOf(k)} as-btn" data-act="rerec" data-spk="${esc(k)}" title="Список для актёра (.txt)">${esc(charName(k))} <i>${l.length}</i> ${ic('download')}</button><button class="icon xs rr-mic" data-act="rec-spk" data-spk="${esc(k)}" title="Записать реплики ${esc(charName(k))} здесь, с суфлёром" aria-label="Записать реплики ${esc(charName(k))} здесь">${ic('mic')}</button></span>`).join('')}
     <button class="ghost-b tiny" data-act="rerec" data-spk="">все одним файлом (${total})</button></div></div>`;
 }
 
@@ -143,6 +187,7 @@ function buildStems() {
   const order = [...S.P.chars.map(c => charName(c.key)), 'остальные голоса', 'звуки', 'звуки фоном'].filter(k => groups.has(k));
   for (const k of groups.keys()) if (!order.includes(k)) order.push(k);
   const stems = order.map(k => ({ name: k, fill: y => { for (const p of groups.get(k)) { const i0 = Math.round(p.at * C.SR); for (let i = 0; i < p.audio.length && i0 + i < n; i++) y[i0 + i] += p.audio[i] * g; } } }));
+  if (r.room && r.room.length) stems.push({ name: 'комнатный тон', fill: y => { for (const a of r.room) { const i0 = Math.round(a.at * C.SR); for (let i = 0; i < a.audio.length && i0 + i < n; i++) y[i0 + i] += a.audio[i] * g; } } });
   if (r.amb && r.amb.length) stems.push({ name: 'фон сцен', fill: y => { for (const a of r.amb) { const i0 = Math.round(a.at * C.SR); for (let i = 0; i < a.audio.length && i0 + i < n; i++) y[i0 + i] += a.audio[i] * g; } } });
   return { stems, n };
 }

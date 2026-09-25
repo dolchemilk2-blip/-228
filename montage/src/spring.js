@@ -58,9 +58,10 @@ function tform(el) {
 const project = (v, rate = 0.99) => (v / 1000) * rate / (1 - rate);
 /** Резиновый край: чем дальше за границу, тем меньше идёт следом. */
 const rubber = (over, dim = 200, c = 0.55) => (over * dim * c) / (dim + c * Math.abs(over));
-/** Скорость по последним точкам указателя: [{t, x, y}] → px/с. */
-function velocityOf(hist) {
-  const now = hist.length ? hist[hist.length - 1].t : 0, pts = hist.filter(p => now - p.t < 100);
+/** Скорость в момент отпускания по последним точкам указателя: [{t, x, y}] → px/с.
+ *  Считается от «сейчас», а не от последнего движения: палец остановился и потом отпустил — броска нет. */
+function velocityOf(hist, now = performance.now()) {
+  const pts = hist.filter(p => now - p.t < 100);
   if (pts.length < 2) return { x: 0, y: 0 };
   const a = pts[0], b = pts[pts.length - 1], dt = Math.max(1, b.t - a.t);
   return { x: (b.x - a.x) / dt * 1000, y: (b.y - a.y) / dt * 1000 };
