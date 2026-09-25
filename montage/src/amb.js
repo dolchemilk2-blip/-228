@@ -127,7 +127,7 @@ function ambHtml() {
       <label class="mini"><input type="checkbox" data-p="on" ${cfg.on && has ? 'checked' : ''} ${has ? '' : 'disabled'} aria-label="фон сцены ${esc(sc.n)}"></label>
       <div class="stext"><b>Сцена ${esc(sc.n)}</b> <span class="muted">${esc(sc.desc.slice(0, 70))}</span>${sc.rule ? `<div class="small muted">место: ${esc(sc.rule.name)}</div>` : ''}</div>
       <div class="asrc">${label}</div>
-      <label class="gain"><input type="range" data-p="gain" min="-36" max="-6" step="1" value="${cfg.gain ?? -18}" aria-label="громкость фона"><span class="gv" data-num="amb:${esc(sc.n)}">${cfg.gain ?? -18} дБ</span></label>
+      <label class="gain"><input type="range" data-p="gain" min="-36" max="-6" step="1" value="${cfg.gain ?? -18}" aria-label="громкость фона"><span class="gv" data-num="amb:${esc(sc.n)}">${dbv(cfg.gain ?? -18)}</span></label>
       <button class="play" data-act="amb-play" ${has ? '' : 'disabled'} aria-label="Слушать">▶</button>
       <button class="ghost-b tiny" data-act="amb-next">${has ? 'другой' : 'из базы'}</button>
       <button class="ghost-b tiny" data-act="amb-room" title="Тихий ровный фон помещения без событий">тишина</button>
@@ -144,11 +144,11 @@ function bindAmb(el) {
   el.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return; const a = b.dataset.act, row = b.closest('.arow'), n = row && row.dataset.n;
     if (a === 'amb-auto') { ambAutoAll(); return; }
-    if (a === 'amb-next') { b.disabled = true; b.textContent = 'качаю…'; ambNext(n).catch(err => notify('База не ответила: ' + err.message)).finally(() => renderSounds()); return; }
+    if (a === 'amb-next') { b.disabled = true; if (typeof swapText === 'function') swapText(b, 'качаю…'); else b.textContent = 'качаю…'; ambNext(n).catch(err => notify('База не ответила: ' + err.message)).finally(() => renderSounds()); return; }
     if (a === 'amb-room') { const st = ambState(); st.scenes[n] = { ...(st.scenes[n] || { gain: -18 }), src: 'synth:room', on: true, manual: true }; ambSave(); renderSounds(); if (S.result) remixSoon(); return; }
     if (a === 'amb-play') { if (playing && playing.btn === b) return stop(); const y = ambAudio(n) || (() => { const st = ambState(), c = st.scenes[n]; const was = c.on; c.on = true; const r = ambAudio(n); c.on = was; return r; })(); if (y) play(y.subarray(0, Math.min(y.length, 12 * C.SR)), b); return; }
   });
-  el.addEventListener('input', e => { const x = e.target; if (x.id === 'amb-duck') { $('#duck-v').textContent = x.value + ' дБ'; return; } if (x.closest('.arow') && x.dataset.p === 'gain') x.closest('.gain').querySelector('.gv').textContent = x.value + ' дБ'; });
+  el.addEventListener('input', e => { const x = e.target; if (x.id === 'amb-duck') { $('#duck-v').textContent = x.value + ' дБ'; return; } if (x.closest('.arow') && x.dataset.p === 'gain') x.closest('.gain').querySelector('.gv').textContent = dbv(+x.value); });
   el.addEventListener('change', e => {
     const x = e.target, st = ambState();
     if (x.id === 'amb-duck') { st.duck = +x.value; ambSave(); if (S.result) remixSoon(); return; }

@@ -127,12 +127,13 @@ function initTilt(sel, max = 7) {
   host.addEventListener('pointerleave', () => { flat(cur); cur = null; });
 }
 // ------------------------------------------------------------------ FLIP: элементы доезжают до новых мест на пружинах
-function flipRecord(sel, key) { const m = new Map(); document.querySelectorAll(sel).forEach(el => { const r = el.getBoundingClientRect(); m.set(key(el), { x: r.left, y: r.top }); }); return m; }
+function flipRecord(sel, key) { const m = new Map(); document.querySelectorAll(sel).forEach(el => { const r = el.getBoundingClientRect(); if (r.width || r.height) m.set(key(el), { x: r.left, y: r.top }); }); return m; }   // скрытые не в счёт: иначе прилетят из угла
 function flipPlay(before, sel, key, opt = { damping: 0.82, response: 0.38 }) {
   if (sprReduced()) return;
   document.querySelectorAll(sel).forEach(el => {
     const was = before.get(key(el)); if (was == null) return;
-    const r = el.getBoundingClientRect(), dx = was.x - r.left, dy = was.y - r.top; if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+    const r = el.getBoundingClientRect(), dx = was.x - r.left, dy = was.y - r.top; if ((Math.abs(dx) < 1 && Math.abs(dy) < 1) || (!r.width && !r.height)) return;
+    if (r.bottom < -40 && was.y + r.height < -40 || r.top > innerHeight + 40 && was.y > innerHeight + 40) return;   // и до, и после за экраном — двигать незачем
     const T = tform(el); if (Math.abs(dx) >= 1) { mvSet(T.x, dx); mvTo(T.x, 0, opt); } if (Math.abs(dy) >= 1) { mvSet(T.y, dy); mvTo(T.y, 0, opt); }
   });
 }

@@ -467,7 +467,7 @@ button.pill:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px
 .acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; justify-content: flex-end; max-width: 400px; }
 .mini { font-size: 13px; display: inline-flex; gap: 6px; align-items: center; color: var(--muted); cursor: pointer; }
 .gain { display: inline-flex; align-items: center; gap: 4px; font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
-.gain span { min-width: 46px; text-align: center; }
+.gain > .gv { min-width: 46px; text-align: center; }   /* только значение: цифры внутри (nums.js) и детали фейдера — тоже span, их не растягивать */
 @media (hover: hover) and (pointer: fine) { .row:hover { background: color-mix(in srgb, var(--well) 70%, transparent); } .row.st-check:hover { background: color-mix(in srgb, var(--warn-soft) 80%, transparent); } }
 @media (max-width: 720px) { .row { grid-template-columns: 38px minmax(0, 1fr); } .acts { grid-column: 2; justify-content: flex-start; max-width: none; } .dir { padding-left: 38px; } }
 .picker { margin-top: 8px; padding: 10px 12px; display: grid; gap: 6px; background: var(--well); border-radius: var(--r-m); border: 1px solid var(--line2); }

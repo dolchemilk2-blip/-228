@@ -15,7 +15,7 @@ const TLFX = { liftIds: null, hoverId: null, pulse: null, band: null };
 TLFX.owner = { render() { drawTimeline(); if (TLFX.pulse && !SPRING.live.has(TLFX.pulse.m)) TLFX.pulse = null; if (TLFX.band && !SPRING.live.has(TLFX.band.m)) TLFX.band = null; if (TLFX.liftIds && TLFX.lift.v < 0.003 && !SPRING.live.has(TLFX.lift)) TLFX.liftIds = null; } };
 TLFX.lift = mv(0, 0.002, TLFX.owner); TLFX.hover = mv(0, 0.01, TLFX.owner);
 function tlLiftUp(clips) { TLFX.liftIds = new Set(clips.map(c => c.row.cue.id)); mvTo(TLFX.lift, 1, { damping: 0.7, response: 0.22 }); try { navigator.vibrate && navigator.vibrate(5); } catch {} }
-function tlPulse(ids) { if (!ids.size || ids.size > 60 || (typeof MOTION !== 'undefined' && (MOTION.reduce || !MOTION.ready))) return; TLFX.pulse = { ids: new Set(ids), m: mv(0, 0.004, TLFX.owner) }; mvTo(TLFX.pulse.m, 1, { damping: 1, response: 0.5 }); }
+function tlPulse(ids, max = 60) { if (!ids.size || ids.size > max || (typeof MOTION !== 'undefined' && (MOTION.reduce || !MOTION.ready))) return; TLFX.pulse = { ids: new Set(ids), m: mv(0, 0.004, TLFX.owner) }; mvTo(TLFX.pulse.m, 1, { damping: 1, response: 0.5 }); }
 /** Прилипание при перетаскивании: край реплики тянется к краю соседней (на любой дорожке), к курсору плеера и к
  *  началу сцены, если до него меньше 7 px. Возвращает сдвиг с прилипанием и время, к которому прилипло. */
 function tlSnap(st, d) {
@@ -93,7 +93,11 @@ function drawTimeline() {
     g.fillText(C.ts(t), x + 3, 9);
   }
   g.fillStyle = muted; g.font = '600 10px ' + cssVar('--mono');
-  for (const sc of r.lay.scenes || []) { const x = tlX(st, sc.start); if (x < TL.HEAD - 2 || x > W) continue; g.strokeStyle = muted; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, H); g.stroke(); g.setLineDash([]); g.fillText('СЦЕНА ' + sc.n, x + 4, TL.RULER + 7); }
+  // подпись сцены — если есть место: целиком, иначе только номер, иначе без подписи (при общем плане сцены рядом налезали)
+  let scEnd = -1e9;
+  for (const sc of r.lay.scenes || []) { const x = tlX(st, sc.start); if (x < TL.HEAD - 2 || x > W) continue; g.strokeStyle = muted; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, H); g.stroke(); g.setLineDash([]);
+    const full = 'СЦЕНА ' + sc.n, short = String(sc.n), wf = g.measureText(full).width, ws = g.measureText(short).width, nx = (r.lay.scenes.find(q => q.start > sc.start + 1e-6) || {}).start, room = nx != null ? tlX(st, nx) - x - 8 : 1e9;
+    const t = x + 4 >= scEnd + 6 ? (wf <= room ? full : ws <= room ? short : '') : ''; if (t) { g.fillText(t, x + 4, TL.RULER + 7); scEnd = x + 4 + g.measureText(t).width; } }
   const drag = st.drag, multi = drag && drag.moved && drag.group;
   const settle = st.settle && st.settle.m.v, sAt = clip => st.settle && (st.settle.ids ? st.settle.ids.has(clip.row.cue.id) : st.settle.own ? clip.idx === st.settle.idx : clip.idx >= st.settle.idx) ? settle : 0;
   const shift = clip => !drag || !drag.moved ? (settle ? sAt(clip) : 0) : multi ? (drag.group.has(clip.row.cue.id) ? drag.delta : 0) : (drag.own ? clip.idx === drag.clip.idx : clip.idx >= drag.clip.idx) ? drag.delta : 0;
@@ -221,12 +225,12 @@ function tlResetShift(ids) {
 function tlVoiceFx(voice, key) {
   histPush(`эффект персонажа ${charName(voice)}: ${key ? FX_PRESETS[key].name : 'как по пометкам'}`);
   if (key) S.fxVoice[voice] = key; else delete S.fxVoice[voice];
-  saveEdits(); remixSoon('lines', voiceIds(voice)); renderMix();
+  saveEdits(); remixSoon('lines', voiceIds(voice)); renderMix(); tlPulse(new Set(voiceIds(voice)), 1000);   // реплики персонажа на таймлайне отзываются вспышкой
 }
 function tlVoiceGain(voice, d) {
   histPush(`громкость персонажа ${charName(voice)} ${d == null ? '0 дБ' : (d > 0 ? '+' : '') + d + ' дБ'}`);
   const v = d == null ? 0 : Math.max(-12, Math.min(6, (S.voiceGains[voice] || 0) + d)); if (v) S.voiceGains[voice] = v; else delete S.voiceGains[voice];
-  saveEdits(); remixSoon('lines', voiceIds(voice)); renderMix();
+  saveEdits(); remixSoon('lines', voiceIds(voice)); renderMix(); tlPulse(new Set(voiceIds(voice)), 1000);
 }
 // ------------------------------------------------------------------ панели
 function tlInfoHtml() {
@@ -247,7 +251,7 @@ function tlInfoHtml() {
     <span>начало <b data-num="tli:at">${C.ts(row.at)}</b></span>${row.gap != null ? `<span>пауза перед <b data-num="tli:gap">${row.gap.toFixed(2)} с</b></span>` : ''}
     ${tmg.before ? `<span>сдвиг <b>${tmg.before > 0 ? '+' : ''}${tmg.before.toFixed(2)} с</b></span>` : ''}${tmg.own ? `<span>только эта <b>${tmg.own > 0 ? '+' : ''}${tmg.own.toFixed(2)} с</b></span>` : ''}
     <button class="ghost-b tiny" data-act="tl-play">${ic('play')}отсюда</button>${tmg.before || tmg.own ? '<button class="ghost-b tiny" data-act="tl-reset">сбросить сдвиг</button>' : ''}
-    ${it ? fxSel(S.fxLine[c.id] || '', auto && auto.key !== 'none' ? `сам: ${FX_PRESETS[auto.key].name} (${auto.why})` : 'без эффекта') + gainBtns + (g ? `<span><b>${g > 0 ? '+' : ''}${g} дБ</b></span>` : '') : ''}`;
+    ${it ? fxSel(S.fxLine[c.id] || '', auto && auto.key !== 'none' ? `сам: ${FX_PRESETS[auto.key].name} (${auto.why})` : 'без эффекта') + gainBtns + (g ? `<span><b>${dbv(g)}</b></span>` : '') : ''}`;
 }
 function tlBarHtml() {
   const st = tlState(), n = Object.keys(S.timing).length, total = S.result && S.result.out ? S.result.out.length / C.SR : 0;
@@ -262,7 +266,13 @@ function tlRefreshInfo() {
   if (el) { const html = tlInfoHtml(); if (el._html !== html) { const swap = el._html != null && !tlState().drag; el._html = html; el.innerHTML = html; if (swap && typeof mIn === 'function' && typeof MOTION !== 'undefined' && MOTION.ready) mIn(el, { opacity: 0.35, transform: 'translateY(3px)' }, [1, 0.26]); } }
   drawTimeline();
 }
-function tlRefreshBar() { const el = $('.tl-bar'); if (el) el.innerHTML = tlBarHtml(); histUi(); }
+/** Панель таймлайна: перестраивается, только если правда поменялась; фокус с клавиатуры остаётся на той же кнопке. */
+function tlRefreshBar() {
+  const el = $('.tl-bar'); if (!el) return histUi();
+  const ae = document.activeElement, fk = ae && el.contains(ae) && typeof focusKey === 'function' ? focusKey(ae) : null;
+  if (setHtml(el, tlBarHtml()) && fk) { const n = el.querySelector(fk); if (n) n.focus({ preventScroll: true }); }
+  histUi();
+}
 function tlSelect(ids, add = false) { const st = tlState(), was = new Set(st.sel); if (!add) st.sel.clear(); for (const id of ids) st.sel.add(id); tlPulse(new Set([...st.sel].filter(id => !was.has(id)))); tlRefreshInfo(); }
 /** Курсор плеера — отдельный слой поверх холста: двигается каждый кадр, холст не перерисовывается. */
 function tlHeadUpdate() {
@@ -292,12 +302,34 @@ function tlFollow() {                                  // курсор плее�
   tlRaf = requestAnimationFrame(step);
 }
 // ------------------------------------------------------------------ на весь экран
+/** На весь экран и обратно. Мышью — таймлайн раскрывается из своего места (маска от его прямоугольника до экрана) и
+ *  так же сворачивается; на его месте в странице стоит заглушка той же высоты — страница за ним не прыгает.
+ *  С клавиатуры (F, Esc) и при «меньше движения» — сразу. */
 function tlSetFull(on) {
-  const st = tlState(), el = $('#mix-out .tl'); if (!el) return;
-  st.full = on; el.classList.toggle('full', on); document.body.classList.toggle('tl-full-open', on);
-  if (on && el.requestFullscreen && !document.fullscreenElement) el.requestFullscreen().catch(() => {});
-  if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
-  tlRefreshBar(); requestAnimationFrame(() => { drawTimeline(); $('#tl-cv').focus(); });
+  const st = tlState(), el = $('#mix-out .tl'); if (!el || !!st.full === on && el.classList.contains('full') === on) return;
+  const anim = typeof mOK === 'function' && mOK() && typeof MOTION !== 'undefined' && MOTION.ready && tlLastInput !== 'key';
+  const vw = innerWidth, vh = innerHeight, ins = (r, rad) => `inset(${Math.max(0, r.top).toFixed(1)}px ${Math.max(0, vw - r.right).toFixed(1)}px ${Math.max(0, vh - r.bottom).toFixed(1)}px ${Math.max(0, r.left).toFixed(1)}px round ${rad}px)`;
+  const done = () => { requestAnimationFrame(() => { drawTimeline(); $('#tl-cv').focus({ preventScroll: true }); }); };
+  if (el._fullAnim) { el._fullAnim.cancel(); el._fullAnim = null; }
+  if (on) {
+    const r0 = el.getBoundingClientRect();
+    let ph = el.previousElementSibling; if (!ph || !ph.classList.contains('tl-ph')) { ph = document.createElement('div'); ph.className = 'tl-ph'; el.before(ph); }
+    ph.style.height = r0.height + 'px';
+    st.full = true; el.classList.add('full'); document.body.classList.add('tl-full-open');
+    if (el.requestFullscreen && !document.fullscreenElement) el.requestFullscreen().catch(() => {});
+    tlRefreshBar();
+    if (anim) { const sp = springEase(0.9, 0.42); el._fullAnim = el.animate([{ clipPath: ins(r0, 14) }, { clipPath: 'inset(0px 0px 0px 0px round 0px)' }], { duration: sp.duration, easing: sp.easing }); el._fullAnim.onfinish = () => { el._fullAnim = null; }; }
+    done(); return;
+  }
+  st.full = false;
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  const ph = el.previousElementSibling && el.previousElementSibling.classList.contains('tl-ph') ? el.previousElementSibling : null;
+  const finish = () => { el._fullAnim = null; el.classList.remove('full'); document.body.classList.remove('tl-full-open'); if (ph) ph.remove(); tlRefreshBar(); done(); };
+  if (!anim || !ph) { finish(); return; }
+  const r1 = ph.getBoundingClientRect();                      // куда вернуться: место заглушки в странице
+  tlRefreshBar();
+  el._fullAnim = el.animate([{ clipPath: 'inset(0px 0px 0px 0px round 0px)' }, { clipPath: ins(r1, 14) }], { duration: 300, easing: EASE, fill: 'forwards' });
+  el._fullAnim.onfinish = () => { const a = el._fullAnim; finish(); if (a) a.cancel(); };
 }
 // ------------------------------------------------------------------ контекстное меню
 const kbd = t => `<kbd>${t}</kbd>`;
@@ -310,7 +342,7 @@ function tlMenuHtml(ctx) {
     const tr = ctx.track, v = tr.voice, cur = v ? S.fxVoice[v] || '' : '', g = v ? S.voiceGains[v] || 0 : 0;
     return `<div class="m-head"><span class="chip ${tr.cls}">${esc(tr.name)}</span><span>${tr.clips.filter(c => !c.fixed).length} на дорожке</span></div>
       <button role="menuitem" data-m="seltrack"><span>Выделить все реплики</span>${kbd('щелчок по имени')}</button>
-      ${v && v !== 'ремарки' ? `<div class="m-lbl">Эффект персонажа</div>${fx(cur, 'vfx')}<div class="m-lbl">Громкость персонажа <b>${g > 0 ? '+' : ''}${g} дБ</b></div>${gains('vg')}` : ''}${hist}`;
+      ${v && v !== 'ремарки' ? `<div class="m-lbl">Эффект персонажа</div>${fx(cur, 'vfx')}<div class="m-lbl">Громкость персонажа <b>${dbv(g)}</b></div>${gains('vg')}` : ''}${hist}`;
   }
   const ids = ctx.ids, n = ids.size, items = tlItems(ids), first = [...ids][0], row = n ? S.result.lay.rows.find(x => x.cue.id === first) : null;
   const head = n > 1 ? `<b>Выбрано ${n}</b>` : row ? `<span class="num">${esc(row.cue.id)}</span><b>${esc(row.sound ? 'звук' : row.cue.type === 'line' ? charName(row.cue.spk) : 'ремарка')}</b><span class="m-txt">«${esc(tlText(row).slice(0, 48))}»</span>` : '<b>Таймлайн</b>';

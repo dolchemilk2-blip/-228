@@ -77,6 +77,9 @@ function sfxSrcFill(e) {
   const cue = sfxCue(sel.dataset.lazy); sel.removeAttribute('data-lazy'); sel.innerHTML = sfxSrcOpts(cue); sel.value = cue.src || '';
 }
 addEventListener('pointerdown', sfxSrcFill, true); addEventListener('focusin', sfxSrcFill, true);
+/** Децибелы для подписей: настоящий минус «−», как по всему сайту, а не дефис. */
+const dbv = v => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v)} дБ`;
+const SFX_SEEN = { res: '', lib: null };
 function renderSounds() {
   const el = $('#sfx-body'); if (!el) return;
   if (!S.P) { el.innerHTML = '<p class="muted">Сначала вставьте сценарий на вкладке «Сборка»: звуки берутся из его ремарок.</p>'; return; }
@@ -102,7 +105,7 @@ function renderSounds() {
       <div class="stext"><span class="num">${esc(c.id)}</span> ${esc(c.text)}${a && !cue.manual ? `<span class="muted"> · ${a.strong ? 'похоже на звук' : 'может быть звуком'}</span>` : ''}${durNote}</div>
       <select data-p="src" data-lazy="${esc(c.id)}" aria-label="источник">${sfxSrcOne(cue)}</select>
       <select data-p="mode" aria-label="как класть"><option value="seq" ${cue.mode === 'seq' ? 'selected' : ''}>между репликами</option><option value="bed" ${cue.mode === 'bed' ? 'selected' : ''}>фоном под следующими</option></select>
-      <label class="gain"><input type="range" data-p="gain" min="-30" max="6" step="1" value="${cue.gain}" aria-label="громкость"><span class="gv" data-num="sfx:${cue.id}">${cue.gain > 0 ? '+' : ''}${cue.gain} дБ</span></label>
+      <label class="gain"><input type="range" data-p="gain" min="-30" max="6" step="1" value="${cue.gain}" aria-label="громкость"><span class="gv" data-num="sfx:${cue.id}">${dbv(cue.gain)}</span></label>
       <button class="play" data-act="play" ${cue.src ? '' : 'disabled'} aria-label="Слушать">▶</button>
       <button class="ghost-b tiny" data-act="db-for" title="Найти звук в базе BBC для этой ремарки">база</button>
     </div>`);
@@ -122,6 +125,15 @@ function renderSounds() {
     ${st.lib.length ? `<div class="chips">${st.lib.map(f => `<span class="chip ghost">${esc(f.name)} <i>${fmt(f.dur)}</i> <button class="icon xs" data-act="lib-play" data-name="${esc(f.name)}" aria-label="Слушать">${ic('play')}</button><button class="icon xs" data-act="lib-rm" data-name="${esc(f.name)}" aria-label="Убрать">${ic('close')}</button></span>`).join('')}</div>` : ''}
     <div class="srows">${list.join('') || '<p class="muted pad">Звучащих ремарок не нашлось. Включите «показывать все ремарки» и назначьте звук вручную.</p>'}</div>`;
   if (before) flipPlay(before, BLK, bkey, { damping: 0.9, response: 0.36 });
+  // новые результаты поиска въезжают лесенкой, новые звуки в библиотеке появляются, а не возникают
+  if (typeof MOTION !== 'undefined' && MOTION.ready && !el.closest('[hidden]')) {
+    const rk = db.res.map(x => x.id).join(',');
+    if (rk && rk !== SFX_SEEN.res && typeof staggerList === 'function') staggerList([...el.querySelectorAll('.dbrow')].slice(0, 10), 30);
+    const fresh = [...el.querySelectorAll('.chips .chip')].filter((c, i) => st.lib[i] && SFX_SEEN.lib && !SFX_SEEN.lib.has(st.lib[i].name));
+    fresh.forEach(c => mIn(c, { opacity: 0, transform: 'scale(0.6)', filter: 'blur(3px)' }, [0.62, 0.42]));
+    SFX_SEEN.res = rk;
+  }
+  SFX_SEEN.lib = new Set(st.lib.map(x => x.name));
   sfxSynthIdle();
 }
 function dbBoxHtml(db) {
@@ -157,7 +169,7 @@ function bindSounds() {
     else if (p === 'gain') cue.gain = +x.value;
     cue.manual = true; sfxSave(); renderSounds(); sfxChanged();
   });
-  el.addEventListener('input', e => { const x = e.target; if (x.dataset.p === 'gain') { x.closest('.gain').querySelector('.gv').textContent = `${x.value > 0 ? '+' : ''}${x.value} дБ`; } });
+  el.addEventListener('input', e => { const x = e.target; if (x.dataset.p === 'gain') { x.closest('.gain').querySelector('.gv').textContent = `${dbv(x.value)}`; } });
   el.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     const a = b.dataset.act;

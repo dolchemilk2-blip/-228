@@ -550,14 +550,16 @@ function refreshPreviewUI(f) {
   const c = cl(f); if (S.cleanFile !== f) return;
   drawEq($('#eq-canvas'), f);
   drawSpec($('#cl-spec-b'), c.dirty ? null : c.after, c.sgAfter); if (c.before && c.sgBefore) drawSpec($('#cl-spec-a'), c.before, c.sgBefore);
-  const lbl = $('#cl-lbl-b'); if (lbl) lbl.textContent = c.dirty ? 'стало — считаю…' : 'стало';
+  const lbl = $('#cl-lbl-b'); if (lbl) { if (typeof swapText === 'function') swapText(lbl, c.dirty ? 'стало — считаю…' : 'стало'); else lbl.textContent = c.dirty ? 'стало — считаю…' : 'стало'; }
   const bA = $('#cl-body .play.ab[data-act=after]'); if (bA) bA.disabled = !(c.after && !c.dirty);
   const bB = $('#cl-body .play.ab[data-act=before]'); if (bB) bB.disabled = !c.before;
   const lu = $('#cl-lufs'); if (lu) lu.textContent = c.lufsBefore != null && !c.dirty ? `${c.lufsBefore.toFixed(1)} → ${c.lufsAfter.toFixed(1)} LUFS` : '';
   const pl = $('#cl-plog'); if (pl) pl.textContent = c.previewLog && !c.dirty ? c.previewLog.join(' · ') : '';
 }
+/** Строка «профиль шума» сменилась (из отрывка ↔ из всего файла) — она проявляется, а не подменяется молча. */
+function clNoiseSwap() { const b = $('#cl-body [data-act=noise-reset], #cl-body [data-act=noise-here]'); if (b && typeof mIn === 'function' && typeof MOTION !== 'undefined' && MOTION.ready) mIn(b.closest('.prm'), { opacity: 0, transform: 'translateY(4px)', filter: 'blur(2px)' }, [1, 0.3]); }
 function markDirty(f) {
-  const c = cl(f); c.dirty = true; const lbl = $('#cl-lbl-b'); if (lbl) lbl.textContent = 'стало — считаю…';
+  const c = cl(f); c.dirty = true; const lbl = $('#cl-lbl-b'); if (lbl) { if (typeof swapText === 'function') swapText(lbl, 'стало — считаю…'); else lbl.textContent = 'стало — считаю…'; }
   const bA = $('#cl-body .play.ab[data-act=after]'); if (bA) bA.disabled = true;
   previewSoon(f);
 }
@@ -596,8 +598,8 @@ function bindCleanup() {
     if (a === 'match-all') return matchAllTo(f);
     if (a === 'revert') return revertFile(f);
     if (a === 'wav') return download(new Blob([C.wav24(f.y48)], { type: 'audio/wav' }), f.name.replace(/\.[^.]+$/, '') + '_чисто.wav');
-    if (a === 'noise-here') { c.noiseOverride = C.noiseProfile(c.before); c.noiseFrom = c.at; if (!c.noiseOverride) return notify('В этом отрывке нет тихих мест, откуда взять профиль.'); renderCleanup(); markDirty(f); return; }
-    if (a === 'noise-reset') { c.noiseOverride = null; renderCleanup(); markDirty(f); return; }
+    if (a === 'noise-here') { c.noiseOverride = C.noiseProfile(c.before); c.noiseFrom = c.at; if (!c.noiseOverride) return notify('В этом отрывке нет тихих мест, откуда взять профиль.'); renderCleanup(); markDirty(f); clNoiseSwap(); return; }
+    if (a === 'noise-reset') { c.noiseOverride = null; renderCleanup(); markDirty(f); clNoiseSwap(); return; }
     if (a === 'band-add') { if (c.chain.eq.bands.length >= 10) return; eqMorph(f); const nb = eqNewBand({ type: 'peak', f: 1000, q: 1, gain: 0 }); c.chain.eq.bands.push(nb); c.chain.eq.on = true; c.eqSel = c.chain.eq.bands.length - 1; eqRerender(new Set([eqBandKey(nb)])); markDirty(f); return; }
     if (a === 'band-rm') { const i = +b.dataset.b, card = b.closest('.bcard'); eqMorph(f); eqGone(f, i); if (card && typeof motionGhostOut === 'function') motionGhostOut(card, { transform: 'scale(0.92)', filter: 'blur(2px)' }, 180); c.chain.eq.bands.splice(i, 1); c.eqSel = -1; EQV.hoverI = -1; eqRerender(); markDirty(f); return; }
     if (a === 'band-off') { eqMorph(f); const band = c.chain.eq.bands[+b.dataset.b]; band.off = !band.off; c.eqSel = +b.dataset.b; eqRerender(); markDirty(f); return; }

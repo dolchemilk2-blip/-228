@@ -154,13 +154,13 @@ function progText(el, t) {
   MOTION.progPhase = t ? phase : null;
 }
 /** Уход без ожидания: копия уходит, настоящий элемент уже скрыт. Вызывать до того, как элемент спрятан. */
-function motionGhostOut(el, to, ms = 150, from = {}) {
+function motionGhostOut(el, to, ms = 150, from = {}, host = null) {
   if (!mOK() || !el || el.hidden || !el.isConnected) return;
   const r = el.getBoundingClientRect(); if (!r.width) return;
   const g = el.cloneNode(true); g.removeAttribute('id'); g.querySelectorAll('[id]').forEach(x => x.removeAttribute('id'));
   g.inert = true; g.setAttribute('aria-hidden', 'true'); g.removeAttribute('role'); g.dataset.ghost = el.id || '1';
   Object.assign(g.style, { position: 'fixed', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', margin: '0', pointerEvents: 'none', transform: 'none', bottom: 'auto', right: 'auto', zIndex: 90, maxHeight: 'none', flex: 'none' });
-  (el.parentNode || document.body).appendChild(g);
+  (host || el.parentNode || document.body).appendChild(g);   // host — если родителя сейчас перестроят вместе с копией
   const a = g.animate([{ opacity: 1, transform: 'none', filter: 'blur(0px)', ...from }, { opacity: 0, ...to }], { duration: ms, easing: EASE, fill: 'forwards' });
   a.onfinish = a.oncancel = () => g.remove();
 }
@@ -379,7 +379,14 @@ function motionSteps() {
     // сводка шага: поменялись только числа — они въезжают (nums.js); поменялась сама фраза — она сменяется целиком
     const m = a.querySelector('.m'); if (m && m.textContent !== meta) { m.dataset.num = 'step:' + id; m.setAttribute('data-num-shape', ''); const swap = MOTION.ready && m.textContent && !MOTION.reduce && !(typeof numShape === 'function' && numShape(m.textContent, meta)); m.textContent = meta; if (swap) mIn(m, { opacity: 0, transform: 'translateY(4px)', filter: 'blur(2px)' }, [1, 0.3]); }
   }
-  const intro = document.getElementById('intro'); if (intro) intro.hidden = !!(S.P || S.files.length);
+  const intro = document.getElementById('intro'), hideIntro = !!(S.P || S.files.length);
+  if (intro && intro.hidden !== hideIntro) { if (hideIntro) motionGhostOut(intro, { transform: 'translateY(-8px)', filter: 'blur(2px)' }, 200); intro.hidden = hideIntro; }   // приветствие тает, шаги подъезжают (render)
+}
+/** Сменить надпись с проявлением (transitions.dev: text swap): «стало» ↔ «стало — считаю…» и подобные. */
+function swapText(el, text) {
+  if (!el || el.textContent === text) return;
+  const had = !!el.textContent; el.textContent = text;
+  if (had && MOTION.ready && !MOTION.reduce) mIn(el, { opacity: 0, transform: 'translateY(3px)', filter: 'blur(2px)' }, [1, 0.28]);
 }
 function replay(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); clearTimeout(el._rt); el._rt = setTimeout(() => el.classList.remove(cls), 700); }
 const plural = (n, a, b, c) => { const m = n % 100, k = n % 10; return m > 10 && m < 20 ? c : k === 1 ? a : k >= 2 && k <= 4 ? b : c; };
