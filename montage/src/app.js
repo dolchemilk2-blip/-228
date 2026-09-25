@@ -416,7 +416,7 @@ async function remixInner(mode, ids) {
   const before = new Map(); if (mode === 'lines') for (const p of r.lay.placed) if (p.item && ids.has(p.item.id)) before.set(p.item.id, p.audio.length);
   for (const it of items) { itemAudio(it); if (mode !== 'lines') await tick(); }
   lap('громкость');
-  if (mode === 'lines') { if (remixLines(r, ids, before)) { lap('куски дорожки'); r.approx = true; S.tlTracks = null; return; } mode = 'layout'; }
+  if (mode === 'lines') { if (await remixLines(r, ids, before, tick)) { lap('куски дорожки'); r.approx = true; S.tlTracks = null; return; } mode = 'layout'; }
   const lay = C.layout(S.P.cues, cue => { const it = r.byId.get(cue.id); if (it) return it.core != null ? { audio: it.audio, core: it.core } : it.audio; return cue.type === 'dir' && sfxIsSeq(cue) ? sfxAudio(cue.id) : null; },
     cue => isVoicedDir(cue) || sfxIsSeq(cue), sfxBed, { tempo: S.tempo || 1, timing: S.timing });
   lay.placed.forEach(p => { p.item = r.byId.get(p.cue.id); });
@@ -439,11 +439,11 @@ async function remixInner(mode, ids) {
   lap('плеер');
 }
 /** Пересчёт кусков дорожки под изменившимися репликами. false — изменений слишком много, проще целиком. */
-function remixLines(r, ids, before) {
+async function remixLines(r, ids, before, tick) {
   TP.hold = true;
-  try { return remixLinesInner(r, ids, before); } finally { TP.hold = false; if (TP.dirty) { TP.dirty = false; if (TP.playing) tpPlay(tpTime()); } }
+  try { return await remixLinesInner(r, ids, before, tick); } finally { TP.hold = false; if (TP.dirty) { TP.dirty = false; if (TP.playing) tpPlay(tpTime()); } }
 }
-function remixLinesInner(r, ids, before) {
+async function remixLinesInner(r, ids, before, tick = async () => {}) {
   const SR = C.SR, n = r.out.length, spans = [];
   for (const p of r.lay.placed) {
     if (!p.item || !ids.has(p.item.id)) continue;
@@ -456,18 +456,21 @@ function remixLinesInner(r, ids, before) {
   for (const [a, b] of spans) { const A = Math.max(0, a - la), B = Math.min(n, b + settle); const m = merged[merged.length - 1]; if (m && A <= m[1]) m[1] = Math.max(m[1], B); else merged.push([A, B]); }
   if (merged.reduce((s, [a, b]) => s + b - a, 0) > 0.6 * n) return false;
   const ceil = 0.84, lim = ceil / r.gain;
-  const pre = (a, b) => {                              // сумма всего, что звучит на [a, b), до мастера
-    const y = new Float32Array(b - a);
-    for (const p of r.lay.placed) { const i0 = Math.round(p.at * SR), s0 = Math.max(a, i0), s1 = Math.min(b, i0 + p.audio.length); for (let i = s0; i < s1; i++) y[i - a] += p.audio[i - i0]; }
-    for (const c of [...(r.amb || []), ...(r.room || [])]) { const i0 = Math.round(c.at * SR), s0 = Math.max(a, i0), s1 = Math.min(b, i0 + c.audio.length); for (let i = s0; i < s1; i++) y[i - a] += c.audio[i - i0]; }
-    return y;
+  // сумма всего, что звучит на [c0, c1), до мастера — в y со сдвигом off (кусками, чтобы длинный отрезок не держал кадр)
+  const preInto = (y, off, c0, c1) => {
+    for (const p of r.lay.placed) { const i0 = Math.round(p.at * SR), s0 = Math.max(c0, i0), s1 = Math.min(c1, i0 + p.audio.length), au = p.audio; for (let i = s0; i < s1; i++) y[i - off] += au[i - i0]; }
+    for (const c of [...(r.amb || []), ...(r.room || [])]) { const i0 = Math.round(c.at * SR), s0 = Math.max(c0, i0), s1 = Math.min(c1, i0 + c.audio.length), au = c.audio; for (let i = s0; i < s1; i++) y[i - off] += au[i - i0]; }
   };
+  const pre = (a, b) => { const y = new Float32Array(b - a); preInto(y, a, a, b); return y; };
   for (let [a, b] of merged) {
     // границы — где лимитер точно отпущен: пиков нет за 0,6 с до начала и на 20 мс после конца
     for (let guard = 0; guard < 20 && a > 0; guard++) { const w = pre(Math.max(0, a - settle), a); let hit = -1; for (let i = w.length - 1; i >= 0; i--) if (w[i] > lim || w[i] < -lim) { hit = i; break; } if (hit < 0) break; a = Math.max(0, a - settle + hit - la); }
     for (let guard = 0; guard < 20 && b < n; guard++) { const w = pre(b, Math.min(n, b + la)); let hit = false; for (const v of w) if (v > lim || v < -lim) { hit = true; break; } if (!hit) break; b = Math.min(n, b + settle); }
-    const y = pre(a, b); for (let i = 0; i < y.length; i++) y[i] *= r.gain;
-    C.limit(y, ceil, true); r.out.set(y, a); tpUpdate(a, b);
+    // то же, что «сумма × усиление → лимитер», но кусками: лимитер потоковый, его состояние идёт через куски
+    const CH = 1 << 18, y = new Float32Array(b - a);
+    for (let c = a; c < b; c += CH) { preInto(y, a, c, Math.min(b, c + CH)); await tick(); }
+    const L = C.limiterStream(y, ceil, r.gain); for (let c = 0; c < y.length; c += CH) { L.step(c, Math.min(y.length, c + CH)); await tick(); } L.finish();
+    r.out.set(y, a); tpUpdate(a, b); await tick();
   }
   return true;
 }
@@ -731,7 +734,8 @@ function renderFiles() {
       <div class="who">${S.P ? S.P.chars.map(c => `<label class="tog ${colorOf(c.key)} ${f.chars.has(c.key) ? 'on' : ''}"><input type="checkbox" data-act="char" data-k="${esc(c.key)}" ${f.chars.has(c.key) ? 'checked' : ''}>${esc(c.name)}</label>`).join('') : '<span class="muted">кто говорит — после сценария</span>'}</div>
     </div>`).join(''));
   const lonely = S.P ? S.P.chars.filter(c => !S.files.some(f => f.chars.has(c.key))) : [];
-  $('#lonely').innerHTML = lonely.length ? `Без записей, будут паузы: ${lonely.map(c => esc(c.name)).join(', ')}.` : '';
+  const lonelyHtml = lonely.length ? `Без записей, будут паузы: ${lonely.map(c => esc(c.name)).join(', ')}.` : '';
+  if (typeof softHtml === 'function') softHtml($('#lonely'), lonelyHtml); else $('#lonely').innerHTML = lonelyHtml;
 }
 function renderRun() {
   $('#go').disabled = S.busy || !S.P || !S.files.some(f => f.chars.size);
@@ -761,7 +765,7 @@ function renderReview() {
     ${c.none ? `<button class="pill none" data-f="all" data-n="${c.none}">роли без записей <b>${c.none}</b></button>` : ''}
     ${c.slips ? `<button class="pill slips" data-f="slips" data-n="${c.slips}" title="Показать оговорки">оговорки <b>${c.slips}</b></button>` : ''}`;
   if (typeof motionCount === 'function') $('#rv-sum').querySelectorAll('.pill').forEach(p => motionCount(p, p.classList[1]));
-  if ($('#rv-rerec')) $('#rv-rerec').innerHTML = typeof rerecHtml === 'function' ? rerecHtml() : '';
+  if ($('#rv-rerec')) { const h = typeof rerecHtml === 'function' ? rerecHtml() : ''; if (typeof softHtml === 'function') softHtml($('#rv-rerec'), h); else $('#rv-rerec').innerHTML = h; }
   document.querySelectorAll('#rv-filter button').forEach(b => b.classList.toggle('on', b.dataset.f === S.filter));
   $('#dirs-t').checked = S.showDirs;
   // список реплик свёрнут, пока его не откроют: не строится вовсе (337 строк — это сотни мс раскладки)

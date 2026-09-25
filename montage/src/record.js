@@ -51,7 +51,21 @@ function recRender() {
   let el = $('#rec');
   if (!el) { el = document.createElement('div'); el.id = 'rec'; el.className = 'sheetbox'; el.hidden = true; document.body.appendChild(el); recBind(el); }
   if (!REC.open) { el.hidden = true; return; }
-  el.innerHTML = recHtml(); el.hidden = false;
+  const html = recHtml(), inn = el.querySelector('.rec-in');
+  if (!inn || el.hidden) { el.innerHTML = html; el.hidden = false; REC.shownI = REC.i; return; }
+  // шторка уже открыта: меняются только части, а сама шторка (её пружина, перетаскивание) остаётся той же.
+  // Следующая реплика подъезжает снизу, как на суфлёре; кнопки сменяются проявлением, а не подменой
+  const t = document.createElement('template'); t.innerHTML = html; const nx = t.content.querySelector('.rec-in'); if (!nx) { el.innerHTML = html; return; }
+  const moved = REC.shownI !== REC.i, anim = typeof MOTION !== 'undefined' && MOTION.ready && typeof mIn === 'function'; REC.shownI = REC.i;
+  for (const sel of ['.rec-head', '.rec-prompt', '.rec-meter', '.rec-ctl', '.rec-foot']) {
+    const a = inn.querySelector(sel), b = nx.querySelector(sel); if (!a || !b || a.innerHTML === b.innerHTML) continue;
+    a.replaceWith(b);
+    if (!anim) continue;
+    if (sel === '.rec-prompt' && moved) mIn(b, { opacity: 0, transform: 'translateY(22px)' }, [0.9, 0.36]);
+    else if (sel === '.rec-ctl') mIn(b, { opacity: 0, transform: 'scale(0.98)' }, [1, 0.24]);
+  }
+  const ca = inn.querySelector('.rec-count'), cb = nx.querySelector('.rec-count');
+  if (ca && !cb) ca.remove(); else if (cb && !ca) inn.appendChild(cb); else if (ca && cb && ca.textContent !== cb.textContent) ca.replaceWith(cb);
 }
 function recBind(el) {
   el.addEventListener('click', async e => {

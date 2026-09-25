@@ -382,6 +382,20 @@ function motionSteps() {
   const intro = document.getElementById('intro'), hideIntro = !!(S.P || S.files.length);
   if (intro && intro.hidden !== hideIntro) { if (hideIntro) motionGhostOut(intro, { transform: 'translateY(-8px)', filter: 'blur(2px)' }, 200); intro.hidden = hideIntro; }   // приветствие тает, шаги подъезжают (render)
 }
+/** Блок-сообщение (предупреждение, «Дозапись»): появился — раскрывается по высоте, пропал — сворачивается, а не
+ *  исчезает рывком; тот же текст не перестраивается. */
+function softHtml(el, html) {
+  if (!el || (el._html === html && (el.innerHTML !== '' || html === ''))) return;
+  const was = !!el.innerHTML.trim(), now = !!html.trim(), anim = MOTION.ready && mOK();
+  if (was && !now && anim) {
+    el._html = html; const h = el.offsetHeight; el.style.overflow = 'hidden';
+    const a = el.animate([{ height: h + 'px', opacity: 1 }, { height: '0px', opacity: 0 }], { duration: 200, easing: EASE, fill: 'forwards' });
+    a.onfinish = () => { if (el._html === html) el.innerHTML = html; el.style.overflow = ''; a.cancel(); };
+    return;
+  }
+  el.getAnimations().forEach(a => a.cancel()); el.style.overflow = '';
+  el._html = html; el.innerHTML = html; if (!was && now && anim) foldIn(el);
+}
 /** Сменить надпись с проявлением (transitions.dev: text swap): «стало» ↔ «стало — считаю…» и подобные. */
 function swapText(el, text) {
   if (!el || el.textContent === text) return;
