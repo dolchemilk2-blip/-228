@@ -18,10 +18,9 @@ self.onmessage = e => {
     else if (m.type === 'run') { const r = runChain(m.y, m.chain, m.aux || {}, p => self.postMessage({ id: m.id, type: 'progress', p })); self.postMessage({ id: m.id, type: 'done', y: r.y, log: r.log }, [r.y.buffer]); }
   } catch (err) { self.postMessage({ id: m.id, type: 'error', message: String(err && err.message || err) }); }
 };`;
-const app = strip(read('app.js')), cleanup = strip(read('cleanup.js')), sounds = strip(read('sounds.js')), sfxdb = strip(read('sfxdb.js')), timeline = strip(read('history.js')) + '\n' + strip(read('timeline.js')) + '\n' + strip(read('motion.js')) + '\n' + strip(read('hero.js')), fx = strip(read('fx.js')), amb = strip(read('amb.js')), extras = strip(read('extras.js'));
-const bundle = `${bundleLib}\nconst DSP_WORKER_SRC = ${JSON.stringify(workerSrc)};\n\n${cleanup}\n\n${sounds}\n\n${sfxdb}\n\n${fx}\n\n${amb}\n\n${timeline}\n\n${extras}\n\n${app}`;
-// GSAP (standard no-charge license, https://gsap.com/standard-license) — встроен, чтобы анимации работали и без сети
-const gsapSrc = read('vendor/gsap.min.js').replace(/<\/script/gi, '<\\/script');
-const page = read('page.html').replace('/*BUNDLE*/', () => bundle).replace('/*GSAP*/', () => gsapSrc);
+const app = strip(read('app.js')), cleanup = strip(read('cleanup.js')), sounds = strip(read('sounds.js')), sfxdb = strip(read('sfxdb.js')), timeline = strip(read('history.js')) + '\n' + strip(read('timeline.js')) + '\n' + strip(read('motion.js')) + '\n' + strip(read('deck.js')), fx = strip(read('fx.js')), amb = strip(read('amb.js')), extras = strip(read('extras.js'));
+const icons = strip(read('icons.js'));
+const bundle = `${bundleLib}\nconst DSP_WORKER_SRC = ${JSON.stringify(workerSrc)};\n\n${icons}\n\n${cleanup}\n\n${sounds}\n\n${sfxdb}\n\n${fx}\n\n${amb}\n\n${timeline}\n\n${extras}\n\n${app}`;
+const page = read('page.html').replace('/*BUNDLE*/', () => bundle);
 fs.writeFileSync(new URL('./index.html', import.meta.url), page);
 console.log(`index.html: ${(page.length / 1024).toFixed(0)} КБ, ядро: ${libNames.length} функций`);

@@ -234,7 +234,7 @@ function abButtons() {
 }
 
 // ------------------------------------------------------------------ картинки
-const CMAP = [[0, [14, 18, 32]], [0.25, [40, 60, 120]], [0.5, [20, 130, 140]], [0.75, [120, 200, 90]], [1, [250, 240, 120]]];
+const CMAP = [[0, [14, 11, 9]], [0.22, [58, 26, 22]], [0.48, [150, 58, 30]], [0.74, [232, 150, 38]], [1, [252, 238, 196]]];   // тёплая: окись → янтарь → белый
 function color(v) {
   for (let i = 1; i < CMAP.length; i++) if (v <= CMAP[i][0]) { const [p0, c0] = CMAP[i - 1], [p1, c1] = CMAP[i], t = (v - p0) / (p1 - p0); return c0.map((a, k) => a + (c1[k] - a) * t); }
   return CMAP[CMAP.length - 1][1];
@@ -352,10 +352,10 @@ function bandsHtml(c) {
       <label><input type="number" data-m="eq" data-b="${i}" data-p="gain" value="${b.gain}" min="-18" max="18" step="0.5" ${NO_GAIN.has(b.type) ? 'disabled' : ''}><span>дБ</span></label>
       <label><input type="number" data-m="eq" data-b="${i}" data-p="q" value="${b.q}" min="0.3" max="12" step="0.1"><span>Q</span></label>
       <button class="icon solo" data-act="band-solo" data-b="${i}" title="Слушать только эту полосу" aria-label="Слушать только эту полосу">S</button>
-      <button class="icon" data-act="band-off" data-b="${i}" title="${b.off ? 'Включить полосу' : 'Выключить полосу'}" aria-label="Выключить полосу">${b.off ? '○' : '●'}</button>
-      <button class="icon" data-act="band-rm" data-b="${i}" title="Убрать" aria-label="Убрать полосу">✕</button>
+      <button class="icon" data-act="band-off" data-b="${i}" title="${b.off ? 'Включить полосу' : 'Выключить полосу'}" aria-label="${b.off ? 'Включить полосу' : 'Выключить полосу'}">${ic(b.off ? 'off' : 'on')}</button>
+      <button class="icon" data-act="band-rm" data-b="${i}" title="Убрать" aria-label="Убрать полосу">${ic('close')}</button>
     </div>`).join('');
-  return `<div class="bands">${rows}<div class="band-add"><button class="ghost-b" data-act="band-add">+ полоса</button>
+  return `<div class="bands">${rows}<div class="band-add"><button class="ghost-b" data-act="band-add">${ic('plus')}полоса</button>
     <span class="muted small">Тянуть кружок на графике: частота и усиление; колёсико — ширина (Q); двойной щелчок по пустому месту — новая полоса, по кружку — убрать.</span></div></div>`;
 }
 function eqModuleHtml(c) {
@@ -373,7 +373,7 @@ function renderCleanup() {
   if (!files.length) { pane.innerHTML = '<p class="muted">Добавьте записи — здесь же или на вкладке «Сборка». Чистить можно любой файл, не только тот, что идёт в спектакль.</p>'; return; }
   if (!S.cleanFile || !files.includes(S.cleanFile)) S.cleanFile = files[0];
   const f = S.cleanFile, c = cl(f);
-  const tabs = `<div class="cl-files">${files.map(x => `<button class="ftab ${x === f ? 'on' : ''}" data-name="${esc(x.name)}">${esc(x.name)}${x.raw48 ? ' <i>✓</i>' : ''}</button>`).join('')}</div>`;
+  const tabs = `<div class="cl-files">${files.map(x => `<button class="ftab ${x === f ? 'on' : ''}" data-name="${esc(x.name)}">${esc(x.name)}${x.raw48 ? ` <i title="очищено">${ic('check')}</i>` : ''}</button>`).join('')}</div>`;
   if (!c.A) { pane.innerHTML = tabs + `<p class="muted">${c.busy ? 'Смотрю, что с записью…' : 'Разбираю…'}</p>`; if (!c.busy) analyzeFile(f); return; }
   const chain = c.chain, dur = srcOf(f).length / C.SR;
   const mods = MODULES.map(m => `
@@ -390,8 +390,8 @@ function renderCleanup() {
       <div class="wave-wrap"><canvas id="cl-wave" class="wave" aria-label="Обзор записи; щёлкните, чтобы выбрать отрывок"></canvas>
         <label class="prm"><span>Отрывок: с <b id="cl-at-t">${fmt(c.at)}</b>, ${EXCERPT} с — щёлкните по волне или подвиньте</span><input type="range" id="cl-at" min="0" max="${Math.max(0, Math.floor(dur - EXCERPT))}" step="1" value="${c.at}"></label></div>
       <div class="ab-top">
-        <button class="play ab" data-act="before" ${c.before ? '' : 'disabled'}>▶ Было</button>
-        <button class="play ab" data-act="after" ${c.after && !c.dirty ? '' : 'disabled'}>▶ Стало</button>
+        <button class="play ab" data-act="before" ${c.before ? '' : 'disabled'}>${ic('play')}Было</button>
+        <button class="play ab" data-act="after" ${c.after && !c.dirty ? '' : 'disabled'}>${ic('play')}Стало</button>
         <span class="muted small">во время прослушивания переключается мгновенно, по кругу</span>
         <span class="lufs" id="cl-lufs"></span>
       </div>
@@ -400,7 +400,7 @@ function renderCleanup() {
     </div>
     <div class="cl-spec">
       <div class="specv-bar"><button class="ghost-b" data-act="spec-open">${c.specOpen ? 'Скрыть спектр файла' : 'Спектр всего файла'}</button>
-        ${c.specOpen ? `<button class="ghost-b" data-act="spec-fit">Весь файл</button>${f.raw48 ? `<button class="ghost-b" data-act="spec-which">${c.specView.which === 'after' ? 'показано: стало' : 'показано: было'}</button>` : ''}<button class="play ab" data-act="spec-play">▶ 8 с с курсора</button><span>колёсико — увеличить, тянуть — двигать, двойной щелчок — сюда отрывок</span><span id="spec-readout"></span>` : ''}</div>
+        ${c.specOpen ? `<button class="ghost-b" data-act="spec-fit">Весь файл</button>${f.raw48 ? `<button class="ghost-b" data-act="spec-which">${c.specView.which === 'after' ? 'показано: стало' : 'показано: было'}</button>` : ''}<button class="play ab" data-act="spec-play">${ic('play')}8 с с курсора</button><span>колёсико — увеличить, тянуть — двигать, двойной щелчок — сюда отрывок</span><span id="spec-readout"></span>` : ''}</div>
       ${c.specOpen ? '<canvas id="spec-view" class="specv" aria-label="Спектрограмма всего файла"></canvas>' : ''}
     </div>
     <div class="cl-actions">

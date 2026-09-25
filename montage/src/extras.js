@@ -106,7 +106,7 @@ function rerecHtml() {
   const all = rerecList(); if (!all.size) return '';
   const total = [...all.values()].reduce((s, l) => s + l.length, 0);
   return `<div class="rerec"><b>Дозапись</b><span class="muted small">по актёру: реплики без записи и те, где услышано не то, с соседними репликами для интонации</span>
-    <div class="chips">${[...all].map(([k, l]) => `<button class="chip ${colorOf(k)} as-btn" data-act="rerec" data-spk="${esc(k)}">${esc(charName(k))} <i>${l.length}</i> ↓</button>`).join('')}
+    <div class="chips">${[...all].map(([k, l]) => `<button class="chip ${colorOf(k)} as-btn" data-act="rerec" data-spk="${esc(k)}">${esc(charName(k))} <i>${l.length}</i> ${ic('download')}</button>`).join('')}
     <button class="ghost-b tiny" data-act="rerec" data-spk="">все одним файлом (${total})</button></div></div>`;
 }
 

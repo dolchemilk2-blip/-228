@@ -7,6 +7,8 @@
 // Использует S, $, esc, fmt, charName, colorOf, cssVar, saveEdits, remixSoon, voiceIds, TP, tpTime, tpSeek,
 // tpPlay, tpPause из app.js; histPush, histUndo, histRedo, histUi, tlFlash из history.js; C — ядро.
 const TL = { HEAD: 150, RULER: 22, PAD: 6, MAX_ZOOM: 400, OV: 30 };
+let tlLastInput = 'pointer';                           // чем закрыли меню: с клавиатуры — без анимации
+addEventListener('keydown', () => { tlLastInput = 'key'; }, true); addEventListener('pointerdown', () => { tlLastInput = 'pointer'; }, true);
 function tlState() {
   if (!S.tl) S.tl = { zoom: 0, scroll: 0, sel: new Set(), own: false, drag: null, pan: null, scrub: false, band: null, row: 40, full: false, ovDrag: false };
   if (!(S.tl.sel instanceof Set)) S.tl.sel = new Set(S.tl.sel ? [S.tl.sel] : []);
@@ -187,13 +189,13 @@ function tlVoiceGain(voice, d) {
 function tlInfoHtml() {
   const st = tlState(), r = S.result; if (!r || !st.sel.size) return '<span class="muted">Щёлкните реплику · Ctrl или Shift+щелчок — добавить · протяжка по пустому месту — рамка · щелчок по имени дорожки — все реплики персонажа · <b>правый щелчок — меню</b> · тянуть реплику — двигать, с Alt — только её · колёсико — масштаб · пробел — играть · Ctrl+Z — отменить</span>';
   const fxSel = (cur, auto) => `<label>эффект <select data-act="tl-fx"><option value="">${auto || 'как у персонажа'}</option>${Object.entries(FX_PRESETS).map(([k, p]) => `<option value="${k}" ${cur === k ? 'selected' : ''}>${p.name}</option>`).join('')}</select></label>`;
-  const gainBtns = `<span class="gain">громкость <button class="icon" data-act="tl-g-" aria-label="Тише на 1 дБ">−</button><button class="icon" data-act="tl-g+" aria-label="Громче на 1 дБ">+</button></span>`;
+  const gainBtns = `<span class="gain">громкость <button class="icon" data-act="tl-g-" aria-label="Тише на 1 дБ">${ic('minus')}</button><button class="icon" data-act="tl-g+" aria-label="Громче на 1 дБ">${ic('plus')}</button></span>`;
   if (st.sel.size > 1) {
     const items = tlSelItems(), by = new Map(); for (const id of st.sel) { const row = r.lay.rows.find(x => x.cue.id === id); if (!row) continue; const k = row.sound ? 'звуки' : row.cue.type === 'line' ? charName(row.cue.spk) : 'ремарки'; by.set(k, (by.get(k) || 0) + 1); }
     const fxs = new Set(items.map(it => S.fxLine[it.id] || '')), shifted = [...st.sel].filter(id => S.timing[id]).length;
     return `<b>Выбрано ${st.sel.size}</b><span class="muted">${[...by].map(([k, n]) => `${esc(k)} ${n}`).join(', ')}</span>
       ${items.length ? fxSel(fxs.size === 1 ? [...fxs][0] : '', fxs.size === 1 ? '' : 'разные — выберите для всех') + gainBtns : ''}
-      <button class="ghost-b tiny" data-act="tl-play">▶ с первой</button>${shifted ? `<button class="ghost-b tiny" data-act="tl-reset">сбросить сдвиги (${shifted})</button>` : ''}<button class="ghost-b tiny" data-act="tl-clear">снять выделение</button>`;
+      <button class="ghost-b tiny" data-act="tl-play">${ic('play')}с первой</button>${shifted ? `<button class="ghost-b tiny" data-act="tl-reset">сбросить сдвиги (${shifted})</button>` : ''}<button class="ghost-b tiny" data-act="tl-clear">снять выделение</button>`;
   }
   const id = [...st.sel][0], row = r.lay.rows.find(x => x.cue.id === id); if (!row) return '';
   const c = row.cue, tmg = S.timing[c.id] || {}, who = row.sound ? 'звук' : c.type === 'line' ? charName(c.spk) : 'ремарка';
@@ -201,16 +203,16 @@ function tlInfoHtml() {
   return `<span class="num">${esc(c.id)}</span><b>${esc(who)}</b><span class="tl-txt">«${esc(tlText(row).slice(0, 90))}»</span>
     <span>начало <b>${C.ts(row.at)}</b></span>${row.gap != null ? `<span>пауза перед <b>${row.gap.toFixed(2)} с</b></span>` : ''}
     ${tmg.before ? `<span>сдвиг <b>${tmg.before > 0 ? '+' : ''}${tmg.before.toFixed(2)} с</b></span>` : ''}${tmg.own ? `<span>только эта <b>${tmg.own > 0 ? '+' : ''}${tmg.own.toFixed(2)} с</b></span>` : ''}
-    <button class="ghost-b tiny" data-act="tl-play">▶ отсюда</button>${tmg.before || tmg.own ? '<button class="ghost-b tiny" data-act="tl-reset">сбросить сдвиг</button>' : ''}
+    <button class="ghost-b tiny" data-act="tl-play">${ic('play')}отсюда</button>${tmg.before || tmg.own ? '<button class="ghost-b tiny" data-act="tl-reset">сбросить сдвиг</button>' : ''}
     ${it ? fxSel(S.fxLine[c.id] || '', auto && auto.key !== 'none' ? `сам: ${FX_PRESETS[auto.key].name} (${auto.why})` : 'без эффекта') + gainBtns + (g ? `<span><b>${g > 0 ? '+' : ''}${g} дБ</b></span>` : '') : ''}`;
 }
 function tlBarHtml() {
   const st = tlState(), n = Object.keys(S.timing).length, total = S.result && S.result.out ? S.result.out.length / C.SR : 0;
-  return `<div class="tl-group tl-tp"><button class="play tp-play-btn" data-act="tp-play" aria-label="${TP.playing ? 'Пауза' : 'Играть'}" title="Играть и пауза (пробел)">${TP.playing ? ICON_PAUSE : ICON_PLAY}</button><span class="tp-time-txt">${fmt(tpTime())} / ${fmt(total)}</span></div>
-    <div class="tl-group"><button class="icon-b" data-act="tl-undo" aria-label="Отменить">↶</button><button class="icon-b" data-act="tl-redo" aria-label="Повторить">↷</button></div>
-    <div class="tl-group"><button class="icon-b" data-act="tl-zoom-" title="Мельче (−)" aria-label="Уменьшить масштаб">−</button><button class="ghost-b tiny" data-act="tl-fit" title="Весь спектакль (0)">весь</button><button class="icon-b" data-act="tl-zoom+" title="Крупнее (+)" aria-label="Увеличить масштаб">+</button></div>
+  return `<div class="tl-group tl-tp"><button class="play tp-play-btn" data-act="tp-play" aria-label="${TP.playing ? 'Пауза' : 'Играть'}" title="Играть и пауза (пробел)">${tpIcon(TP.playing)}</button><span class="tp-time-txt">${fmt(tpTime())} / ${fmt(total)}</span></div>
+    <div class="tl-group"><button class="icon-b" data-act="tl-undo" aria-label="Отменить">${ic('undo')}</button><button class="icon-b" data-act="tl-redo" aria-label="Повторить">${ic('redo')}</button></div>
+    <div class="tl-group"><button class="icon-b" data-act="tl-zoom-" title="Мельче (−)" aria-label="Уменьшить масштаб">${ic('minus')}</button><button class="ghost-b tiny" data-act="tl-fit" title="Весь спектакль (0)">весь</button><button class="icon-b" data-act="tl-zoom+" title="Крупнее (+)" aria-label="Увеличить масштаб">${ic('plus')}</button></div>
     <div class="tl-group"><button class="ghost-b tiny ${st.own ? 'on' : ''}" data-act="tl-own" title="Двигать только выбранную реплику, не сдвигая остальные" aria-pressed="${st.own}">только эта реплика</button>${n ? `<button class="ghost-b tiny" data-act="tl-reset-all">сбросить все сдвиги (${n})</button>` : ''}</div>
-    <button class="ghost-b tl-fullbtn" data-act="tl-full" title="${st.full ? 'Свернуть (Esc)' : 'Таймлайн на весь экран (F)'}">${st.full ? '✕ Свернуть' : '⛶ На весь экран'}</button>`;
+    <button class="ghost-b tl-fullbtn" data-act="tl-full" title="${st.full ? 'Свернуть (Esc)' : 'Таймлайн на весь экран (F)'}">${st.full ? ic('collapse') + 'Свернуть' : ic('expand') + 'На весь экран'}</button>`;
 }
 function tlRefreshInfo() { const el = $('#tl-info'); if (el) el.innerHTML = tlInfoHtml(); drawTimeline(); }
 function tlRefreshBar() { const el = $('.tl-bar'); if (el) el.innerHTML = tlBarHtml(); histUi(); }
@@ -240,7 +242,7 @@ function tlMenuHtml(ctx) {
   const st = tlState(), fx = (cur, attr) => `<div class="m-fx">${Object.entries(FX_PRESETS).map(([k, p]) => `<button role="menuitemradio" aria-checked="${cur === k}" class="${cur === k ? 'on' : ''}" data-m="${attr}" data-v="${k}">${p.name}</button>`).join('')}<button role="menuitemradio" aria-checked="${!cur}" class="${!cur ? 'on' : ''}" data-m="${attr}" data-v="">${attr === 'fx' ? 'как у персонажа' : 'по пометкам'}</button></div>`;
   const gains = attr => `<div class="m-row">${[-3, -1, 1, 3].map(d => `<button role="menuitem" data-m="${attr}" data-v="${d}">${d > 0 ? '+' : '−'}${Math.abs(d)} дБ</button>`).join('')}<button role="menuitem" data-m="${attr}" data-v="0">0</button></div>`;
   const undo = HIST.undo[HIST.undo.length - 1], redo = HIST.redo[HIST.redo.length - 1];
-  const hist = `<div class="m-sep"></div><button role="menuitem" data-m="undo" ${undo ? '' : 'disabled'}><span>↶ Отменить${undo ? ': ' + esc(undo.label) : ''}</span>${kbd('Ctrl+Z')}</button><button role="menuitem" data-m="redo" ${redo ? '' : 'disabled'}><span>↷ Повторить${redo ? ': ' + esc(redo.label) : ''}</span>${kbd('Ctrl+Shift+Z')}</button>`;
+  const hist = `<div class="m-sep"></div><button role="menuitem" data-m="undo" ${undo ? '' : 'disabled'}><span>${ic('undo')}Отменить${undo ? ': ' + esc(undo.label) : ''}</span>${kbd('Ctrl+Z')}</button><button role="menuitem" data-m="redo" ${redo ? '' : 'disabled'}><span>${ic('redo')}Повторить${redo ? ': ' + esc(redo.label) : ''}</span>${kbd('Ctrl+Shift+Z')}</button>`;
   if (ctx.track) {
     const tr = ctx.track, v = tr.voice, cur = v ? S.fxVoice[v] || '' : '', g = v ? S.voiceGains[v] || 0 : 0;
     return `<div class="m-head"><span class="chip ${tr.cls}">${esc(tr.name)}</span><span>${tr.clips.filter(c => !c.fixed).length} на дорожке</span></div>
@@ -252,9 +254,9 @@ function tlMenuHtml(ctx) {
   const fxs = new Set(items.map(it => S.fxLine[it.id] || '')), cur = fxs.size === 1 ? [...fxs][0] : null, shifted = [...ids].some(id => S.timing[id]);
   const voice = n === 1 && row && row.cue.type === 'line' ? row.cue.spk : null;
   return `<div class="m-head">${head}</div>
-    ${ctx.t != null ? `<button role="menuitem" data-m="play" data-v="${ctx.t}"><span>▶ Слушать ${n ? 'с реплики' : 'отсюда'}</span>${kbd(n ? 'двойной щелчок' : 'пробел')}</button>` : ''}
+    ${ctx.t != null ? `<button role="menuitem" data-m="play" data-v="${ctx.t}"><span>${ic('play')}Слушать ${n ? 'с реплики' : 'отсюда'}</span>${kbd(n ? 'двойной щелчок' : 'пробел')}</button>` : ''}
     ${items.length ? `<div class="m-lbl">Эффект${n > 1 ? ' для всех выбранных' : ''}</div>${fx(cur === null ? '—' : cur, 'fx')}<div class="m-lbl">Громкость${n > 1 ? ' выбранных' : ''}</div>${gains('g')}` : ''}
-    ${n ? `<div class="m-lbl">Время</div><div class="m-row"><button role="menuitem" data-m="nudge" data-v="-0.5">← 0,5 с</button><button role="menuitem" data-m="nudge" data-v="-0.1">← 0,1 с</button><button role="menuitem" data-m="nudge" data-v="0.1">0,1 с →</button><button role="menuitem" data-m="nudge" data-v="0.5">0,5 с →</button></div>${shifted ? `<button role="menuitem" data-m="reset"><span>Сбросить сдвиг</span></button>` : ''}` : ''}
+    ${n ? `<div class="m-lbl">Время</div><div class="m-row"><button role="menuitem" data-m="nudge" data-v="-0.5" aria-label="раньше на 0,5 с">${ic('left')}0,5 с</button><button role="menuitem" data-m="nudge" data-v="-0.1" aria-label="раньше на 0,1 с">${ic('left')}0,1 с</button><button role="menuitem" data-m="nudge" data-v="0.1" aria-label="позже на 0,1 с">0,1 с${ic('right')}</button><button role="menuitem" data-m="nudge" data-v="0.5" aria-label="позже на 0,5 с">0,5 с${ic('right')}</button></div>${shifted ? `<button role="menuitem" data-m="reset"><span>Сбросить сдвиг</span></button>` : ''}` : ''}
     <div class="m-sep"></div>
     ${voice ? `<button role="menuitem" data-m="selvoice" data-v="${esc(voice)}"><span>Выделить все реплики: ${esc(charName(voice))}</span></button>` : ''}
     <button role="menuitem" data-m="selall"><span>Выделить всё</span>${kbd('Ctrl+A')}</button>
@@ -266,11 +268,12 @@ function tlMenuOpen(cx, cy, ctx) {
   st.menu = ctx; st.menuIds = ctx.ids || null;
   m.innerHTML = tlMenuHtml(ctx); m.hidden = false;
   const r = m.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight;
-  m.style.left = Math.max(8, Math.min(cx, vw - r.width - 8)) + 'px'; m.style.top = Math.max(8, Math.min(cy, vh - r.height - 8)) + 'px';
+  const left = Math.max(8, Math.min(cx, vw - r.width - 8)), top = Math.max(8, Math.min(cy, vh - r.height - 8));
+  m.style.left = left + 'px'; m.style.top = top + 'px'; m.style.setProperty('--origin', `${Math.max(0, Math.min(r.width, cx - left)).toFixed(0)}px ${Math.max(0, Math.min(r.height, cy - top)).toFixed(0)}px`);
   drawTimeline();
   const f = m.querySelector('button:not([disabled])'); if (f) f.focus();
 }
-function tlMenuClose(refocus = true) { const st = tlState(), m = $('#tl-menu'); if (!m || m.hidden) return; m.hidden = true; st.menu = null; st.menuIds = null; drawTimeline(); if (refocus) $('#tl-cv')?.focus(); }
+function tlMenuClose(refocus = true) { const st = tlState(), m = $('#tl-menu'); if (!m || m.hidden) return; if (typeof motionGhostOut === 'function' && tlLastInput !== 'key') motionGhostOut(m, { transform: 'scale(0.99)' }, 150); m.hidden = true; st.menu = null; st.menuIds = null; drawTimeline(); if (refocus) $('#tl-cv')?.focus(); }
 function tlMenuAct(b) {
   const st = tlState(), ctx = st.menu, a = b.dataset.m, v = b.dataset.v; if (!ctx) return;
   const ids = ctx.ids || new Set(), keep = ['fx', 'g', 'vfx', 'vg', 'nudge'].includes(a);
@@ -293,6 +296,7 @@ function tlMenuAct(b) {
 }
 /** Меню с клавиатуры: у выбранной реплики или в начале видимой части. */
 function tlMenuFromKeys() {
+  if (typeof MOTION !== 'undefined') MOTION.kbd = performance.now();
   const st = tlState(), cv = $('#tl-cv'), r = cv.getBoundingClientRect(), clips = tlAllClips().filter(c => st.sel.has(c.row.cue.id));
   if (clips.length) { const c = clips[0], ti = (S.tlTracks || []).findIndex(t => t.clips.includes(c)); tlMenuOpen(r.left + Math.max(TL.HEAD, tlX(st, c.row.at)) + 10, r.top + TL.RULER + ti * st.row + st.row, { ids: new Set(st.sel), t: c.row.at }); }
   else tlMenuOpen(r.left + TL.HEAD + 20, r.top + TL.RULER + 10, { ids: new Set(), t: st.scroll });
@@ -302,7 +306,7 @@ function tlZoom(k, cx = null, smooth = false) {
   const zoom = Math.max((W - TL.HEAD) / S.result.lay.total, Math.min(TL.MAX_ZOOM, st.zoom * k)), scroll = t - (mx - TL.HEAD) / zoom;
   if (smooth && typeof motionView === 'function') motionView(st, zoom, scroll, drawTimeline); else { st.zoom = zoom; st.scroll = scroll; drawTimeline(); }
 }
-function tlFit() { const st = tlState(), W = st.W || 800, z = (W - TL.HEAD) / S.result.lay.total; if (typeof motionView === 'function') motionView(st, z, 0, drawTimeline); else { st.zoom = 0; st.scroll = 0; drawTimeline(); } }
+function tlFit(smooth = true) { const st = tlState(), W = st.W || 800, z = (W - TL.HEAD) / S.result.lay.total; if (!smooth) { st.zoom = z; st.scroll = 0; drawTimeline(); return; } if (typeof motionView === 'function') motionView(st, z, 0, drawTimeline); else { st.zoom = 0; st.scroll = 0; drawTimeline(); } }
 function bindTimeline() {
   const host = $('#mix-out');
   host.addEventListener('contextmenu', e => {
@@ -382,9 +386,9 @@ function bindTimeline() {
     if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); tlMenuFromKeys(); return; }
     if (e.key === 'Escape') { if (st.sel.size) tlSelect([]); else if (st.full) tlSetFull(false); return; }
     if (e.key === 'f' || e.key === 'F' || e.key === 'а' || e.key === 'А') { if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); tlSetFull(!st.full); return; } }
-    if (e.key === '+' || e.key === '=') { tlZoom(1.5, null, true); return; }
-    if (e.key === '-' || e.key === '_') { tlZoom(1 / 1.5, null, true); return; }
-    if (e.key === '0') { tlFit(); return; }
+    if (e.key === '+' || e.key === '=') { tlZoom(1.5); return; }             // с клавиатуры — мгновенно
+    if (e.key === '-' || e.key === '_') { tlZoom(1 / 1.5); return; }
+    if (e.key === '0') { tlFit(false); return; }
     if (e.key === 'Home') { tlSeek(0); st.scroll = 0; drawTimeline(); return; }
     if ((e.ctrlKey || e.metaKey) && e.code === 'KeyA') { e.preventDefault(); tlSelect(tlAllClips().filter(c => !c.fixed).map(c => c.row.cue.id)); return; }
     if (!st.sel.size || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return; e.preventDefault();

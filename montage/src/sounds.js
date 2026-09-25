@@ -80,14 +80,14 @@ function renderSounds() {
   }
   el.innerHTML = `
     <div class="sfx-head">
-      <label class="ghost-b file-b">Загрузить свои звуки<input type="file" id="sfx-add" accept="audio/*,.m4a,.opus,.flac" multiple hidden></label>
+      <label class="ghost-b file-b">${ic('plus')}Загрузить свои звуки<input type="file" id="sfx-add" accept="audio/*,.m4a,.opus,.flac" multiple hidden></label>
       <span class="muted small">файлы называйте по смыслу: «дверь открывается.wav», «шаги.mp3», «стук.wav» — так они подставятся к ремаркам сами</span>
       <span class="pill ok">в дорожке ${inTrack}</span>
       <label class="mini"><input type="checkbox" id="sfx-all" ${st.showAll ? 'checked' : ''}> показывать все ремарки</label>
     </div>
     ${ambHtml()}
     ${dbBoxHtml(db)}
-    ${st.lib.length ? `<div class="chips">${st.lib.map(f => `<span class="chip ghost">${esc(f.name)} <i>${fmt(f.dur)}</i> <button class="icon xs" data-act="lib-play" data-name="${esc(f.name)}" aria-label="Слушать">▶</button><button class="icon xs" data-act="lib-rm" data-name="${esc(f.name)}" aria-label="Убрать">✕</button></span>`).join('')}</div>` : ''}
+    ${st.lib.length ? `<div class="chips">${st.lib.map(f => `<span class="chip ghost">${esc(f.name)} <i>${fmt(f.dur)}</i> <button class="icon xs" data-act="lib-play" data-name="${esc(f.name)}" aria-label="Слушать">${ic('play')}</button><button class="icon xs" data-act="lib-rm" data-name="${esc(f.name)}" aria-label="Убрать">${ic('close')}</button></span>`).join('')}</div>` : ''}
     <div class="srows">${list.join('') || '<p class="muted pad">Звучащих ремарок не нашлось. Включите «показывать все ремарки» и назначьте звук вручную.</p>'}</div>`;
 }
 function dbBoxHtml(db) {

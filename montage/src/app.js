@@ -43,6 +43,7 @@ let outNode = null, analyser = null, levelBuf = null;
 function audioOut() {
   const ctx = audioCtx();
   if (!outNode) { analyser = ctx.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.6; outNode = ctx.createGain(); outNode.connect(analyser); analyser.connect(ctx.destination); levelBuf = new Float32Array(analyser.fftSize); }
+  if (typeof deckKick === 'function') deckKick();
   return outNode;
 }
 function audioLevel() {
@@ -438,8 +439,6 @@ function remixLinesInner(r, ids, before) {
   return true;
 }
 // ------------------------------------------------------------------ плеер из памяти: без сборки WAV, правки слышны сразу
-const ICON_PLAY = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>';
-const ICON_PAUSE = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="3.5" y="2.5" width="3" height="11" rx="1" fill="currentColor"/><rect x="9.5" y="2.5" width="3" height="11" rx="1" fill="currentColor"/></svg>';
 const TP = { buf: null, src: null, startAt: 0, offset: 0, playing: false, len: 0, hold: false, dirty: false };
 /** Буфер плеера с запасом в минуту: сдвиги меняют длину дорожки, а новый буфер на 200 МБ — это секунда. */
 function tpLoad(out) {
@@ -464,7 +463,7 @@ function tpPlay(t = tpTime()) {
 function tpPause() { if (!TP.playing) return; TP.offset = tpTime(); TP.playing = false; if (TP.src) { TP.src.onended = null; try { TP.src.stop(); } catch {} TP.src = null; } tpUi(); }
 function tpSeek(t, play = null) { if (play === true || (play == null && TP.playing)) tpPlay(t); else { TP.offset = Math.max(0, Math.min(t, TP.len / C.SR)); tpUi(); } }
 function tpUi() {
-  document.querySelectorAll('#tp-play, .tp-play-btn').forEach(b => { b.innerHTML = TP.playing ? ICON_PAUSE : ICON_PLAY; b.setAttribute('aria-label', TP.playing ? 'Пауза' : 'Играть'); b.title = (TP.playing ? 'Пауза' : 'Играть') + ' (пробел)'; });
+  document.querySelectorAll('#tp-play, .tp-play-btn').forEach(b => { const sw = b.querySelector('.swap'); if (sw) sw.dataset.state = TP.playing ? 'b' : 'a'; else b.innerHTML = tpIcon(TP.playing); b.classList.toggle('on', TP.playing); b.setAttribute('aria-label', TP.playing ? 'Пауза' : 'Играть'); b.title = (TP.playing ? 'Пауза' : 'Играть') + ' (пробел)'; });
   if (S.result && S.result.out) document.querySelectorAll('#tp-time, .tp-time-txt').forEach(tt => { tt.textContent = `${fmt(tpTime())} / ${fmt(S.result.out.length / C.SR)}`; });
   const sk = $('#tp-seek'); if (sk && !sk.matches(':active')) sk.value = tpTime();
   if (typeof drawTimeline === 'function') drawTimeline();
@@ -622,8 +621,10 @@ async function uploadFor(id, file) {
 let msgTimer = null;
 function notify(t) { const el = $('#msg'); el.textContent = t; el.hidden = !t; clearTimeout(msgTimer); if (t) msgTimer = setTimeout(() => { typeof motionHide === 'function' ? motionHide(el) : (el.hidden = true); }, 9000); }
 function progress(t, p) {
-  const el = $('#prog'); el.hidden = !t;
-  $('#prog-t').textContent = t; $('#prog-b').style.setProperty('--p', Math.max(0, Math.min(1, p || 0)).toFixed(3));
+  const el = $('#prog');
+  if (!t && !el.hidden && typeof motionGhostOut === 'function') motionGhostOut(el, { transform: 'translateY(12px) scale(0.98)', filter: 'blur(2px)' }, 250);
+  el.hidden = !t;
+  $('#prog-t').textContent = t; $('#prog-t').dataset.text = t; $('#prog-b').style.setProperty('--p', Math.max(0, Math.min(1, p || 0)).toFixed(3));
 }
 let shownTab = null;
 function render() {
@@ -651,9 +652,9 @@ function renderFiles() {
         <span class="fname">${esc(f.name)}</span>
         <span class="fmeta">${f.error ? `<span class="bad">${esc(f.error)}</span>` : f.dur ? fmt(f.dur) : 'читаю…'}${f.segs ? ` · кусков ${f.segs.length}` : ''}${f.raw48 ? ' · <span class="okt">очищено</span>' : ''}</span>
         <span class="fbtn">
-          <button class="icon" data-act="up" title="Выше" ${i ? '' : 'disabled'} aria-label="Выше">↑</button>
-          <button class="icon" data-act="down" title="Ниже" ${i < S.files.length - 1 ? '' : 'disabled'} aria-label="Ниже">↓</button>
-          <button class="icon" data-act="rm" title="Убрать" aria-label="Убрать">✕</button>
+          <button class="icon" data-act="up" title="Выше" ${i ? '' : 'disabled'} aria-label="Выше">${ic('up')}</button>
+          <button class="icon" data-act="down" title="Ниже" ${i < S.files.length - 1 ? '' : 'disabled'} aria-label="Ниже">${ic('down')}</button>
+          <button class="icon" data-act="rm" title="Убрать" aria-label="Убрать">${ic('close')}</button>
         </span>
       </div>
       <div class="who">${S.P ? S.P.chars.map(c => `<label class="tog ${colorOf(c.key)} ${f.chars.has(c.key) ? 'on' : ''}"><input type="checkbox" data-act="char" data-k="${esc(c.key)}" ${f.chars.has(c.key) ? 'checked' : ''}>${esc(c.name)}</label>`).join('') : '<span class="muted">кто говорит — после сценария</span>'}</div>
@@ -726,13 +727,13 @@ function rowHtml(cue, st, hasFile) {
     </div>
     <div class="acts">
       ${src ? `<button class="play" data-act="play" aria-label="Слушать">▶</button>` : ''}
-      ${src && src.takes > 1 ? `<button class="ghost-b" data-act="take-next" title="Актёр прочёл реплику ${src.takes} раза; сначала стоит лучший">дубль ${src.take + 1}/${src.takes} ▸</button>` : ''}
+      ${src && src.takes > 1 ? `<button class="ghost-b" data-act="take-next" title="Актёр прочёл реплику ${src.takes} раза; сначала стоит лучший">дубль ${src.take + 1}/${src.takes} ${ic('next')}</button>` : ''}
       ${isDir ? `<label class="mini"><input type="checkbox" data-act="voiced" ${on ? 'checked' : ''}> в дорожку</label>` : ''}
       <button class="ghost-b" data-act="pick">${src ? 'Другой кусок' : 'Найти'}</button>
       <label class="ghost-b file-b">Своя запись<input type="file" accept="audio/*" data-act="own" hidden></label>
       ${src ? `<button class="ghost-b" data-act="none">Без записи</button>` : ''}
       ${S.edits[cue.id] || S.uploads.has(cue.id) ? `<button class="ghost-b" data-act="reset">Как было</button>` : ''}
-      <span class="gain"><button class="icon" data-act="g-" aria-label="Тише на 1 дБ">−</button><span>${g ? (g > 0 ? '+' : '') + g + ' дБ' : '0 дБ'}</span><button class="icon" data-act="g+" aria-label="Громче на 1 дБ">+</button></span>
+      <span class="gain"><button class="icon" data-act="g-" aria-label="Тише на 1 дБ">${ic('minus')}</button><span>${g ? (g > 0 ? '+' : '') + g + ' дБ' : '0 дБ'}</span><button class="icon" data-act="g+" aria-label="Громче на 1 дБ">${ic('plus')}</button></span>
     </div>
   </div>`;
 }
@@ -771,7 +772,7 @@ function renderMix() {
   for (const it of r.items) { if (!voices.has(it.voice)) voices.set(it.voice, []); voices.get(it.voice).push(it); }
   const spread = list => { const a = list.map(x => x.levelAfter).sort((x, y) => x - y), b = list.map(x => x.level).sort((x, y) => x - y); const p = (arr, q) => arr[Math.min(arr.length - 1, Math.floor(q * (arr.length - 1)))]; return [p(b, 0.9) - p(b, 0.1), p(a, 0.9) - p(a, 0.1)]; };
   $('#mix-top').innerHTML = `
-    <div class="tp"><button class="play big" id="tp-play" data-act="tp-play" aria-label="${TP.playing ? 'Пауза' : 'Играть'}" title="Играть и пауза (пробел)">${TP.playing ? ICON_PAUSE : ICON_PLAY}</button>
+    <div class="tp"><button class="play big" id="tp-play" data-act="tp-play" aria-label="${TP.playing ? 'Пауза' : 'Играть'}" title="Играть и пауза (пробел)">${tpIcon(TP.playing)}</button>
       <input type="range" id="tp-seek" min="0" max="${(r.out.length / C.SR).toFixed(1)}" step="0.1" value="${tpTime()}" aria-label="Позиция"><span class="tp-time" id="tp-time">${fmt(tpTime())} / ${fmt(r.out.length / C.SR)}</span>
       <span id="mix-status">${mixStatusHtml(r)}</span></div>
 `;
@@ -791,7 +792,7 @@ function renderMix() {
       ${[...voices.keys()].map(v => { const g = S.voiceGains[v] || 0; return `<label class="vg"><span class="chip ${S.P.chars.some(c => c.key === v) ? colorOf(v) : 'ghost'}">${esc(charName(v))}</span><input type="range" data-voice="${esc(v)}" min="-12" max="6" step="0.5" value="${g}" aria-label="громкость ${esc(charName(v))}"><b>${g > 0 ? '+' : ''}${g} дБ</b><button class="icon xs" data-act="vg0" data-voice="${esc(v)}" title="Сбросить в 0" aria-label="Сбросить">0</button>${typeof FX_PRESETS !== 'undefined' ? (() => { const cur = fxOfVoice(v); return `<select data-fxvoice="${esc(v)}" aria-label="эффект ${esc(charName(v))}"><option value="">${cur && !S.fxVoice[v] ? 'сам: ' + FX_PRESETS[cur.key].name : 'без эффекта'}</option>${Object.entries(FX_PRESETS).filter(([k]) => k !== 'none' || (cur && !S.fxVoice[v])).map(([k, p]) => `<option value="${k}" ${S.fxVoice[v] === k ? 'selected' : ''}>${p.name}</option>`).join('')}</select>`; })() : ''}</label>`; }).join('')}
     </div>
     <div class="dl">
-      <button class="primary" data-act="mp3">Скачать MP3</button>
+      <button class="primary" data-act="mp3">${ic('download')}Скачать MP3</button>
       <button class="ghost-b" data-act="wav">WAV 24 бит</button>
       <button class="ghost-b" data-act="pauses">Паузы (.txt)</button>
       <button class="ghost-b" data-act="csv">Разметка (.csv)</button>
@@ -830,7 +831,7 @@ function bind() {
       S.pendingClean = new Map((p.cleanup || []).map(x => [x.name, x]));
       for (const f of S.files) if (f.y48) restoreClean(f);
       notify('Проект открыт. Добавьте те же файлы записей — роли подставятся сами.'); render();
-    } catch { notify('Это не файл проекта Монтажки.'); }
+    } catch { notify('Это не файл проекта Монтажки.'); if (typeof motionShake === 'function') motionShake(e.target.closest('label')); }
     e.target.value = '';
   });
   drop($('#s1'), fs => addFiles(fs));
@@ -922,8 +923,8 @@ function bind() {
 }
 
 // для проверки из консоли и автотестов
-window.montage = { S, C, PRESETS, play: (y, btn) => play(y, btn), stop: () => stop(), HERO: typeof HERO !== 'undefined' ? HERO : null, MOTION: typeof MOTION !== 'undefined' ? MOTION : null, audioLevel: () => audioLevel(), projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses };
+window.montage = { S, C, PRESETS, play: (y, btn) => play(y, btn), stop: () => stop(), DECK: typeof DECK !== 'undefined' ? DECK : null, MOTION: typeof MOTION !== 'undefined' ? MOTION : null, audioLevel: () => audioLevel(), projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses };
 bind(); render();
 if (typeof motionInit === 'function') motionInit();
-if (typeof initHero === 'function') initHero();
+if (typeof initDeck === 'function') initDeck();
 if (typeof initTheme === 'function') initTheme();
