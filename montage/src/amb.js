@@ -111,7 +111,7 @@ function ambHtml() {
       <label class="mini"><input type="checkbox" data-p="on" ${cfg.on && has ? 'checked' : ''} ${has ? '' : 'disabled'} aria-label="фон сцены ${esc(sc.n)}"></label>
       <div class="stext"><b>Сцена ${esc(sc.n)}</b> <span class="muted">${esc(sc.desc.slice(0, 70))}</span>${sc.rule ? `<div class="small muted">место: ${esc(sc.rule.name)}</div>` : ''}</div>
       <div class="asrc">${label}</div>
-      <label class="gain"><input type="range" data-p="gain" min="-36" max="-6" step="1" value="${cfg.gain ?? -18}" aria-label="громкость фона"><span>${cfg.gain ?? -18} дБ</span></label>
+      <label class="gain"><input type="range" data-p="gain" min="-36" max="-6" step="1" value="${cfg.gain ?? -18}" aria-label="громкость фона"><span class="gv" data-num="amb:${esc(sc.n)}">${cfg.gain ?? -18} дБ</span></label>
       <button class="play" data-act="amb-play" ${has ? '' : 'disabled'} aria-label="Слушать">▶</button>
       <button class="ghost-b tiny" data-act="amb-next">${has ? 'другой' : 'из базы'}</button>
       <button class="ghost-b tiny" data-act="amb-room" title="Тихий ровный фон помещения без событий">тишина</button>
@@ -120,7 +120,7 @@ function ambHtml() {
   return `<div class="ambbox">
     <div class="dbline"><b>Фон сцен</b><span class="pill ${on ? 'ok' : 'none'}">${on ? 'сцен с фоном ' + on : 'выключен'}</span>
       <button class="primary" data-act="amb-auto">Подобрать фон из базы ко всем сценам</button>
-      <label class="gain duck"><span>под репликами тише на <b id="duck-v">${st.duck} дБ</b></span><input type="range" id="amb-duck" min="0" max="18" step="1" value="${st.duck}"></label></div>
+      <label class="gain duck"><span>под репликами тише на <b id="duck-v" data-num="duck">${st.duck} дБ</b></span><input type="range" id="amb-duck" min="0" max="18" step="1" value="${st.duck}"></label></div>
     <p class="muted small">Место берётся из описания сцены. Фон тянется на всю сцену, стыки плавные, под речью он сам приглушается.</p>
     <div class="arows">${rows}</div></div>`;
 }
@@ -132,7 +132,7 @@ function bindAmb(el) {
     if (a === 'amb-room') { const st = ambState(); st.scenes[n] = { ...(st.scenes[n] || { gain: -18 }), src: 'synth:room', on: true, manual: true }; ambSave(); renderSounds(); if (S.result) remixSoon(); return; }
     if (a === 'amb-play') { if (playing && playing.btn === b) return stop(); const y = ambAudio(n) || (() => { const st = ambState(), c = st.scenes[n]; const was = c.on; c.on = true; const r = ambAudio(n); c.on = was; return r; })(); if (y) play(y.subarray(0, Math.min(y.length, 12 * C.SR)), b); return; }
   });
-  el.addEventListener('input', e => { const x = e.target; if (x.id === 'amb-duck') { $('#duck-v').textContent = x.value + ' дБ'; return; } if (x.closest('.arow') && x.dataset.p === 'gain') x.nextElementSibling.textContent = x.value + ' дБ'; });
+  el.addEventListener('input', e => { const x = e.target; if (x.id === 'amb-duck') { $('#duck-v').textContent = x.value + ' дБ'; return; } if (x.closest('.arow') && x.dataset.p === 'gain') x.closest('.gain').querySelector('.gv').textContent = x.value + ' дБ'; });
   el.addEventListener('change', e => {
     const x = e.target, st = ambState();
     if (x.id === 'amb-duck') { st.duck = +x.value; ambSave(); if (S.result) remixSoon(); return; }

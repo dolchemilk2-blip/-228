@@ -22,7 +22,7 @@ function recHtml() {
   const line = (x, cls) => x ? `<div class="rec-l ${cls}"><span class="chip ${colorOf(x.spk)}">${esc(charName(x.spk))}</span> ${x.note ? `<i>(${esc(x.note)})</i> ` : ''}${esc(x.text)}</div>` : '';
   return `<div class="rec-in" role="dialog" aria-modal="true" aria-label="Дозапись">
     <div class="rec-grab" aria-hidden="true"></div>
-    <div class="rec-head"><b>Дозапись</b><span class="chip ${colorOf(c.spk)}">${esc(charName(c.spk))}</span><span class="muted small">${REC.i + 1} из ${total} · реплика ${esc(c.id)}</span>
+    <div class="rec-head"><b>Дозапись</b><span class="chip ${colorOf(c.spk)}">${esc(charName(c.spk))}</span><span class="muted small"><span data-num="rec:pos">${REC.i + 1} из ${total}</span> · реплика ${esc(c.id)}</span>
       <button class="icon rec-x" data-rec="close" aria-label="Закрыть">${ic('close')}</button></div>
     <div class="rec-prompt">
       ${line(p, 'prev')}

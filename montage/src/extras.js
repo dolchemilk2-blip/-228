@@ -150,7 +150,7 @@ function rerecHtml() {
   const all = rerecList(); if (!all.size) return '';
   const total = [...all.values()].reduce((s, l) => s + l.length, 0);
   return `<div class="rerec"><b>Дозапись</b><span class="muted small">по актёру: реплики без записи и те, где услышано не то, с соседними репликами для интонации</span>
-    <div class="chips">${[...all].map(([k, l]) => `<span class="rr"><button class="chip ${colorOf(k)} as-btn" data-act="rerec" data-spk="${esc(k)}" title="Список для актёра (.txt)">${esc(charName(k))} <i>${l.length}</i> ${ic('download')}</button><button class="icon xs rr-mic" data-act="rec-spk" data-spk="${esc(k)}" title="Записать реплики ${esc(charName(k))} здесь, с суфлёром" aria-label="Записать реплики ${esc(charName(k))} здесь">${ic('mic')}</button></span>`).join('')}
+    <div class="chips">${[...all].map(([k, l]) => `<span class="rr"><button class="chip ${colorOf(k)} as-btn" data-act="rerec" data-spk="${esc(k)}" title="Список для актёра (.txt)">${esc(charName(k))} <i data-num="rr:${esc(k)}">${l.length}</i> ${ic('download')}</button><button class="icon xs rr-mic" data-act="rec-spk" data-spk="${esc(k)}" title="Записать реплики ${esc(charName(k))} здесь, с суфлёром" aria-label="Записать реплики ${esc(charName(k))} здесь">${ic('mic')}</button></span>`).join('')}
     <button class="ghost-b tiny" data-act="rerec" data-spk="">все одним файлом (${total})</button></div></div>`;
 }
 

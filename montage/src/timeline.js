@@ -200,7 +200,7 @@ function tlInfoHtml() {
   if (st.sel.size > 1) {
     const items = tlSelItems(), by = new Map(); for (const id of st.sel) { const row = r.lay.rows.find(x => x.cue.id === id); if (!row) continue; const k = row.sound ? 'звуки' : row.cue.type === 'line' ? charName(row.cue.spk) : 'ремарки'; by.set(k, (by.get(k) || 0) + 1); }
     const fxs = new Set(items.map(it => S.fxLine[it.id] || '')), shifted = [...st.sel].filter(id => S.timing[id]).length;
-    return `<b>Выбрано ${st.sel.size}</b><span class="muted">${[...by].map(([k, n]) => `${esc(k)} ${n}`).join(', ')}</span>
+    return `<b>Выбрано <span data-num="tli:n">${st.sel.size}</span></b><span class="muted">${[...by].map(([k, n]) => `${esc(k)} ${n}`).join(', ')}</span>
       ${items.length ? fxSel(fxs.size === 1 ? [...fxs][0] : '', fxs.size === 1 ? '' : 'разные — выберите для всех') + gainBtns : ''}
       <button class="ghost-b tiny" data-act="tl-play">${ic('play')}с первой</button>${shifted ? `<button class="ghost-b tiny" data-act="tl-reset">сбросить сдвиги (${shifted})</button>` : ''}<button class="ghost-b tiny" data-act="tl-clear">снять выделение</button>`;
   }
@@ -208,14 +208,14 @@ function tlInfoHtml() {
   const c = row.cue, tmg = S.timing[c.id] || {}, who = row.sound ? 'звук' : c.type === 'line' ? charName(c.spk) : 'ремарка';
   const it = r.byId && r.byId.get(c.id), auto = it ? (S.fxLine[c.id] ? null : fxOfLine(c, it.voice)) : null, g = S.gains[c.id] || 0;
   return `<span class="num">${esc(c.id)}</span><b>${esc(who)}</b><span class="tl-txt">«${esc(tlText(row).slice(0, 90))}»</span>
-    <span>начало <b>${C.ts(row.at)}</b></span>${row.gap != null ? `<span>пауза перед <b>${row.gap.toFixed(2)} с</b></span>` : ''}
+    <span>начало <b data-num="tli:at">${C.ts(row.at)}</b></span>${row.gap != null ? `<span>пауза перед <b data-num="tli:gap">${row.gap.toFixed(2)} с</b></span>` : ''}
     ${tmg.before ? `<span>сдвиг <b>${tmg.before > 0 ? '+' : ''}${tmg.before.toFixed(2)} с</b></span>` : ''}${tmg.own ? `<span>только эта <b>${tmg.own > 0 ? '+' : ''}${tmg.own.toFixed(2)} с</b></span>` : ''}
     <button class="ghost-b tiny" data-act="tl-play">${ic('play')}отсюда</button>${tmg.before || tmg.own ? '<button class="ghost-b tiny" data-act="tl-reset">сбросить сдвиг</button>' : ''}
     ${it ? fxSel(S.fxLine[c.id] || '', auto && auto.key !== 'none' ? `сам: ${FX_PRESETS[auto.key].name} (${auto.why})` : 'без эффекта') + gainBtns + (g ? `<span><b>${g > 0 ? '+' : ''}${g} дБ</b></span>` : '') : ''}`;
 }
 function tlBarHtml() {
   const st = tlState(), n = Object.keys(S.timing).length, total = S.result && S.result.out ? S.result.out.length / C.SR : 0;
-  return `<div class="tl-group tl-tp"><button class="play tp-play-btn" data-act="tp-play" aria-label="${TP.playing ? 'Пауза' : 'Играть'}" title="Играть и пауза (пробел)">${tpIcon(TP.playing)}</button><span class="tp-time-txt">${fmt(tpTime())} / ${fmt(total)}</span></div>
+  return `<div class="tl-group tl-tp"><button class="play tp-play-btn" data-act="tp-play" aria-label="${TP.playing ? 'Пауза' : 'Играть'}" title="Играть и пауза (пробел)">${tpIcon(TP.playing)}</button><span class="tp-time-txt" data-num="tp2" data-num-quiet="play">${fmt(tpTime())} / ${fmt(total)}</span></div>
     <div class="tl-group"><button class="icon-b" data-act="tl-undo" aria-label="Отменить">${ic('undo')}</button><button class="icon-b" data-act="tl-redo" aria-label="Повторить">${ic('redo')}</button></div>
     <div class="tl-group"><button class="icon-b" data-act="tl-zoom-" title="Мельче (−)" aria-label="Уменьшить масштаб">${ic('minus')}</button><button class="ghost-b tiny" data-act="tl-fit" title="Весь спектакль (0)">весь</button><button class="icon-b" data-act="tl-zoom+" title="Крупнее (+)" aria-label="Увеличить масштаб">${ic('plus')}</button></div>
     <div class="tl-group"><button class="ghost-b tiny ${st.own ? 'on' : ''}" data-act="tl-own" title="Двигать только выбранную реплику, не сдвигая остальные" aria-pressed="${st.own}">только эта реплика</button>${n ? `<button class="ghost-b tiny" data-act="tl-reset-all">сбросить все сдвиги (${n})</button>` : ''}</div>

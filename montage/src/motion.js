@@ -372,20 +372,15 @@ function motionSteps() {
     const a = document.querySelector(`.rail a[data-step="${id}"]`); if (!a) continue;
     a.classList.toggle('done', ok); if (just) replay(a, 'just');
     const sec = document.getElementById(id); a.setAttribute('aria-disabled', sec && sec.hidden ? 'true' : 'false');
-    const m = a.querySelector('.m'); if (m && m.textContent !== meta) { const swap = MOTION.ready && m.textContent && !MOTION.reduce; m.textContent = meta; if (swap) mIn(m, { opacity: 0, transform: 'translateY(4px)', filter: 'blur(2px)' }, [1, 0.3]); }
+    // сводка шага: поменялись только числа — они въезжают (nums.js); поменялась сама фраза — она сменяется целиком
+    const m = a.querySelector('.m'); if (m && m.textContent !== meta) { m.dataset.num = 'step:' + id; m.setAttribute('data-num-shape', ''); const swap = MOTION.ready && m.textContent && !MOTION.reduce && !(typeof numShape === 'function' && numShape(m.textContent, meta)); m.textContent = meta; if (swap) mIn(m, { opacity: 0, transform: 'translateY(4px)', filter: 'blur(2px)' }, [1, 0.3]); }
   }
   const intro = document.getElementById('intro'); if (intro) intro.hidden = !!(S.P || S.files.length);
 }
 function replay(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); clearTimeout(el._rt); el._rt = setTimeout(() => el.classList.remove(cls), 700); }
 const plural = (n, a, b, c) => { const m = n % 100, k = n % 10; return m > 10 && m < 20 ? c : k === 1 ? a : k >= 2 && k <= 4 ? b : c; };
 /** Число в плашке: изменившиеся цифры въезжают снизу (transitions.dev: number pop-in). */
-function motionCount(el, key) {
-  const to = +el.dataset.n; if (!isFinite(to)) return;
-  const had = MOTION.counts.has(key), from = MOTION.counts.get(key); MOTION.counts.set(key, to);
-  const out = el.querySelector('b') || el;
-  out.classList.add('digits'); out.innerHTML = [...String(to)].map(ch => `<span class="digit">${ch}</span>`).join('');
-  if (had && from !== to && !MOTION.reduce) replay(out, 'pop');
-}
+function motionCount(el, key) { const out = el.querySelector('b') || el; out.dataset.num = 'pill:' + key; if (typeof numCheck === 'function') numCheck(out); }
 /** Раскрывашка (transitions.dev: accordion): высота через grid-rows 0fr → 1fr на пружине, шеврон переворачивается. */
 function initAccordions() {
   document.addEventListener('click', e => {

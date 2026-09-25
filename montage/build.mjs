@@ -19,7 +19,7 @@ self.onmessage = e => {
   } catch (err) { self.postMessage({ id: m.id, type: 'error', message: String(err && err.message || err) }); }
 };`;
 const app = strip(read('app.js')), cleanup = strip(read('cleanup.js')), sounds = strip(read('sounds.js')), sfxdb = strip(read('sfxdb.js')), timeline = strip(read('history.js')) + '\n' + strip(read('timeline.js')) + '\n' + strip(read('motion.js')) + '\n' + strip(read('deck.js')), fx = strip(read('fx.js')), amb = strip(read('amb.js')), extras = strip(read('extras.js')) + '\n' + strip(read('video.js')) + '\n' + strip(read('read.js')) + '\n' + strip(read('record.js'));
-const icons = strip(read('icons.js')) + '\n' + strip(read('spring.js'));
+const icons = strip(read('icons.js')) + '\n' + strip(read('spring.js')) + '\n' + strip(read('fader.js')) + '\n' + strip(read('nums.js'));
 const bundle = `${bundleLib}\nconst DSP_WORKER_SRC = ${JSON.stringify(workerSrc)};\n\n${icons}\n\n${cleanup}\n\n${sounds}\n\n${sfxdb}\n\n${fx}\n\n${amb}\n\n${timeline}\n\n${extras}\n\n${app}`;
 const page = read('page.html').replace('/*BUNDLE*/', () => bundle);
 fs.writeFileSync(new URL('./index.html', import.meta.url), page);

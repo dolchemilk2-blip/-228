@@ -653,7 +653,7 @@ function renderScript() {
   const el = $('#script-sum');
   if (!S.P) { el.innerHTML = '<p class="muted">Вставьте текст или перетащите .txt сюда.</p>'; return; }
   const nLines = S.P.cues.filter(c => c.type === 'line').length, nDirs = S.P.cues.filter(c => c.type === 'dir').length;
-  el.innerHTML = `<p class="stat"><b>${S.P.nScenes || '—'}</b> сцен · <b>${nLines}</b> реплик · <b>${nDirs}</b> ремарок</p>
+  el.innerHTML = `<p class="stat"><b data-num="sc:n">${S.P.nScenes || '—'}</b> сцен · <b data-num="sc:l">${nLines}</b> реплик · <b data-num="sc:d">${nDirs}</b> ремарок</p>
     <div class="chips">${S.P.chars.map(c => `<span class="chip ${colorOf(c.key)}">${esc(c.name)} <i>${c.count}</i></span>`).join('')}</div>`;
 }
 function renderFiles() {
@@ -744,14 +744,14 @@ function rowHtml(cue, st, hasFile) {
     </div>
     <div class="acts">
       ${src ? `<button class="play" data-act="play" aria-label="Слушать">▶</button>` : ''}
-      ${src && src.takes > 1 ? `<button class="ghost-b" data-act="take-next" title="Актёр прочёл реплику ${src.takes} раза; сначала стоит лучший">дубль ${src.take + 1}/${src.takes} ${ic('next')}</button>` : ''}
+      ${src && src.takes > 1 ? `<button class="ghost-b" data-act="take-next" title="Актёр прочёл реплику ${src.takes} раза; сначала стоит лучший">дубль <span data-num="take:${cue.id}">${src.take + 1}/${src.takes}</span> ${ic('next')}</button>` : ''}
       ${isDir ? `<label class="mini"><input type="checkbox" data-act="voiced" ${on ? 'checked' : ''}> в дорожку</label>` : ''}
       <button class="ghost-b" data-act="pick">${src ? 'Другой кусок' : 'Найти'}</button>
       ${!isDir ? `<button class="ghost-b" data-act="rec" title="Записать с микрофона — с суфлёром">${ic('mic')}Записать</button>` : ''}
       <label class="ghost-b file-b">Своя запись<input type="file" accept="audio/*" data-act="own" hidden></label>
       ${src ? `<button class="ghost-b" data-act="none">Без записи</button>` : ''}
       ${S.edits[cue.id] || S.uploads.has(cue.id) ? `<button class="ghost-b" data-act="reset">Как было</button>` : ''}
-      <span class="gain"><button class="icon" data-act="g-" aria-label="Тише на 1 дБ">${ic('minus')}</button><span>${g ? (g > 0 ? '+' : '') + g + ' дБ' : '0 дБ'}</span><button class="icon" data-act="g+" aria-label="Громче на 1 дБ">${ic('plus')}</button></span>
+      <span class="gain"><button class="icon" data-act="g-" aria-label="Тише на 1 дБ">${ic('minus')}</button><span data-num="g:${cue.id}">${g ? (g > 0 ? '+' : '') + g + ' дБ' : '0 дБ'}</span><button class="icon" data-act="g+" aria-label="Громче на 1 дБ">${ic('plus')}</button></span>
     </div>
   </div>`;
 }
@@ -820,7 +820,7 @@ function renderMix() {
   const spread = list => { const a = list.map(x => x.levelAfter).sort((x, y) => x - y), b = list.map(x => x.level).sort((x, y) => x - y); const p = (arr, q) => arr[Math.min(arr.length - 1, Math.floor(q * (arr.length - 1)))]; return [p(b, 0.9) - p(b, 0.1), p(a, 0.9) - p(a, 0.1)]; };
   $('#mix-top').innerHTML = `
     <div class="tp"><button class="play big" id="tp-play" data-act="tp-play" aria-label="${TP.playing ? 'Пауза' : 'Играть'}" title="Играть и пауза (пробел)">${tpIcon(TP.playing)}</button>
-      <input type="range" id="tp-seek" min="0" max="${(r.out.length / C.SR).toFixed(1)}" step="0.1" value="${tpTime()}" aria-label="Позиция"><span class="tp-time" id="tp-time">${fmt(tpTime())} / ${fmt(r.out.length / C.SR)}</span>
+      <input type="range" id="tp-seek" min="0" max="${(r.out.length / C.SR).toFixed(1)}" step="0.1" value="${tpTime()}" aria-label="Позиция"><span class="tp-time" id="tp-time" data-num="tp" data-num-quiet="play">${fmt(tpTime())} / ${fmt(r.out.length / C.SR)}</span>
       <button class="ghost-b tp-read${S.readOpen ? ' on' : ''}" data-act="read" aria-pressed="${!!S.readOpen}" title="Сценарий идёт за плеером">${ic('lines')}Читка</button>
       <span id="mix-status">${mixStatusHtml(r)}</span></div>
 `;
@@ -833,11 +833,11 @@ function renderMix() {
       <div class="tl-flash" role="status" aria-live="polite"></div></div>`;
   else { tlRefreshBar(); tlRefreshInfo(); }
   $('#mix-rest').innerHTML = `
-    <p class="stat">${mixStatHtml(r)}</p>
+    <p class="stat" data-num="mixstat" data-num-flow>${mixStatHtml(r)}</p>
     <div class="levels">${[...voices].map(([v, list]) => { const [b, a] = spread(list); return `<div><span class="chip ${S.P.chars.some(c => c.key === v) ? colorOf(v) : 'ghost'}">${esc(charName(v))}</span> разброс громкости ${b.toFixed(1)} → <b>${a.toFixed(1)} дБ</b></div>`; }).join('')}</div>
     <div class="vgains">
       <div class="vg-head"><b>Персонажи: громкость и эффект</b><span class="muted small">поправка ко всем репликам персонажа поверх выравнивания; эффект — «голос в голове», телефон, мегафон, за дверью… Пометки в сценарии («в микрофон», «из другого угла») срабатывают сами. Применяется сразу, плеер продолжает с того же места</span><span class="muted small" id="vg-note"></span></div>
-      ${[...voices.keys()].map(v => { const g = S.voiceGains[v] || 0; return `<label class="vg"><span class="chip ${S.P.chars.some(c => c.key === v) ? colorOf(v) : 'ghost'}">${esc(charName(v))}</span><input type="range" data-voice="${esc(v)}" min="-12" max="6" step="0.5" value="${g}" aria-label="громкость ${esc(charName(v))}"><b>${g > 0 ? '+' : ''}${g} дБ</b><button class="icon xs" data-act="vg0" data-voice="${esc(v)}" title="Сбросить в 0" aria-label="Сбросить">0</button>${typeof FX_PRESETS !== 'undefined' ? (() => { const cur = fxOfVoice(v); return `<select data-fxvoice="${esc(v)}" aria-label="эффект ${esc(charName(v))}"><option value="">${cur && !S.fxVoice[v] ? 'сам: ' + FX_PRESETS[cur.key].name : 'без эффекта'}</option>${Object.entries(FX_PRESETS).filter(([k]) => k !== 'none' || (cur && !S.fxVoice[v])).map(([k, p]) => `<option value="${k}" ${S.fxVoice[v] === k ? 'selected' : ''}>${p.name}</option>`).join('')}</select>`; })() : ''}</label>`; }).join('')}
+      ${[...voices.keys()].map(v => { const g = S.voiceGains[v] || 0; return `<label class="vg"><span class="chip ${S.P.chars.some(c => c.key === v) ? colorOf(v) : 'ghost'}">${esc(charName(v))}</span><input type="range" data-voice="${esc(v)}" min="-12" max="6" step="0.5" value="${g}" aria-label="громкость ${esc(charName(v))}"><b data-num="vg:${esc(v)}">${g > 0 ? '+' : ''}${g} дБ</b><button class="icon xs" data-act="vg0" data-voice="${esc(v)}" title="Сбросить в 0" aria-label="Сбросить">0</button>${typeof FX_PRESETS !== 'undefined' ? (() => { const cur = fxOfVoice(v); return `<select data-fxvoice="${esc(v)}" aria-label="эффект ${esc(charName(v))}"><option value="">${cur && !S.fxVoice[v] ? 'сам: ' + FX_PRESETS[cur.key].name : 'без эффекта'}</option>${Object.entries(FX_PRESETS).filter(([k]) => k !== 'none' || (cur && !S.fxVoice[v])).map(([k, p]) => `<option value="${k}" ${S.fxVoice[v] === k ? 'selected' : ''}>${p.name}</option>`).join('')}</select>`; })() : ''}</label>`; }).join('')}
     </div>
     <div class="dl">
       <button class="primary" data-act="mp3">${ic('download')}Скачать MP3</button>
@@ -927,7 +927,7 @@ function bind() {
   $('#tempo').addEventListener('change', () => { if (+$('#tempo').value === (S.tempo || 1)) return; histPush(`темп пауз ${(+$('#tempo').value).toFixed(2)}×`); S.tempo = +$('#tempo').value; saveEdits(); if (S.result) remixSoon('layout'); });
   if (typeof bindTimeline === 'function') bindTimeline();
   $('#mixgo').addEventListener('click', mixdown);
-  $('#mix-out').addEventListener('input', e => { const x = e.target; if (x.dataset.voice == null) return; x.nextElementSibling.textContent = `${+x.value > 0 ? '+' : ''}${+x.value} дБ`; });
+  $('#mix-out').addEventListener('input', e => { const x = e.target; if (x.dataset.voice == null) return; x.closest('.vg').querySelector('b').textContent = `${+x.value > 0 ? '+' : ''}${+x.value} дБ`; });
   $('#mix-out').addEventListener('change', e => { const x = e.target;
     if (x.dataset.fxvoice != null) { if ((x.value || undefined) === S.fxVoice[x.dataset.fxvoice]) return; histPush(`эффект персонажа ${charName(x.dataset.fxvoice)}: ${x.value ? FX_PRESETS[x.value].name : 'как по пометкам'}`); if (x.value) S.fxVoice[x.dataset.fxvoice] = x.value; else delete S.fxVoice[x.dataset.fxvoice]; saveEdits(); remixSoon('lines', voiceIds(x.dataset.fxvoice)); drawTimeline(); return; }
     if (x.dataset.voice == null) return; const v = +x.value; if (v === (S.voiceGains[x.dataset.voice] || 0)) return; histPush(`громкость персонажа ${charName(x.dataset.voice)} ${v > 0 ? '+' : ''}${v} дБ`); if (v) S.voiceGains[x.dataset.voice] = v; else delete S.voiceGains[x.dataset.voice]; saveEdits(); remixSoon('lines', voiceIds(x.dataset.voice)); });
@@ -949,7 +949,7 @@ function bind() {
     try {
       if (a === 'tp-play') { TP.playing ? tpPause() : tpPlay(); return; }
       if (a === 'read') { S.readOpen = !S.readOpen; renderMix(); return; }
-      if (a === 'vg0') { histPush(`громкость персонажа ${charName(b.dataset.voice)} 0 дБ`); delete S.voiceGains[b.dataset.voice]; saveEdits(); const sl = $('#mix-out').querySelector(`input[data-voice="${CSS.escape(b.dataset.voice)}"]`); if (sl) { sl.value = 0; sl.nextElementSibling.textContent = '0 дБ'; } remixSoon('lines', voiceIds(b.dataset.voice)); return; }
+      if (a === 'vg0') { histPush(`громкость персонажа ${charName(b.dataset.voice)} 0 дБ`); delete S.voiceGains[b.dataset.voice]; saveEdits(); const sl = $('#mix-out').querySelector(`input[data-voice="${CSS.escape(b.dataset.voice)}"]`); if (sl) { sl.value = 0; sl.closest('.vg').querySelector('b').textContent = '0 дБ'; } remixSoon('lines', voiceIds(b.dataset.voice)); return; }
       if (['mp3', 'wav', 'stems'].includes(a) && S.result.approx) { b.disabled = true; await exactResult(); b.disabled = false; }
       if (a === 'mp3') { b.disabled = true; const blob = await encodeMp3(S.result.out, +$('#kbps').value); progress('', 0); const tag = typeof id3Chapters === 'function' ? id3Chapters((S.P.title || 'Радиоспектакль')) : null; download(tag && tag.length ? new Blob([tag, blob], { type: 'audio/mpeg' }) : blob, `сведение-${stamp}.mp3`); b.disabled = false; }
       if (a === 'stems') { b.disabled = true; try { const z = await exportStems(); if (z) download(z, `стемы-${stamp}.zip`); } catch (err) { progress('', 0); notify('Стемы не получились: ' + err.message); } b.disabled = false; }
@@ -967,6 +967,8 @@ function bind() {
 
 // для проверки из консоли и автотестов
 window.montage = { S, C, PRESETS, play: (y, btn) => play(y, btn), stop: () => stop(), progress: (t, p) => progress(t, p), notify: t => notify(t), DECK: typeof DECK !== 'undefined' ? DECK : null, MOTION: typeof MOTION !== 'undefined' ? MOTION : null, audioLevel: () => audioLevel(), projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses, recOpenFor: k => recOpenFor(k), recOpen: l => recOpen(l), REC: typeof REC !== 'undefined' ? REC : null, srtText: () => srtText(), vttText: () => vttText(), subCues: () => subCues(), buildVideo: o => buildVideo(o), videoFormat: () => videoFormat(1280, 720, 24), slipDiff: (a, b) => slipDiff(a, b), slipOf: c => slipOf(c) };
+if (typeof fdrInit === 'function') fdrInit();
+if (typeof numInit === 'function') numInit();
 bind(); render();
 if (typeof motionInit === 'function') motionInit();
 if (typeof initDeck === 'function') initDeck();

@@ -123,12 +123,12 @@ function initTilt(sel, max = 7) {
   host.addEventListener('pointerleave', () => { flat(cur); cur = null; });
 }
 // ------------------------------------------------------------------ FLIP: элементы доезжают до новых мест на пружинах
-function flipRecord(sel, key) { const m = new Map(); document.querySelectorAll(sel).forEach(el => m.set(key(el), el.getBoundingClientRect().top)); return m; }
+function flipRecord(sel, key) { const m = new Map(); document.querySelectorAll(sel).forEach(el => { const r = el.getBoundingClientRect(); m.set(key(el), { x: r.left, y: r.top }); }); return m; }
 function flipPlay(before, sel, key, opt = { damping: 0.82, response: 0.38 }) {
   if (sprReduced()) return;
   document.querySelectorAll(sel).forEach(el => {
     const was = before.get(key(el)); if (was == null) return;
-    const d = was - el.getBoundingClientRect().top; if (Math.abs(d) < 1) return;
-    const T = tform(el); mvSet(T.y, d); mvTo(T.y, 0, opt);
+    const r = el.getBoundingClientRect(), dx = was.x - r.left, dy = was.y - r.top; if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+    const T = tform(el); if (Math.abs(dx) >= 1) { mvSet(T.x, dx); mvTo(T.x, 0, opt); } if (Math.abs(dy) >= 1) { mvSet(T.y, dy); mvTo(T.y, 0, opt); }
   });
 }

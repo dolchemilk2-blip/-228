@@ -276,39 +276,95 @@ function otherCoefs(c) {
   if (ch.tone.on && ch.tone.mode === 'auto' && c.A && c.A.octaves) for (const [fc, ref] of Object.entries(C.TONE_REF)) { const d = Math.max(-8, Math.min(0, ref + 2 - c.A.octaves[fc]) * ch.tone.strength); if (d <= -0.5) out.push(C.biquad('peak', +fc, 1.0, d)); }
   return out;
 }
+// ------------------------------------------------------------------ эквалайзер: экран-анализатор
+// Экран всегда тёмный, как у анализатора: серым — спектр отрывка «было», зелёным — «стало», пунктиром — что делают
+// другие модули, янтарём — кривая эквалайзера. У каждой полосы свой цвет — тот же у ручки и у карточки.
+// Ручки на пружинах: под курсором подрастают, новая выскакивает, убранная сжимается; кривая перетекает при
+// пресетах, смене типа, добавлении и удалении полосы. Над ручкой — подсказка с числами (nums.js).
+const EQ_COL = ['#F2B233', '#8DB1E6', '#E59ABD', '#7ED0A8', '#B9A3EA', '#85CDE0', '#EDB072', '#C6D27C', '#DDAE8C', '#F07B6C'];
+const EQ_SHAPE = { peak: 'M1.5 11h3c1.6 0 2-6.5 3.5-6.5S10 11 11.5 11h3', lowshelf: 'M1.5 5h3.5c2 0 3 6 5 6h4.5', highshelf: 'M1.5 11h4c2 0 3-6 5-6h4', hp: 'M2 14c1-7 2.2-9 5-9h7.5', lp: 'M1.5 5h7.5c2.8 0 4 2 5 9', notch: 'M1.5 5h4.5l2 7 2-7h4.5' };
+const EQV = { hs: new WeakMap(), fresh: new WeakSet(), keys: new WeakMap(), n: 0, morph: null, hover: null, hoverI: -1, drag: -1, kbd: false, gone: [] };
+EQV.owner = { render() { drawEq($('#eq-canvas'), S.cleanFile); } };
+const eqCol = i => EQ_COL[i % EQ_COL.length];
+const eqBandKey = b => { if (!EQV.keys.has(b)) EQV.keys.set(b, 'b' + (++EQV.n)); return EQV.keys.get(b); };
+function eqHs(b) { if (!EQV.hs.has(b)) { const fresh = EQV.fresh.has(b), m = mv(fresh ? 0 : 1, 0.001, EQV.owner); EQV.hs.set(b, m); if (fresh) { EQV.fresh.delete(b); mvTo(m, 1, { damping: 0.55, response: 0.42 }); } } return EQV.hs.get(b); }
+/** Перед изменением полос: кривая запомнит, откуда перетекать. */
+function eqMorph(f) { const c = cl(f); if (!c._eqR || (typeof MOTION !== 'undefined' && MOTION.reduce)) { EQV.morph = null; return; } EQV.morph = { from: Float64Array.from(c._eqR), m: mv(0, 0.001, EQV.owner) }; mvTo(EQV.morph.m, 1, { damping: 1, response: 0.36 }); }
+function eqGone(f, i) { const c = cl(f), b = c.chain.eq.bands[i]; if (!b || !c.eqW) return; const m = mv(eqHs(b).v, 0.01, EQV.owner); EQV.gone.push({ x: fx(b.f, c.eqW), y: gy(NO_GAIN.has(b.type) ? 0 : b.gain, c.eqH), col: eqCol(i), m }); mvTo(m, 0, { damping: 1, response: 0.2 }); }
+const eqFmtF = f => f >= 1000 ? [(f / 1000).toFixed(f >= 10000 ? 1 : 2).replace('.', ','), 'кГц'] : [String(Math.round(f)), 'Гц'];
+const eqFmtG = g => (g > 0 ? '+' : g < 0 ? '−' : '') + Math.abs(g).toFixed(1).replace('.', ',');
+const eqFmtQ = q => q.toFixed(q < 10 ? 2 : 1).replace('.', ',');
 function drawEq(canvas, f) {
-  if (!canvas) return;
-  const c = cl(f), ch = c.chain, W = Math.max(320, Math.floor(canvas.clientWidth || 700)), H = 240, dpr = window.devicePixelRatio || 1;
-  canvas.width = W * dpr; canvas.height = H * dpr;
-  const g = canvas.getContext('2d'); g.scale(dpr, dpr);
-  const ink = cssVar('--ink'), muted = cssVar('--muted'), line = cssVar('--line'), accent = cssVar('--accent'), ok = cssVar('--ok');
-  g.fillStyle = cssVar('--bg'); g.fillRect(0, 0, W, H);
-  // сетка
-  g.strokeStyle = line; g.lineWidth = 1; g.font = '11px ' + cssVar('--mono'); g.fillStyle = muted; g.textAlign = 'center';
-  for (const fr of [50, 100, 200, 500, 1000, 2000, 5000, 10000]) { const x = fx(fr, W); g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); g.fillText(fr >= 1000 ? fr / 1000 + 'к' : String(fr), x, H - 4); }
+  if (!canvas || !f) return;
+  const c = cl(f), ch = c.chain, dpr = window.devicePixelRatio || 1;
+  const W = Math.max(300, Math.floor(canvas.clientWidth || 700)), H = Math.max(180, Math.floor(canvas.clientHeight || 280));
+  if (canvas.width !== W * dpr || canvas.height !== H * dpr) { canvas.width = W * dpr; canvas.height = H * dpr; }
+  const g = canvas.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const mono = cssVar('--mono'), bands = ch.eq.bands, y0 = gy(0, H);
+  const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#1C1612'); bg.addColorStop(1, '#0E0B09'); g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  // сетка: октавы тонко, подписи — снизу и слева
+  g.lineWidth = 1;
+  for (const fr of [20, 30, 40, 60, 70, 80, 90, 300, 400, 600, 700, 800, 900, 3000, 4000, 6000, 7000, 8000, 9000]) { const x = Math.round(fx(fr, W)) + 0.5; g.strokeStyle = 'rgba(239,233,226,0.035)'; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); }
+  g.font = '10px ' + mono; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  for (const fr of [50, 100, 200, 500, 1000, 2000, 5000, 10000]) { const x = Math.round(fx(fr, W)) + 0.5; g.strokeStyle = 'rgba(239,233,226,0.08)'; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); g.fillStyle = 'rgba(239,233,226,0.42)'; g.fillText(fr >= 1000 ? fr / 1000 + 'к' : String(fr), x, H - 5); }
   g.textAlign = 'left';
-  for (const db of [-12, -6, 0, 6, 12]) { const y = gy(db, H); g.strokeStyle = db === 0 ? muted : line; g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); g.fillText((db > 0 ? '+' : '') + db, 4, y - 3); }
+  for (const db of [-12, -6, 0, 6, 12]) { const y = Math.round(gy(db, H)) + 0.5; g.strokeStyle = db ? 'rgba(239,233,226,0.07)' : 'rgba(239,233,226,0.2)'; g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); g.fillStyle = 'rgba(239,233,226,0.42)'; g.fillText((db > 0 ? '+' : db < 0 ? '−' : '') + Math.abs(db), 6, y - 4); }
   // анализатор: было — заливкой, стало — линией (своя шкала: 70 дБ от максимума)
   const spec = (arr, top) => { g.beginPath(); for (let i = 0; i < EQ_FREQS.length; i++) { const x = fx(EQ_FREQS[i], W), y = Math.min(H, (top - arr[i]) / 70 * H); i ? g.lineTo(x, y) : g.moveTo(x, y); } };
   if (c.specBefore) {
     let top = -200; for (const v of c.specBefore) top = Math.max(top, v); top += 2;
-    spec(c.specBefore, top); g.lineTo(W, H); g.lineTo(0, H); g.closePath(); g.fillStyle = muted; g.globalAlpha = 0.16; g.fill(); g.globalAlpha = 1;
-    if (c.specAfter && !c.dirty) { spec(c.specAfter, top); g.strokeStyle = ok; g.lineWidth = 1.5; g.globalAlpha = 0.9; g.stroke(); g.globalAlpha = 1; }
+    spec(c.specBefore, top); g.lineTo(W, H); g.lineTo(0, H); g.closePath(); g.fillStyle = 'rgba(171,161,151,0.15)'; g.fill();
+    if (c.specAfter && !c.dirty) { spec(c.specAfter, top); g.strokeStyle = 'rgba(108,197,146,0.85)'; g.lineWidth = 1.4; g.stroke(); }
   }
-  // остальная обработка пунктиром, эквалайзер сплошной
+  const curve = (r, close) => { g.beginPath(); for (let i = 0; i < r.length; i++) { const x = fx(EQ_FREQS[i], W), y = gy(Math.max(-EQ_RANGE, Math.min(EQ_RANGE, r[i])), H); i ? g.lineTo(x, y) : g.moveTo(x, y); } if (close) { g.lineTo(W, y0); g.lineTo(0, y0); g.closePath(); } };
+  // остальная обработка пунктиром
   const other = otherCoefs(c);
-  if (other.length) { const r = C.responseOf(other, EQ_FREQS); g.setLineDash([4, 4]); g.strokeStyle = muted; g.lineWidth = 1.2; g.beginPath(); for (let i = 0; i < r.length; i++) { const x = fx(EQ_FREQS[i], W), y = gy(Math.max(-EQ_RANGE, Math.min(EQ_RANGE, r[i])), H); i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); g.setLineDash([]); }
-  const r = C.eqResponse(ch.eq.bands, EQ_FREQS);
-  g.strokeStyle = ch.eq.on ? ink : muted; g.lineWidth = 2; g.beginPath();
-  for (let i = 0; i < r.length; i++) { const x = fx(EQ_FREQS[i], W), y = gy(Math.max(-EQ_RANGE, Math.min(EQ_RANGE, r[i])), H); i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke();
-  // ручки полос
-  ch.eq.bands.forEach((b, i) => {
-    const x = fx(b.f, W), y = gy(NO_GAIN.has(b.type) ? 0 : b.gain, H), sel = i === c.eqSel;
-    g.beginPath(); g.arc(x, y, sel ? 10 : 8, 0, Math.PI * 2); g.fillStyle = b.off ? line : accent; g.fill();
-    if (sel) { g.strokeStyle = ink; g.lineWidth = 2; g.stroke(); }
-    g.fillStyle = b.off ? muted : cssVar('--accent-ink'); g.font = '600 11px ' + cssVar('--sans'); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(i + 1), x, y + 0.5); g.textBaseline = 'alphabetic'; g.textAlign = 'left';
+  if (other.length) { g.setLineDash([4, 4]); g.strokeStyle = 'rgba(239,233,226,0.38)'; g.lineWidth = 1.2; curve(C.responseOf(other, EQ_FREQS)); g.stroke(); g.setLineDash([]); }
+  // вклад полосы в фокусе — её цветом
+  const focus = EQV.drag >= 0 ? EQV.drag : EQV.hoverI >= 0 ? EQV.hoverI : c.eqSel;
+  if (focus >= 0 && bands[focus] && !bands[focus].off && ch.eq.on) { const col = eqCol(focus); curve(C.eqResponse([bands[focus]], EQ_FREQS), true); g.fillStyle = col + '30'; g.fill(); curve(C.eqResponse([bands[focus]], EQ_FREQS)); g.strokeStyle = col + '99'; g.lineWidth = 1; g.stroke(); }
+  // кривая эквалайзера: перетекает из прежней, если полосы только что поменялись
+  let r = C.eqResponse(bands, EQ_FREQS);
+  const mo = EQV.morph; if (mo && mo.from.length === r.length) { const k = mo.m.v; r = r.map((v, i) => mo.from[i] + (v - mo.from[i]) * k); if (!SPRING.live.has(mo.m)) EQV.morph = null; }
+  c._eqR = r;
+  if (ch.eq.on) { const fill = g.createLinearGradient(0, 0, 0, H); fill.addColorStop(0, 'rgba(242,178,51,0.22)'); fill.addColorStop(0.5, 'rgba(242,178,51,0.04)'); fill.addColorStop(1, 'rgba(242,178,51,0.22)'); curve(r, true); g.fillStyle = fill; g.fill(); }
+  curve(r); g.strokeStyle = ch.eq.on ? '#F2B233' : 'rgba(239,233,226,0.35)'; g.lineWidth = 2.4; g.lineJoin = 'round';
+  if (ch.eq.on) { g.shadowColor = 'rgba(242,178,51,0.55)'; g.shadowBlur = 10; } g.stroke(); g.shadowBlur = 0;
+  // убранные ручки сжимаются
+  EQV.gone = EQV.gone.filter(q => { const s = q.m.v; if (s < 0.02) return false; g.beginPath(); g.arc(q.x, q.y, 7.5 * s, 0, Math.PI * 2); g.fillStyle = q.col; g.globalAlpha = s; g.fill(); g.globalAlpha = 1; return true; });
+  // ручки полос: под курсором подрастают, в руке — ещё больше
+  bands.forEach((b, i) => {
+    const x = fx(b.f, W), y = gy(NO_GAIN.has(b.type) ? 0 : b.gain, H), col = eqCol(i), sel = i === c.eqSel, hs = eqHs(b);
+    const want = EQV.drag === i ? 1.45 : EQV.hoverI === i ? 1.28 : 1; if (hs.to >= 0.99 && hs.to !== want) mvTo(hs, want, { damping: 0.62, response: 0.3 });
+    const s = hs.v, R = 7.5 * s; if (s < 0.02) return;
+    if (sel || EQV.hoverI === i || EQV.drag === i) { g.beginPath(); g.arc(x, y, R + 9, 0, Math.PI * 2); g.fillStyle = col + '26'; g.fill(); }
+    if (sel) { g.beginPath(); g.arc(x, y, R + 4, 0, Math.PI * 2); g.strokeStyle = col; g.lineWidth = 1.6; g.stroke(); }
+    g.beginPath(); g.arc(x, y, R, 0, Math.PI * 2);
+    if (b.off) { g.fillStyle = '#2A231E'; g.fill(); g.strokeStyle = col + '88'; g.lineWidth = 1.5; g.stroke(); } else { g.fillStyle = col; g.fill(); g.strokeStyle = '#120E0B'; g.lineWidth = 2; g.stroke(); }
+    if (s > 0.6) { g.fillStyle = b.off ? col : '#1B1400'; g.font = `700 ${Math.round(10.5 * Math.min(1.25, s))}px ` + cssVar('--display'); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(i + 1), x, y + 0.5); g.textBaseline = 'alphabetic'; g.textAlign = 'left'; }
   });
+  // курсор по пустому месту: частота под ним и подсказка
+  const hv = EQV.hover;
+  if (hv && EQV.hoverI < 0 && EQV.drag < 0) {
+    const x = Math.round(hv.x) + 0.5, [fv, fu] = eqFmtF(fInv(hv.x, W));
+    g.strokeStyle = 'rgba(239,233,226,0.22)'; g.lineWidth = 1; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H - 18); g.stroke();
+    const t = `${fv} ${fu}`, tw = g.measureText(t).width + 14, lx = Math.max(2, Math.min(W - tw - 2, x - tw / 2));
+    g.fillStyle = 'rgba(239,233,226,0.92)'; g.beginPath(); g.roundRect(lx, H - 19, tw, 16, 8); g.fill(); g.fillStyle = '#14100D'; g.font = '600 10px ' + mono; g.textAlign = 'center'; g.fillText(t, lx + tw / 2, H - 7.5); g.textAlign = 'left';
+    if (bands.length < 10) { g.fillStyle = 'rgba(239,233,226,0.5)'; g.font = '11px ' + cssVar('--sans'); g.textAlign = 'right'; g.fillText('двойной щелчок — полоса здесь', W - 10, 16); g.textAlign = 'left'; }
+  }
   c.eqW = W; c.eqH = H;
+  eqTip(canvas, c, W, H);
+}
+/** Подсказка над ручкой: частота, усиление, добротность — числа въезжают (nums.js). */
+function eqTip(canvas, c, W, H) {
+  const tip = canvas.parentElement && canvas.parentElement.querySelector('.eq-tip'); if (!tip) return;
+  const bands = c.chain.eq.bands, i = EQV.drag >= 0 ? EQV.drag : EQV.hoverI >= 0 ? EQV.hoverI : EQV.kbd ? c.eqSel : -1, b = bands[i];
+  if (!b) { tip.classList.remove('on'); return; }
+  const x = Math.max(96, Math.min(W - 96, fx(b.f, W))), y = gy(NO_GAIN.has(b.type) ? 0 : b.gain, H), [fv, fu] = eqFmtF(b.f);
+  const set = (sel, t) => { const el = tip.querySelector(sel); if (el && el.textContent !== t) el.textContent = t; };
+  set('.tf', fv); set('.tfu', fu); set('.tg', NO_GAIN.has(b.type) ? '—' : eqFmtG(b.gain)); set('.tq', eqFmtQ(b.q));
+  tip.style.setProperty('--tc', eqCol(i)); tip.dataset.side = y < 70 ? 'below' : 'above';
+  tip.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`; tip.classList.add('on');
 }
 
 // ------------------------------------------------------------------ отрисовка
@@ -337,33 +393,41 @@ function paramHtml(mod, p, c, f) {
     ? `<div class="prm"><span>профиль шума: из отрывка с ${fmt(c.noiseFrom)} <button class="ghost-b tiny" data-act="noise-reset">из всего файла</button></span></div>`
     : `<div class="prm"><span>профиль шума: из тихих мест файла <button class="ghost-b tiny" data-act="noise-here">взять из этого отрывка</button></span></div>`;
   const shown = p.pct ? `${Math.round(v * 100)} %` : `${v}${p.unit ? ' ' + p.unit : ''}`;
-  return `<label class="prm"><span>${esc(p.label)} <b>${shown}</b></span><input type="range" data-m="${mod.k}" data-p="${p.k}" min="${p.min}" max="${p.max}" step="${p.step}" value="${v}"></label>`;
+  return `<label class="prm"><span>${esc(p.label)} <b data-num="cl:${mod.k}.${p.k}">${shown}</b></span><input type="range" data-m="${mod.k}" data-p="${p.k}" min="${p.min}" max="${p.max}" step="${p.step}" value="${v}"></label>`;
 }
+/** Число, которое тянут мышью или пальцем (влево-вниз — меньше, вправо-вверх — больше), щелчок — ввести с клавиатуры. */
+function scrubHtml(m, i, p, label, v, unit, key, dis, short) {
+  const lim = SCRUB_SPEC[m === 'eq5' ? 'f5' : p];
+  return `<span class="scrub${dis ? ' dis' : ''}" role="spinbutton" tabindex="${dis ? -1 : 0}" data-m="${m}" data-b="${i}" data-p="${p}" aria-label="${esc(label)}" aria-valuemin="${lim.min}" aria-valuemax="${lim.max}" aria-valuenow="${v}"${dis ? ' aria-disabled="true"' : ''}>${short ? `<span class="sl">${esc(short)}</span>` : ''}<span class="sv-row"><span class="sv" data-num="${key}">${scrubText(p, v)[0]}</span><span class="su">${scrubText(p, v)[1] || unit}</span></span></span>`;
+}
+function scrubText(p, v) { return p === 'f' ? eqFmtF(v) : p === 'gain' ? [eqFmtG(v), 'дБ'] : [eqFmtQ(v), '']; }
 function eq5Html(c) {
   const p = c.chain.eq5;
-  return `<div class="eq5">${p.f.map((f, i) => `<div class="eqb"><input type="range" class="v" data-m="eq5" data-b="${i}" data-p="g" min="-12" max="12" step="0.5" value="${p.g[i]}" aria-label="усиление ${f} Гц"><b>${p.g[i] > 0 ? '+' : ''}${p.g[i]}</b><input type="number" data-m="eq5" data-b="${i}" data-p="f" value="${f}" min="30" max="16000" step="10" aria-label="частота"><span>Гц</span></div>`).join('')}</div>`;
+  return `<div class="eq5">${p.f.map((f, i) => `<div class="eqb"><b data-num="eq5:${i}">${eqFmtG(p.g[i])}</b><input type="range" class="v" data-m="eq5" data-b="${i}" data-p="g" min="-12" max="12" step="0.5" value="${p.g[i]}" aria-label="усиление полосы ${Math.round(f)} Гц">${scrubHtml('eq5', i, 'f', `частота полосы ${i + 1}`, f, '', 'eq5f:' + i)}</div>`).join('')}</div>`;
 }
 function bandsHtml(c) {
-  const rows = c.chain.eq.bands.map((b, i) => `
-    <div class="band ${i === c.eqSel ? 'sel' : ''} ${b.off ? 'off' : ''}" data-b="${i}">
-      <span class="bn">${i + 1}</span>
-      <select data-m="eq" data-b="${i}" data-p="type" aria-label="тип">${BAND_TYPES.map(([t, n]) => `<option value="${t}" ${b.type === t ? 'selected' : ''}>${n}</option>`).join('')}</select>
-      <label><input type="number" data-m="eq" data-b="${i}" data-p="f" value="${Math.round(b.f)}" min="20" max="20000" step="1"><span>Гц</span></label>
-      <label><input type="number" data-m="eq" data-b="${i}" data-p="gain" value="${b.gain}" min="-18" max="18" step="0.5" ${NO_GAIN.has(b.type) ? 'disabled' : ''}><span>дБ</span></label>
-      <label><input type="number" data-m="eq" data-b="${i}" data-p="q" value="${b.q}" min="0.3" max="12" step="0.1"><span>Q</span></label>
-      <button class="icon solo" data-act="band-solo" data-b="${i}" title="Слушать только эту полосу" aria-label="Слушать только эту полосу">S</button>
-      <button class="icon" data-act="band-off" data-b="${i}" title="${b.off ? 'Включить полосу' : 'Выключить полосу'}" aria-label="${b.off ? 'Включить полосу' : 'Выключить полосу'}">${ic(b.off ? 'off' : 'on')}</button>
-      <button class="icon" data-act="band-rm" data-b="${i}" title="Убрать" aria-label="Убрать полосу">${ic('close')}</button>
-    </div>`).join('');
-  return `<div class="bands">${rows}<div class="band-add"><button class="ghost-b" data-act="band-add">${ic('plus')}полоса</button>
-    <span class="muted small">Тянуть кружок на графике: частота и усиление; колёсико — ширина (Q); двойной щелчок по пустому месту — новая полоса, по кружку — убрать.</span></div></div>`;
+  const cards = c.chain.eq.bands.map((b, i) => { const k = eqBandKey(b), ng = NO_GAIN.has(b.type);
+    return `<div class="bcard ${i === c.eqSel ? 'sel' : ''} ${b.off ? 'off' : ''}" data-b="${i}" data-k="${k}" style="--bc:${eqCol(i)}">
+      <div class="bc-head"><span class="bc-n">${i + 1}</span>
+        <label class="bc-type"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="${EQ_SHAPE[b.type] || EQ_SHAPE.peak}"/></svg><select data-m="eq" data-b="${i}" data-p="type" aria-label="тип полосы ${i + 1}">${BAND_TYPES.map(([t, n]) => `<option value="${t}" ${b.type === t ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+        <button class="icon xs solo" data-act="band-solo" data-b="${i}" title="Слушать только эту полосу" aria-label="Слушать только полосу ${i + 1}">S</button>
+        <button class="icon xs" data-act="band-off" data-b="${i}" title="${b.off ? 'Включить полосу' : 'Выключить полосу'}" aria-label="${b.off ? 'Включить' : 'Выключить'} полосу ${i + 1}" aria-pressed="${!b.off}">${ic(b.off ? 'off' : 'on')}</button>
+        <button class="icon xs" data-act="band-rm" data-b="${i}" title="Убрать полосу" aria-label="Убрать полосу ${i + 1}">${ic('close')}</button></div>
+      <div class="bc-vals">${scrubHtml('eq', i, 'f', `частота, полоса ${i + 1}`, b.f, '', `eqb:${k}.f`, false, 'частота')}${scrubHtml('eq', i, 'gain', `усиление, полоса ${i + 1}`, b.gain, 'дБ', `eqb:${k}.g`, ng, 'усиление')}${scrubHtml('eq', i, 'q', `ширина (Q), полоса ${i + 1}`, b.q, '', `eqb:${k}.q`, false, 'Q')}</div>
+    </div>`; }).join('');
+  return `<div class="bcards">${cards}${c.chain.eq.bands.length < 10 ? `<button class="bc-add" data-act="band-add">${ic('plus')}<span>полоса</span></button>` : ''}</div>
+    <p class="muted small eq-hint">На экране: тянуть кружок — частота и усиление, колёсико — ширина, двойной щелчок по пустому — новая полоса, по кружку — убрать; стрелки и Tab — с клавиатуры. Числа в карточках тянут мышью или пальцем, щелчок — ввести.</p>`;
 }
 function eqModuleHtml(c) {
   const ch = c.chain;
   return `<div class="mod eq-mod ${ch.eq.on ? 'on' : ''}">
-    <label class="mhead"><input type="checkbox" data-m="eq" data-p="on" ${ch.eq.on ? 'checked' : ''}><b>Эквалайзер</b><span>серым — спектр отрывка «было», зелёным — «стало»; пунктир — что делают срез низа, гул, тембр и пять полос</span></label>
-    <div class="eq-presets">${Object.entries(EQ_PRESETS).map(([k, p]) => `<button class="ghost-b" data-eqpreset="${k}">${p.name}</button>`).join('')}</div>
-    <canvas id="eq-canvas" class="eqg" tabindex="0" aria-label="График эквалайзера"></canvas>
+    <div class="eq-top"><label class="mhead"><input type="checkbox" data-m="eq" data-p="on" ${ch.eq.on ? 'checked' : ''}><b>Эквалайзер</b><span>до 10 полос; пресеты — отправная точка</span></label>
+      <div class="eq-presets" role="group" aria-label="Пресеты эквалайзера">${Object.entries(EQ_PRESETS).map(([k, p]) => `<button class="ghost-b tiny" data-eqpreset="${k}">${p.name}</button>`).join('')}</div></div>
+    <div class="eq-screen">
+      <canvas id="eq-canvas" class="eqg" tabindex="0" aria-label="График эквалайзера: стрелки двигают выбранную полосу, Tab — следующая"></canvas>
+      <div class="eq-tip" aria-hidden="true"><div class="eq-tip-in"><i></i><span><b class="tf" data-num="eqtip.f"></b> <span class="tfu"></span></span><span class="sep">·</span><span><b class="tg" data-num="eqtip.g"></b> дБ</span><span class="sep">·</span><span>Q <b class="tq" data-num="eqtip.q"></b></span></div></div>
+      <div class="eq-legend" aria-hidden="true"><span><i class="lg-b"></i>было</span><span><i class="lg-a"></i>стало</span><span><i class="lg-o"></i>другие модули</span><span><i class="lg-e"></i>эквалайзер</span></div>
+    </div>
     ${bandsHtml(c)}
   </div>`;
 }
@@ -388,12 +452,12 @@ function renderCleanup() {
     ${eqModuleHtml(c)}
     <div class="cl-ab">
       <div class="wave-wrap"><canvas id="cl-wave" class="wave" aria-label="Обзор записи; щёлкните, чтобы выбрать отрывок"></canvas>
-        <label class="prm"><span>Отрывок: с <b id="cl-at-t">${fmt(c.at)}</b>, ${EXCERPT} с — щёлкните по волне или подвиньте</span><input type="range" id="cl-at" min="0" max="${Math.max(0, Math.floor(dur - EXCERPT))}" step="1" value="${c.at}"></label></div>
+        <label class="prm"><span>Отрывок: с <b id="cl-at-t" data-num="clat">${fmt(c.at)}</b>, ${EXCERPT} с — щёлкните по волне или подвиньте</span><input type="range" id="cl-at" min="0" max="${Math.max(0, Math.floor(dur - EXCERPT))}" step="1" value="${c.at}"></label></div>
       <div class="ab-top">
         <button class="play ab" data-act="before" ${c.before ? '' : 'disabled'}>${ic('play')}Было</button>
         <button class="play ab" data-act="after" ${c.after && !c.dirty ? '' : 'disabled'}>${ic('play')}Стало</button>
         <span class="muted small">во время прослушивания переключается мгновенно, по кругу</span>
-        <span class="lufs" id="cl-lufs"></span>
+        <span class="lufs" id="cl-lufs" data-num="cllufs"></span>
       </div>
       <div class="specs"><div><span class="lbl">было</span><canvas id="cl-spec-a"></canvas></div><div><span class="lbl" id="cl-lbl-b">стало${c.dirty ? ' — считаю…' : ''}</span><canvas id="cl-spec-b"></canvas></div></div>
       <p class="muted small" id="cl-plog"></p>
@@ -482,18 +546,33 @@ function markDirty(f) {
   previewSoon(f);
 }
 function syncBandRow(c, i) {
-  const b = c.chain.eq.bands[i], row = document.querySelector(`#cl-body .band[data-b="${i}"]`); if (!row) return;
-  row.querySelector('[data-p=f]').value = Math.round(b.f); row.querySelector('[data-p=gain]').value = Math.round(b.gain * 2) / 2; row.querySelector('[data-p=q]').value = Math.round(b.q * 10) / 10;
-  document.querySelectorAll('#cl-body .band').forEach(r => r.classList.toggle('sel', +r.dataset.b === c.eqSel));
+  const b = c.chain.eq.bands[i], card = document.querySelector(`#cl-body .bcard[data-b="${i}"]`);
+  if (b && card) for (const p of ['f', 'gain', 'q']) {
+    const el = card.querySelector(`.scrub[data-p="${p}"]`); if (!el || el.classList.contains('edit')) continue;
+    const [t, u] = scrubText(p, b[p]), sv = el.querySelector('.sv'), su = el.querySelector('.su');
+    if (sv.textContent !== t) sv.textContent = t; if (su && su.textContent !== u) su.textContent = u; el.setAttribute('aria-valuenow', b[p]);
+  }
+  eqSelCards(c);
 }
+function eqSelCards(c) { document.querySelectorAll('#cl-body .bcard').forEach(r => r.classList.toggle('sel', +r.dataset.b === c.eqSel)); }
+/** Перестроить вкладку после правки полос: карточки доезжают до новых мест, новые — выскакивают. */
+function eqRerender(fresh) {
+  const key = el => el.dataset.k, before = typeof flipRecord === 'function' ? flipRecord('#cl-body .bcard', key) : null;
+  renderCleanup();
+  if (before) flipPlay(before, '#cl-body .bcard', key, { damping: 0.8, response: 0.34 });
+  if (fresh && typeof mIn === 'function') [...document.querySelectorAll('#cl-body .bcard')].filter(el => fresh.has(el.dataset.k)).forEach((el, n) => mIn(el, { opacity: 0, transform: 'translateY(8px) scale(0.94)' }, [0.72, 0.42], { delay: n * 40 }));
+}
+function eqNewBand(b) { EQV.fresh.add(b); return b; }
 function bindCleanup() {
   const pane = $('#cl-body');
   pane.addEventListener('click', e => {
+    const card = e.target.closest('.bcard');
+    if (card && !e.target.closest('button, select, .scrub, label')) { const c = cl(S.cleanFile); c.eqSel = +card.dataset.b; eqSelCards(c); drawEq($('#eq-canvas'), S.cleanFile); return; }
     const b = e.target.closest('button'); if (!b) return;
     const f = S.cleanFile, c = f && cl(f);
     if (b.dataset.name) { S.cleanFile = S.files.find(x => x.name === b.dataset.name); abStop(); stop(); renderCleanup(); return; }
     if (b.dataset.preset) { c.presetWhy = null; c.preset = b.dataset.preset; const eqKeep = c.chain.eq, eq5Keep = c.chain.eq5; c.chain = C.defaultChain(c.preset, { boom: c.A.boom }); c.chain.eq = eqKeep; c.chain.eq5 = eq5Keep; c.dirty = true; renderCleanup(); previewSoon(f); return; }
-    if (b.dataset.eqpreset) { const p = EQ_PRESETS[b.dataset.eqpreset]; c.chain.eq.bands = clone(p.bands); if (p.bands.length) c.chain.eq.on = true; c.eqSel = -1; renderCleanup(); markDirty(f); return; }
+    if (b.dataset.eqpreset) { eqMorph(f); c.chain.eq.bands.forEach((q, i) => eqGone(f, i)); const p = EQ_PRESETS[b.dataset.eqpreset]; c.chain.eq.bands = clone(p.bands).map(eqNewBand); if (p.bands.length) c.chain.eq.on = true; c.eqSel = -1; eqRerender(new Set(c.chain.eq.bands.map(eqBandKey))); markDirty(f); return; }
     const a = b.dataset.act;
     if (a === 'before' || a === 'after') return abPlay(f, a);
     if (a === 'apply') return applyFile(f);
@@ -503,9 +582,9 @@ function bindCleanup() {
     if (a === 'wav') return download(new Blob([C.wav24(f.y48)], { type: 'audio/wav' }), f.name.replace(/\.[^.]+$/, '') + '_чисто.wav');
     if (a === 'noise-here') { c.noiseOverride = C.noiseProfile(c.before); c.noiseFrom = c.at; if (!c.noiseOverride) return notify('В этом отрывке нет тихих мест, откуда взять профиль.'); renderCleanup(); markDirty(f); return; }
     if (a === 'noise-reset') { c.noiseOverride = null; renderCleanup(); markDirty(f); return; }
-    if (a === 'band-add') { if (c.chain.eq.bands.length >= 10) return; c.chain.eq.bands.push({ type: 'peak', f: 1000, q: 1, gain: 0 }); c.chain.eq.on = true; c.eqSel = c.chain.eq.bands.length - 1; renderCleanup(); markDirty(f); return; }
-    if (a === 'band-rm') { c.chain.eq.bands.splice(+b.dataset.b, 1); c.eqSel = -1; renderCleanup(); markDirty(f); return; }
-    if (a === 'band-off') { const band = c.chain.eq.bands[+b.dataset.b]; band.off = !band.off; renderCleanup(); markDirty(f); return; }
+    if (a === 'band-add') { if (c.chain.eq.bands.length >= 10) return; eqMorph(f); const nb = eqNewBand({ type: 'peak', f: 1000, q: 1, gain: 0 }); c.chain.eq.bands.push(nb); c.chain.eq.on = true; c.eqSel = c.chain.eq.bands.length - 1; eqRerender(new Set([eqBandKey(nb)])); markDirty(f); return; }
+    if (a === 'band-rm') { const i = +b.dataset.b, card = b.closest('.bcard'); eqMorph(f); eqGone(f, i); if (card && typeof motionGhostOut === 'function') motionGhostOut(card, { transform: 'scale(0.92)', filter: 'blur(2px)' }, 180); c.chain.eq.bands.splice(i, 1); c.eqSel = -1; EQV.hoverI = -1; eqRerender(); markDirty(f); return; }
+    if (a === 'band-off') { eqMorph(f); const band = c.chain.eq.bands[+b.dataset.b]; band.off = !band.off; c.eqSel = +b.dataset.b; eqRerender(); markDirty(f); return; }
     if (a === 'band-solo') { if (playing && playing.btn === b) return stop(); const band = c.chain.eq.bands[+b.dataset.b]; if (!band || !c.before) return;
       // слышно только эту полосу: полосовой фильтр с её шириной; для срезов — сам срез
       const q = Math.max(0.7, band.q || 1), co = band.type === 'hp' || band.type === 'lp' ? C.biquad(band.type, band.f, q) : C.biquad('bp', band.f, q);
@@ -522,19 +601,22 @@ function bindCleanup() {
     const c = cl(f), m = x.dataset.m, p = x.dataset.p;
     if (m === 'eq5' && x.dataset.b != null) {
       const i = +x.dataset.b, v = +x.value; if (!isFinite(v)) return;
-      if (p === 'g') { c.chain.eq5.g[i] = Math.max(-12, Math.min(12, v)); x.nextElementSibling.textContent = (v > 0 ? '+' : '') + v; } else c.chain.eq5.f[i] = Math.max(30, Math.min(16000, v));
+      if (p === 'g') { c.chain.eq5.g[i] = Math.max(-12, Math.min(12, v)); x.closest('.eqb').querySelector('b').textContent = eqFmtG(c.chain.eq5.g[i]); }
       drawEq($('#eq-canvas'), f); markDirty(f); return;
     }
     if (m === 'eq' && x.dataset.b != null) {
       const band = c.chain.eq.bands[+x.dataset.b]; if (!band) return;
-      if (p === 'type') { band.type = x.value; if (NO_GAIN.has(band.type)) band.gain = 0; const gi = x.closest('.band').querySelector('[data-p=gain]'); gi.disabled = NO_GAIN.has(band.type); gi.value = band.gain; }
-      else { const v = +x.value; if (!isFinite(v)) return; band[p] = p === 'f' ? Math.max(20, Math.min(20000, v)) : p === 'q' ? Math.max(0.3, Math.min(12, v)) : Math.max(-18, Math.min(18, v)); }
-      c.eqSel = +x.dataset.b; drawEq($('#eq-canvas'), f); markDirty(f); return;
+      if (p === 'type') {                              // тип полосы: кривая перетекает, значок формы и «усиление» — на месте
+        eqMorph(f); band.type = x.value; if (NO_GAIN.has(band.type)) band.gain = 0;
+        const card = x.closest('.bcard'), gs = card && card.querySelector('.scrub[data-p=gain]'), ng = NO_GAIN.has(band.type);
+        if (card) { card.querySelector('.bc-type path').setAttribute('d', EQ_SHAPE[band.type] || EQ_SHAPE.peak); gs.classList.toggle('dis', ng); gs.tabIndex = ng ? -1 : 0; gs.toggleAttribute('aria-disabled', ng); }
+      }
+      c.eqSel = +x.dataset.b; syncBandRow(c, c.eqSel); drawEq($('#eq-canvas'), f); markDirty(f); return;
     }
-    if (p === 'on') { c.chain[m].on = x.checked; x.closest('.mod').classList.toggle('on', x.checked); drawEq($('#eq-canvas'), f); markDirty(f); return; }
+    if (p === 'on') { if (m === 'eq') eqMorph(f); c.chain[m].on = x.checked; x.closest('.mod').classList.toggle('on', x.checked); drawEq($('#eq-canvas'), f); markDirty(f); return; }
     if (x.tagName === 'SELECT') { const v = x.value; c.chain[m][p] = v === '' ? null : (p === 'ref' || p === 'band' || isNaN(+v)) ? v : +v; if (m === 'tone' && p === 'mode') renderCleanup(); if (m === 'hp' || m === 'tones') drawEq($('#eq-canvas'), f); markDirty(f); return; }
     c.chain[m][p] = +x.value;
-    const lbl = x.previousElementSibling && x.previousElementSibling.querySelector('b');
+    const lbl = x.closest('.prm') && x.closest('.prm').querySelector('span b');
     if (lbl) { const spec = MODULES.find(q => q.k === m).params.find(q => q.k === p); lbl.textContent = spec.pct ? `${Math.round(x.value * 100)} %` : `${x.value}${spec.unit ? ' ' + spec.unit : ''}`; }
     if (m === 'hp' || m === 'tone' || m === 'tones') drawEq($('#eq-canvas'), f);
     markDirty(f);
@@ -549,56 +631,117 @@ function bindCleanup() {
   const waveAt = e => { const cv = $('#cl-wave'); if (!cv) return; const f = S.cleanFile, c = cl(f), r = cv.getBoundingClientRect(), dur = srcOf(f).length / C.SR;
     c.at = Math.round(Math.max(0, Math.min(dur - EXCERPT, (e.clientX - r.left) / r.width * dur - EXCERPT / 2))); $('#cl-at').value = c.at; $('#cl-at-t').textContent = fmt(c.at); drawWave(cv, f); };
   let waveDrag = false;
-  pane.addEventListener('pointerdown', e => { if (e.target.id === 'cl-wave') { waveDrag = true; waveAt(e); } if (e.target.id === 'eq-canvas') eqDown(e); });
-  pane.addEventListener('pointermove', e => { if (waveDrag && e.target.id === 'cl-wave') waveAt(e); if (eqDrag) eqMove(e); });
-  const up = () => { if (waveDrag) { waveDrag = false; markDirty(S.cleanFile); } if (eqDrag) { eqDrag = null; markDirty(S.cleanFile); } };
-  pane.addEventListener('pointerup', up); pane.addEventListener('pointercancel', up); pane.addEventListener('pointerleave', e => { if (e.target === pane) up(); });
+  pane.addEventListener('pointerdown', e => { const sc = e.target.closest('.scrub'); if (sc) { scrubDown(e, sc); return; } if (e.target.id === 'cl-wave') { waveDrag = true; waveAt(e); } if (e.target.id === 'eq-canvas') eqDown(e); });
+  pane.addEventListener('pointermove', e => { if (scrubD) { scrubMove(e); return; } if (waveDrag && e.target.id === 'cl-wave') waveAt(e); if (eqDrag) eqMove(e); else if (e.target.id === 'eq-canvas' && e.pointerType === 'mouse') eqHover(e); });
+  const up = e => { if (scrubD) { scrubUp(e); return; } if (waveDrag) { waveDrag = false; markDirty(S.cleanFile); } if (eqDrag) { eqDrag = null; EQV.drag = -1; const cv = $('#eq-canvas'); if (cv) cv.style.cursor = EQV.hoverI >= 0 ? 'grab' : 'crosshair'; drawEq(cv, S.cleanFile); markDirty(S.cleanFile); } };
+  pane.addEventListener('pointerup', up); pane.addEventListener('pointercancel', up); pane.addEventListener('pointerleave', e => { if (e.target === pane) up(e); });
+  // наведение: курсор на экране — частота под ним; на карточке — её ручка подсвечена
+  pane.addEventListener('pointerout', e => { if (e.target.id === 'eq-canvas' && !eqDrag) { EQV.hover = null; EQV.hoverI = -1; drawEq(e.target, S.cleanFile); } const card = e.target.closest && e.target.closest('.bcard'); if (card && !card.contains(e.relatedTarget) && e.pointerType === 'mouse') { EQV.hoverI = -1; drawEq($('#eq-canvas'), S.cleanFile); } });
+  pane.addEventListener('pointerover', e => { const card = e.target.closest && e.target.closest('.bcard'); if (card && e.pointerType === 'mouse' && !eqDrag) { EQV.hoverI = +card.dataset.b; EQV.hover = null; drawEq($('#eq-canvas'), S.cleanFile); } });
   pane.addEventListener('dblclick', e => { if (e.target.id === 'eq-canvas') eqDouble(e); });
-  pane.addEventListener('wheel', e => { if (e.target.id === 'eq-canvas') eqWheel(e); }, { passive: false });
-  pane.addEventListener('keydown', e => { if (e.target.id === 'eq-canvas') eqKey(e); });
+  pane.addEventListener('wheel', e => { const sc = e.target.closest('.scrub'); if (sc && !sc.classList.contains('dis') && !sc.classList.contains('edit')) { e.preventDefault(); scrubStep(sc, e.deltaY < 0 ? 1 : -1, e.shiftKey); return; } if (e.target.id === 'eq-canvas') eqWheel(e); }, { passive: false });
+  pane.addEventListener('keydown', e => { const sc = e.target.classList && e.target.classList.contains('scrub') ? e.target : null; if (sc) { scrubKey(e, sc); return; } if (e.target.id === 'eq-canvas') eqKey(e); });
   $('#cl-add').addEventListener('change', e => { addFiles(e.target.files); e.target.value = ''; });
   bindSpecView(pane);
 }
-// ------------------------------------------------------------------ эквалайзер: мышь и клавиатура
+// ------------------------------------------------------------------ эквалайзер: мышь, палец и клавиатура
 let eqDrag = null;
 function eqHit(e) {
   const cv = $('#eq-canvas'), c = cl(S.cleanFile), r = cv.getBoundingClientRect(), W = c.eqW || r.width, H = c.eqH || r.height;
   const x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * H;
-  let best = -1, bd = 16;
+  let best = -1, bd = e.pointerType === 'touch' ? 28 : 16;                 // пальцем — ручка «толще»
   c.chain.eq.bands.forEach((b, i) => { const d = Math.hypot(x - fx(b.f, W), y - gy(NO_GAIN.has(b.type) ? 0 : b.gain, H)); if (d < bd) { bd = d; best = i; } });
   return { x, y, W, H, i: best };
 }
 function eqDown(e) {
-  const f = S.cleanFile, c = cl(f), h = eqHit(e);
-  c.eqSel = h.i; if (h.i >= 0) { eqDrag = { i: h.i }; try { e.target.setPointerCapture(e.pointerId); } catch {} }
-  drawEq($('#eq-canvas'), f); document.querySelectorAll('#cl-body .band').forEach(r => r.classList.toggle('sel', +r.dataset.b === c.eqSel));
-  e.preventDefault();
+  const f = S.cleanFile, c = cl(f), h = eqHit(e); EQV.kbd = false; EQV.hover = null;
+  c.eqSel = h.i;
+  if (h.i >= 0) {                                        // берём там, где схватили, — ручка не прыгает под палец
+    const b = c.chain.eq.bands[h.i]; eqDrag = { i: h.i, dx: h.x - fx(b.f, h.W), dy: h.y - gy(NO_GAIN.has(b.type) ? 0 : b.gain, h.H) }; EQV.drag = h.i; e.target.style.cursor = 'grabbing';
+    try { e.target.setPointerCapture(e.pointerId); } catch {}
+  }
+  eqSelCards(c); drawEq($('#eq-canvas'), f); e.preventDefault();
 }
 function eqMove(e) {
   const f = S.cleanFile, c = cl(f), h = eqHit(e), b = c.chain.eq.bands[eqDrag.i]; if (!b) return;
-  b.f = Math.round(Math.max(20, Math.min(20000, fInv(Math.max(0, Math.min(h.W, h.x)), h.W))));
-  if (!NO_GAIN.has(b.type)) b.gain = Math.round(Math.max(-EQ_RANGE, Math.min(EQ_RANGE, gInv(h.y, h.H))) * 2) / 2;
+  b.f = Math.round(Math.max(20, Math.min(20000, fInv(Math.max(0, Math.min(h.W, h.x - eqDrag.dx)), h.W))));
+  if (!NO_GAIN.has(b.type)) b.gain = Math.round(Math.max(-EQ_RANGE, Math.min(EQ_RANGE, gInv(h.y - eqDrag.dy, h.H))) * 10) / 10;
   drawEq($('#eq-canvas'), f); syncBandRow(c, eqDrag.i);
 }
+function eqHover(e) {
+  const h = eqHit(e); EQV.hover = { x: h.x, y: h.y };
+  if (EQV.hoverI !== h.i) { EQV.hoverI = h.i; e.target.style.cursor = h.i >= 0 ? 'grab' : 'crosshair'; }
+  drawEq(e.target, S.cleanFile);
+}
 function eqDouble(e) {
-  const f = S.cleanFile, c = cl(f), h = eqHit(e);
-  if (h.i >= 0) { c.chain.eq.bands.splice(h.i, 1); c.eqSel = -1; }
-  else if (c.chain.eq.bands.length < 10) { c.chain.eq.bands.push({ type: 'peak', f: Math.round(fInv(h.x, h.W)), q: 1, gain: Math.round(gInv(h.y, h.H) * 2) / 2 }); c.chain.eq.on = true; c.eqSel = c.chain.eq.bands.length - 1; }
-  renderCleanup(); markDirty(f);
+  const f = S.cleanFile, c = cl(f), h = eqHit(e); eqMorph(f);
+  if (h.i >= 0) { eqGone(f, h.i); c.chain.eq.bands.splice(h.i, 1); c.eqSel = -1; EQV.hoverI = -1; eqRerender(); }
+  else if (c.chain.eq.bands.length < 10) { const nb = eqNewBand({ type: 'peak', f: Math.round(fInv(h.x, h.W)), q: 1, gain: Math.round(gInv(h.y, h.H) * 2) / 2 }); c.chain.eq.bands.push(nb); c.chain.eq.on = true; c.eqSel = c.chain.eq.bands.length - 1; eqRerender(new Set([eqBandKey(nb)])); }
+  markDirty(f);
 }
 function eqWheel(e) {
   const f = S.cleanFile, c = cl(f), h = eqHit(e), i = h.i >= 0 ? h.i : c.eqSel, b = c.chain.eq.bands[i]; if (!b) return;
-  e.preventDefault(); b.q = Math.round(Math.max(0.3, Math.min(12, b.q * (e.deltaY < 0 ? 1.12 : 1 / 1.12))) * 10) / 10;
+  e.preventDefault(); b.q = Math.round(Math.max(0.3, Math.min(12, b.q * (e.deltaY < 0 ? 1.12 : 1 / 1.12))) * 100) / 100;
   c.eqSel = i; drawEq($('#eq-canvas'), f); syncBandRow(c, i); markDirty(f);
 }
+// ------------------------------------------------------------------ числа, которые тянут (карточки полос, частоты пяти полос)
+const SCRUB_SPEC = { f: { min: 20, max: 20000, oct: 60 }, f5: { min: 30, max: 16000, oct: 60 }, gain: { min: -18, max: 18, per: 0.1, step: 0.5 }, q: { min: 0.3, max: 12, oct: 80 } };
+let scrubD = null;
+const scrubLim = el => SCRUB_SPEC[el.dataset.m === 'eq5' ? 'f5' : el.dataset.p];
+function scrubVal(el) { const c = cl(S.cleanFile), i = +el.dataset.b; return el.dataset.m === 'eq5' ? c.chain.eq5.f[i] : (c.chain.eq.bands[i] || {})[el.dataset.p]; }
+function scrubSet(el, v) {
+  const f = S.cleanFile, c = cl(f), i = +el.dataset.b, p = el.dataset.p, lim = scrubLim(el); if (!isFinite(v)) return;
+  v = Math.max(lim.min, Math.min(lim.max, v)); v = p === 'f' ? Math.round(v) : p === 'q' ? Math.round(v * 100) / 100 : Math.round(v * 10) / 10;
+  if (el.dataset.m === 'eq5') { c.chain.eq5.f[i] = v; const [t, u] = eqFmtF(v), sv = el.querySelector('.sv'); if (sv.textContent !== t) sv.textContent = t; el.querySelector('.su').textContent = u; el.setAttribute('aria-valuenow', v); }
+  else { const b = c.chain.eq.bands[i]; if (!b || (p === 'gain' && NO_GAIN.has(b.type))) return; b[p] = v; c.eqSel = i; syncBandRow(c, i); }
+  drawEq($('#eq-canvas'), f); markDirty(f);
+}
+function scrubDown(e, el) {
+  if (el.classList.contains('dis') || el.classList.contains('edit') || e.button > 0) return;
+  scrubD = { el, id: e.pointerId, x: e.clientX, y: e.clientY, v0: scrubVal(el), moved: false };
+  try { el.setPointerCapture(e.pointerId); } catch {} e.preventDefault(); el.focus({ preventScroll: true });
+}
+function scrubMove(e) {
+  const d = scrubD; if (!d || d.id !== e.pointerId) return;
+  const dist = (e.clientX - d.x) - (e.clientY - d.y); if (!d.moved && Math.abs(dist) < 4) return;
+  if (!d.moved) { d.moved = true; d.el.classList.add('is-scrub'); document.body.classList.add('scrubbing'); }
+  const lim = scrubLim(d.el), k = e.shiftKey ? 0.25 : 1;                          // Shift — точнее
+  scrubSet(d.el, lim.oct ? d.v0 * Math.pow(2, dist * k / lim.oct) : d.v0 + dist * k * lim.per);
+}
+function scrubUp(e) { const d = scrubD; if (!d || d.id !== e.pointerId) return; scrubD = null; d.el.classList.remove('is-scrub'); document.body.classList.remove('scrubbing'); if (!d.moved && e.type === 'pointerup') scrubEdit(d.el); }
+function scrubStep(el, dir, big) { const p = el.dataset.p, lim = scrubLim(el), v = scrubVal(el), n = big ? 5 : 1; scrubSet(el, lim.oct ? v * Math.pow(2, dir * n / (p === 'q' ? 8 : 12)) : v + dir * n * lim.step); }
+function scrubKey(e, el) {
+  if (el.classList.contains('dis')) return;
+  const k = e.key, dir = k === 'ArrowUp' || k === 'ArrowRight' || k === 'PageUp' ? 1 : k === 'ArrowDown' || k === 'ArrowLeft' || k === 'PageDown' ? -1 : 0;
+  if (dir) { e.preventDefault(); scrubStep(el, dir, e.shiftKey || k.startsWith('Page')); return; }
+  if (k === 'Enter' || k === 'F2') { e.preventDefault(); scrubEdit(el); }
+}
+/** Ввод с клавиатуры: поле на месте числа; Enter или уход — принять, Esc — отменить. «3,5к» — это 3500 Гц. */
+function scrubEdit(el) {
+  if (el.classList.contains('dis') || el.classList.contains('edit')) return;
+  const row = el.querySelector('.sv-row'), p = el.dataset.p, v = scrubVal(el), inp = document.createElement('input');
+  inp.type = 'text'; inp.inputMode = 'decimal'; inp.className = 'scrub-in'; inp.value = p === 'f' ? String(Math.round(v)) : String(v).replace('.', ','); inp.setAttribute('aria-label', el.getAttribute('aria-label'));
+  el.classList.add('edit'); row.hidden = true; el.appendChild(inp); inp.focus(); inp.select();
+  let done = false;
+  const finish = ok => {
+    if (done) return; done = true;
+    const t = inp.value.trim().replace(/\s/g, '').replace(',', '.').replace('−', '-'), n = parseFloat(t) * (p !== 'gain' && /[кk]/i.test(t) ? 1000 : 1);
+    inp.remove(); row.hidden = false; el.classList.remove('edit');
+    if (ok && isFinite(n)) scrubSet(el, n); if (document.activeElement === document.body || !document.activeElement) el.focus({ preventScroll: true });
+  };
+  inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); finish(true); el.focus({ preventScroll: true }); } else if (e.key === 'Escape') { e.preventDefault(); finish(false); el.focus({ preventScroll: true }); } });
+  inp.addEventListener('blur', () => finish(true));
+  inp.addEventListener('pointerdown', e => e.stopPropagation());
+}
 function eqKey(e) {
-  const f = S.cleanFile, c = cl(f), b = c.chain.eq.bands[c.eqSel]; if (!b) return;
+  const f = S.cleanFile, c = cl(f); EQV.kbd = true;
+  const b = c.chain.eq.bands[c.eqSel]; if (!b && e.key !== 'Tab') return;
   const st = e.shiftKey ? 5 : 1; let used = true;
   if (e.key === 'ArrowLeft') b.f = Math.max(20, Math.round(b.f / Math.pow(2, st / 12)));
   else if (e.key === 'ArrowRight') b.f = Math.min(20000, Math.round(b.f * Math.pow(2, st / 12)));
   else if (e.key === 'ArrowUp' && !NO_GAIN.has(b.type)) b.gain = Math.min(EQ_RANGE, b.gain + 0.5 * st);
   else if (e.key === 'ArrowDown' && !NO_GAIN.has(b.type)) b.gain = Math.max(-EQ_RANGE, b.gain - 0.5 * st);
-  else if (e.key === 'Tab' && c.chain.eq.bands.length) { c.eqSel = (c.eqSel + 1) % c.chain.eq.bands.length; }
+  else if (e.key === 'Tab' && !e.shiftKey && c.eqSel < c.chain.eq.bands.length - 1) { c.eqSel++; }   // на последней Tab уводит дальше по странице
   else used = false;
   if (!used) return;
   e.preventDefault(); drawEq($('#eq-canvas'), f); syncBandRow(c, c.eqSel); if (e.key !== 'Tab') markDirty(f);

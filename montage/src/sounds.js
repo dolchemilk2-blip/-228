@@ -73,7 +73,7 @@ function renderSounds() {
       <div class="stext"><span class="num">${esc(c.id)}</span> ${esc(c.text)}${a && !cue.manual ? `<span class="muted"> · ${a.strong ? 'похоже на звук' : 'может быть звуком'}</span>` : ''}${durNote}</div>
       <select data-p="src" aria-label="источник">${srcOpts(cue)}</select>
       <select data-p="mode" aria-label="как класть"><option value="seq" ${cue.mode === 'seq' ? 'selected' : ''}>между репликами</option><option value="bed" ${cue.mode === 'bed' ? 'selected' : ''}>фоном под следующими</option></select>
-      <label class="gain"><input type="range" data-p="gain" min="-30" max="6" step="1" value="${cue.gain}" aria-label="громкость"><span>${cue.gain > 0 ? '+' : ''}${cue.gain} дБ</span></label>
+      <label class="gain"><input type="range" data-p="gain" min="-30" max="6" step="1" value="${cue.gain}" aria-label="громкость"><span class="gv" data-num="sfx:${cue.id}">${cue.gain > 0 ? '+' : ''}${cue.gain} дБ</span></label>
       <button class="play" data-act="play" ${cue.src ? '' : 'disabled'} aria-label="Слушать">▶</button>
       <button class="ghost-b tiny" data-act="db-for" title="Найти звук в базе BBC для этой ремарки">база</button>
     </div>`);
@@ -123,7 +123,7 @@ function bindSounds() {
     else if (p === 'gain') cue.gain = +x.value;
     cue.manual = true; S.result = null; sfxSave(); renderSounds(); renderMix();
   });
-  el.addEventListener('input', e => { const x = e.target; if (x.dataset.p === 'gain') { x.nextElementSibling.textContent = `${x.value > 0 ? '+' : ''}${x.value} дБ`; } });
+  el.addEventListener('input', e => { const x = e.target; if (x.dataset.p === 'gain') { x.closest('.gain').querySelector('.gv').textContent = `${x.value > 0 ? '+' : ''}${x.value} дБ`; } });
   el.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     const a = b.dataset.act;
