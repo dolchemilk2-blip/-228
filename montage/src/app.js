@@ -522,7 +522,7 @@ function refreshMix() {
   const st = out.querySelector('.stat'); if (st) st.innerHTML = mixStatHtml(r);
   const ms = $('#mix-status'); if (ms) ms.innerHTML = mixStatusHtml(r);
   const sk = $('#tp-seek'); if (sk) sk.max = (r.out.length / C.SR).toFixed(1);
-  if ($('#tl-info')) $('#tl-info').innerHTML = tlInfoHtml(); tlRefreshBar();
+  if ($('#tl-info')) tlRefreshInfo(); tlRefreshBar();
   const note = $('#vg-note'); if (note) note.textContent = '';
   tpUi();
 }
@@ -709,16 +709,23 @@ function renderReview() {
   const sec = $('#review'), ready = S.matches.size > 0 || S.uploads.size > 0;
   sec.hidden = !ready; if (!ready) return;
   const c = counts();
+  // счётчики — кнопки: открывают список реплик сразу с нужным фильтром
   $('#rv-sum').innerHTML = `
-    <span class="pill ok" data-n="${c.ok + c.own}">найдено <b>${c.ok + c.own}</b></span>
-    <span class="pill check" data-n="${c.check}">проверить <b>${c.check}</b></span>
-    <span class="pill miss" data-n="${c.miss}">нет записи <b>${c.miss}</b></span>
-    ${c.none ? `<span class="pill none" data-n="${c.none}">роли без записей <b>${c.none}</b></span>` : ''}
-    ${c.slips ? `<span class="pill slips" data-n="${c.slips}">оговорки <b>${c.slips}</b></span>` : ''}`;
+    <button class="pill ok" data-f="all" data-n="${c.ok + c.own}" title="Показать все реплики">найдено <b>${c.ok + c.own}</b></button>
+    <button class="pill check" data-f="check" data-n="${c.check}" title="Показать те, что стоит проверить">проверить <b>${c.check}</b></button>
+    <button class="pill miss" data-f="miss" data-n="${c.miss}" title="Показать реплики без записи">нет записи <b>${c.miss}</b></button>
+    ${c.none ? `<button class="pill none" data-f="all" data-n="${c.none}">роли без записей <b>${c.none}</b></button>` : ''}
+    ${c.slips ? `<button class="pill slips" data-f="slips" data-n="${c.slips}" title="Показать оговорки">оговорки <b>${c.slips}</b></button>` : ''}`;
   if (typeof motionCount === 'function') $('#rv-sum').querySelectorAll('.pill').forEach(p => motionCount(p, p.classList[1]));
   if ($('#rv-rerec')) $('#rv-rerec').innerHTML = typeof rerecHtml === 'function' ? rerecHtml() : '';
   document.querySelectorAll('#rv-filter button').forEach(b => b.classList.toggle('on', b.dataset.f === S.filter));
   $('#dirs-t').checked = S.showDirs;
+  // список реплик свёрнут, пока его не откроют: не строится вовсе (337 строк — это сотни мс раскладки)
+  const tg = $('#rv-toggle'), fold = $('#rv-fold');
+  tg.setAttribute('aria-expanded', String(!!S.rvOpen)); tg.querySelector('.rv-t').textContent = S.rvOpen ? 'Свернуть реплики' : 'Показать все реплики';
+  tg.querySelector('.rv-n').textContent = String(S.P.cues.filter(q => q.type === 'line').length);
+  if (!S.rvOpen) { if (!fold._closing) fold.hidden = true; return; }
+  fold.hidden = false;
   const rows = [];
   let scene = null;
   for (const cue of S.P.cues) {
@@ -739,6 +746,17 @@ function renderReview() {
   }
   $('#rv-list').dataset.v = `${S.filter}|${S.showDirs}|${S.matches.size}`;
   setHtml($('#rv-list'), rows.join('') || '<p class="muted pad">Здесь пусто — под этот фильтр ничего не подходит.</p>');
+  if (typeof segInd === 'function') segInd($('#rv-filter'), 'rv-filter');
+}
+/** Раскрыть или свернуть список реплик. Снизу («Свернуть реплики» в конце списка) — сначала вернуться к началу. */
+function rvToggle(open, fromBottom) {
+  if (!!S.rvOpen === open) return;
+  const fold = $('#rv-fold');
+  if (open) { S.rvOpen = true; renderReview(); if (typeof foldIn === 'function') foldIn(fold, $('#rv-list')); return; }
+  const tg = $('#rv-toggle'), r = tg.getBoundingClientRect();
+  if (fromBottom && (r.top < 60 || r.bottom > innerHeight)) tg.scrollIntoView({ block: 'center' });
+  if (typeof foldOut === 'function') foldOut(fold); else fold.hidden = true;             // сначала уход (он держит блок), потом состояние
+  S.rvOpen = false; renderReview();
 }
 /** Заменить содержимое, только если оно правда другое: пересборка списка на 337 строк стоит сотни миллисекунд
  *  раскладки, а после многих действий (темп, громкость, сведение) сам список не меняется. */
@@ -774,7 +792,7 @@ function rowHtml(cue, st, hasFile) {
 }
 function openPicker(row, cue) {
   const box = row.querySelector('.picker');
-  if (!box.hidden) { box.hidden = true; return; }
+  if (!box.hidden && !box._closing) { if (typeof foldOut === 'function') foldOut(box); else box.hidden = true; return; }
   const spk = cue.type === 'line' ? cue.spk : null;
   const t = C.norm(cue.text);
   const cands = [];
@@ -800,6 +818,8 @@ function openPicker(row, cue) {
       onClick: e => { const b = e.target.closest('button'); if (!b || !b.dataset.act) return; rvAct(b, cue.id); if (b.dataset.act === 'take' || b.dataset.act === 'add') sheetClose(); } });
     return;
   }
+  // закрывался и его снова открыли — прервать уход и открыть заново с того же места
+  if (box._closing) { box._closing = false; box.getAnimations().forEach(a => a.cancel()); box.hidden = true; }
   box.innerHTML = html; box.hidden = false;
 }
 /** Кнопки реплики в разборе — из строки списка или из шторки «Другой кусок» на телефоне. */
@@ -807,7 +827,7 @@ function rvAct(b, id, row = null) {
   row = row || document.querySelector(`#rv-list .row[data-id="${CSS.escape(id)}"]`);
   const cue = S.P.cues.find(c => c.id === id), a = b.dataset.act; if (!cue) return;
   if (a === 'play') { if (playing && playing.btn === b) return stop(); const y = audioOfSource(sourceOf(cue)); if (y) play(y, b); return; }
-  if (a === 'pick') return openPicker(row, cue);
+  if (a === 'pick') return row && openPicker(row, cue);
   if (a === 'rec') return recOpen([cue]);
   if (a === 'cplay') { if (playing && playing.btn === b) return stop(); const cd = b.closest('.cand'); play(slice(S.files[+cd.dataset.f], +cd.dataset.a, +cd.dataset.b), b); return; }
   if (a === 'take' || a === 'add') {
@@ -926,6 +946,9 @@ function bind() {
   document.querySelectorAll('input[name=preset]').forEach(r => r.addEventListener('change', () => { S.preset = r.value; render(); }));
   $('#go').addEventListener('click', analyze);
   $('#rv-filter').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { S.filter = b.dataset.f; renderReview(); } });
+  $('#rv-sum').addEventListener('click', e => { const b = e.target.closest('button.pill'); if (!b) return; S.filter = b.dataset.f; if (S.rvOpen) renderReview(); else rvToggle(true); });
+  $('#rv-toggle').addEventListener('click', () => rvToggle(!S.rvOpen));
+  $('#rv-fold').addEventListener('click', e => { if (e.target.closest('[data-rv=close]')) rvToggle(false, true); });
   $('#dirs-t').addEventListener('change', e => { S.showDirs = e.target.checked; renderReview(); });
   $('#rv-rerec').addEventListener('click', e => { const r = e.target.closest('button[data-act=rec-spk]'); if (r) { recOpenFor(r.dataset.spk); return; } const b = e.target.closest('button[data-act=rerec]'); if (!b) return; const spk = b.dataset.spk || null;
     download(new Blob([rerecText(spk)], { type: 'text/plain;charset=utf-8' }), `дозапись${spk ? '-' + charName(spk) : ''}.txt`); });
@@ -983,7 +1006,7 @@ function bind() {
 }
 
 // для проверки из консоли и автотестов
-window.montage = { S, C, PRESETS, play: (y, btn) => play(y, btn), stop: () => stop(), progress: (t, p) => progress(t, p), notify: t => notify(t), DECK: typeof DECK !== 'undefined' ? DECK : null, MOTION: typeof MOTION !== 'undefined' ? MOTION : null, audioLevel: () => audioLevel(), projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses, recOpenFor: k => recOpenFor(k), recOpen: l => recOpen(l), REC: typeof REC !== 'undefined' ? REC : null, srtText: () => srtText(), vttText: () => vttText(), subCues: () => subCues(), buildVideo: o => buildVideo(o), videoFormat: () => videoFormat(1280, 720, 24), slipDiff: (a, b) => slipDiff(a, b), slipOf: c => slipOf(c) };
+window.montage = { tlFx: () => ({ lift: +TLFX.lift.v.toFixed(3), liftIds: TLFX.liftIds && [...TLFX.liftIds], hoverId: TLFX.hoverId, hover: +TLFX.hover.v.toFixed(3), pulse: TLFX.pulse ? +TLFX.pulse.m.v.toFixed(3) : null, band: !!TLFX.band, snap: tlState().drag ? tlState().drag.snapT : undefined, delta: tlState().drag ? tlState().drag.delta : undefined }), S, C, PRESETS, play: (y, btn) => play(y, btn), stop: () => stop(), progress: (t, p) => progress(t, p), notify: t => notify(t), DECK: typeof DECK !== 'undefined' ? DECK : null, MOTION: typeof MOTION !== 'undefined' ? MOTION : null, audioLevel: () => audioLevel(), projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses, recOpenFor: k => recOpenFor(k), recOpen: l => recOpen(l), REC: typeof REC !== 'undefined' ? REC : null, srtText: () => srtText(), vttText: () => vttText(), subCues: () => subCues(), buildVideo: o => buildVideo(o), videoFormat: () => videoFormat(1280, 720, 24), slipDiff: (a, b) => slipDiff(a, b), slipOf: c => slipOf(c) };
 if (typeof fdrInit === 'function') fdrInit();
 if (typeof numInit === 'function') numInit();
 bind(); render();

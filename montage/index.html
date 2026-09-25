@@ -310,6 +310,25 @@ input[type=radio] { accent-color: var(--accent); }
 .pill.ok { background: var(--ok-soft); color: var(--ok); } .pill.check { background: var(--warn-soft); color: var(--warn); }
 .pill.miss { background: var(--bad-soft); color: var(--bad); } .pill.none { background: var(--none-soft); color: var(--none); }
 .pill.slips { background: var(--accent-soft); color: var(--accent-text); }
+/* счётчики разбора — кнопки: открывают список сразу с нужным фильтром */
+button.pill { border: 0; cursor: pointer; font-family: inherit; transition: box-shadow var(--duration-quick) ease, filter var(--duration-quick) ease; }
+@media (hover: hover) and (pointer: fine) { button.pill:hover { box-shadow: inset 0 0 0 1.5px currentColor; } }
+button.pill:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* список реплик свёрнут: полоса-кнопка со счётчиком; раскрывается на пружине */
+.rv-toggle { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 8px 14px; border: 1px dashed var(--line); border-radius: var(--r-m); background: var(--well); color: var(--ink); font: 600 14px var(--sans); text-align: left; cursor: pointer; transition: border-color var(--duration-quick) ease, background-color var(--duration-quick) ease; }
+.rv-toggle .rv-n { font: 600 13px var(--mono); color: var(--muted); }
+.rv-toggle .rv-chev { margin-left: auto; width: 18px; height: 18px; transition: transform var(--spring-bouncy-dur, 300ms) var(--spring-bouncy, ease); }
+.rv-toggle[aria-expanded="true"] { border-style: solid; background: var(--surface); }
+.rv-toggle[aria-expanded="true"] .rv-chev { transform: rotate(180deg); }
+@media (hover: hover) and (pointer: fine) { .rv-toggle:hover { border-color: var(--accent); background: var(--accent-soft); } }
+.rv-fold { display: flow-root; } .rv-fold > * + * { margin-top: 12px; }   /* не сетка: вложенные сетки вокруг 337 строк раскладываются в разы дольше */
+.rv-close { display: flex; width: fit-content; margin-inline: auto; }
+/* скользящая подложка у переключателей (фильтры разбора, пресеты и файлы чистки): едет к выбранному на пружине */
+.seg { position: relative; isolation: isolate; }
+.seg > button, .seg-off > button { transition: none !important; }   /* цвет кнопок меняется ровно вместе с подложкой, без встречного перехода */
+.seg-ind { position: absolute; left: 0; top: 0; z-index: -1; background: var(--deck); pointer-events: none; will-change: transform; }
+.seg > button.on, .seg > .ghost-b.on, .filters.seg > button.on, .presets.seg > .ghost-b.on { background: transparent; border-color: transparent; }
+@media (hover: hover) and (pointer: fine) { .seg > .ghost-b.on:hover:not(:disabled) { background: transparent; border-color: transparent; } }
 /* цифры, которые поменялись, въезжают снизу (transitions.dev: number pop-in) */
 /* Transitions.dev — Number pop-in (src/nums.js ставит ячейки сам по data-num).
    Токены и кривая — как в рецепте; дополнения: .t-still — цифра не менялась и стоит; .is-tick — число меняется
@@ -416,7 +435,7 @@ input[type=radio] { accent-color: var(--accent); }
 .rerec { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line2); border-bottom: 1px solid var(--line2); }
 .rerec > b { font: 600 14.5px var(--display); font-stretch: 95%; }
 #rv-rerec:empty { display: none; }
-#rv-list { display: grid; }
+#rv-list { display: flow-root; }
 .scene { position: sticky; top: var(--scene-top, var(--deck-h)); z-index: 2; font: 700 12px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 18px 0 8px; background: var(--surface); }
 .dir { font-size: 13px; color: var(--muted); font-style: italic; padding: 3px 0 3px 58px; }
 .row { position: relative; display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; gap: 12px; padding: 11px 8px 11px 0; border-bottom: 1px solid var(--line2); transition: background-color var(--duration-quick) ease; }
@@ -545,13 +564,50 @@ input[type=radio] { accent-color: var(--accent); }
 .tl:fullscreen { background: var(--bg); }
 body.tl-full-open { overflow: hidden; }
 /* контекстное меню: растёт из точки щелчка (transitions.dev: menu dropdown) */
-.tl-menu { position: fixed; z-index: 80; width: min(340px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: auto; overflow-x: hidden; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; padding: 6px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--sh-2); font-size: 13px; transform-origin: var(--origin, top left); }
+.tl-menu { position: fixed; z-index: 80; background: var(--surface); color: var(--ink); border: 1px solid var(--line); box-shadow: var(--sh-2); font-size: 13px; }
+/* Transitions.dev — Plus to menu morph: меню по правому щелчку вырастает из кружка «+» у курсора.
+   Токены и кривые — как в рецепте; дополнения: размер открытого меню (--mw, --mh) меряется по содержимому,
+   угол, из которого растёт, — ближайший к курсору (data-ax/ay), и содержимое въезжает с той же стороны. */
+:root {
+  --morph-open-dur: 350ms;
+  --morph-close-dur: 250ms;
+  --morph-ease: cubic-bezier(0.34, 1.25, 0.64, 1);
+  --morph-close-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --morph-r-closed: 40px;
+  --morph-r-open: 20px;
+  --morph-fade-dur: 200ms;
+  --morph-slide: 40px;
+  --morph-rotate: 45deg;
+  --morph-scale: 0.97;
+  --morph-blur: 2px;
+}
+.t-morph { --sx: -1; --sy: -1; width: 40px; height: 40px; border-radius: var(--morph-r-closed); overflow: hidden;
+  transition: width var(--morph-close-dur) var(--morph-close-ease), height var(--morph-close-dur) var(--morph-close-ease), border-radius var(--morph-close-dur) var(--morph-close-ease), box-shadow var(--morph-close-dur) var(--morph-close-ease); }
+.t-morph[data-ax="r"] { --sx: 1; } .t-morph[data-ay="b"] { --sy: 1; }
+.t-morph[data-open="true"] { width: var(--mw); height: var(--mh); border-radius: var(--morph-r-open);
+  transition: width var(--morph-open-dur) var(--morph-ease), height var(--morph-open-dur) var(--morph-ease), border-radius var(--morph-open-dur) var(--morph-ease), box-shadow var(--morph-open-dur) var(--morph-ease); }
+.t-morph:not([data-open="true"]) { box-shadow: 0 6px 16px -6px rgb(0 0 0 / 40%); }
+/* «+» уезжает внутрь и поворачивается в «×» */
+.t-morph-plus { position: absolute; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--accent-ink); pointer-events: none;
+  transition: opacity var(--morph-fade-dur) var(--morph-close-ease), transform var(--morph-open-dur) var(--morph-close-ease), filter var(--morph-fade-dur) var(--morph-close-ease); }
+.t-morph-plus svg { width: 18px; height: 18px; stroke-width: 2; transition: transform var(--morph-open-dur) var(--morph-close-ease); }
+.t-morph[data-open="true"] .t-morph-plus { opacity: 0; transform: translate(calc(-1 * var(--morph-slide) * var(--sx)), calc(-.5 * var(--morph-slide) * var(--sy))); filter: blur(var(--morph-blur)); }
+.t-morph[data-open="true"] .t-morph-plus svg { transform: scale(var(--morph-scale)) rotate(var(--morph-rotate)); }
+/* меню — въезжает со стороны кружка, чуть уменьшенное и размытое */
+.t-morph-menu { position: absolute; width: var(--mw); height: var(--mh); overflow: auto; overflow-x: hidden; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 1px; padding: 6px; box-sizing: border-box;
+  opacity: 0; transform: translate(calc(var(--morph-slide) * var(--sx)), calc(.5 * var(--morph-slide) * var(--sy))) scale(var(--morph-scale)); filter: blur(var(--morph-blur)); pointer-events: none;
+  transition: opacity var(--morph-fade-dur) var(--morph-close-ease), transform var(--morph-open-dur) var(--morph-close-ease), filter var(--morph-fade-dur) var(--morph-close-ease); }
+.t-morph[data-open="true"] .t-morph-menu { opacity: 1; transform: translate(0, 0) scale(1); filter: blur(0); pointer-events: auto; }
+.t-morph[data-ax="l"] .t-morph-plus, .t-morph[data-ax="l"] .t-morph-menu { left: 0; } .t-morph[data-ax="r"] .t-morph-plus, .t-morph[data-ax="r"] .t-morph-menu { right: 0; }
+.t-morph[data-ay="t"] .t-morph-plus, .t-morph[data-ay="t"] .t-morph-menu { top: 0; } .t-morph[data-ay="b"] .t-morph-plus, .t-morph[data-ay="b"] .t-morph-menu { bottom: 0; }
+.t-morph.t-instant, .t-morph.t-instant * { transition: none !important; }                 /* с клавиатуры — сразу */
+@media (prefers-reduced-motion: reduce) { .t-morph, .t-morph-plus, .t-morph-menu, .t-morph-plus svg { transition: none !important; } }
 .tl-menu[hidden] { display: none; }
-.tl-menu > button { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; min-height: 30px; padding: 5px 9px; border: 0; border-radius: var(--r-s); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.tl-menu > button span { display: inline-flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tl-menu > button kbd { flex: none; }
-.tl-menu > button:hover:not(:disabled), .tl-menu > button:focus-visible { background: var(--accent-soft); outline: none; }
-.tl-menu > button:disabled { opacity: .45; cursor: default; }
+.t-morph-menu > button { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; min-height: 30px; padding: 5px 9px; border: 0; border-radius: var(--r-s); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.t-morph-menu > button span { display: inline-flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-morph-menu > button kbd { flex: none; }
+.t-morph-menu > button:hover:not(:disabled), .t-morph-menu > button:focus-visible { background: var(--accent-soft); outline: none; }
+.t-morph-menu > button:disabled { opacity: .45; cursor: default; }
 .tl-menu kbd { font: 11px var(--mono); color: var(--muted); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; white-space: nowrap; background: var(--well); }
 .m-head { display: flex; gap: 8px; align-items: center; padding: 6px 9px 8px; border-bottom: 1px solid var(--line2); margin-bottom: 4px; min-width: 0; }
 .m-head .m-txt { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -561,6 +617,7 @@ body.tl-full-open { overflow: hidden; }
 .m-fx button, .m-row button { min-height: 28px; padding: 4px 8px; border: 1px solid var(--line2); border-radius: var(--r-s); background: var(--well); color: inherit; font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .m-fx button:hover, .m-row button:hover, .m-fx button:focus-visible, .m-row button:focus-visible { border-color: var(--ink); outline: none; }
 .m-fx button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.m-fx.seg > button.on { background: transparent; border-color: transparent; } .m-fx > .seg-ind { background: var(--accent); }
 .m-row { display: flex; flex-wrap: wrap; gap: 3px; padding: 0 4px 2px; }
 .m-row button { flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-variant-numeric: tabular-nums; }
 .m-row .ic { width: 13px; height: 13px; }
@@ -572,7 +629,7 @@ body.tl-full-open { overflow: hidden; }
 #cl-body > *:not(.cl-files):not(:last-child) { margin-bottom: 16px; }
 #cl-body > .cl-files { grid-column: 1; grid-row: 1 / span 20; position: sticky; top: calc(var(--deck-h) + 24px); flex-direction: column; flex-wrap: nowrap; gap: 2px; }
 #cl-body > p.muted:only-child { grid-column: 1 / -1; }
-@media (max-width: 980px) { #cl-body { grid-template-columns: minmax(0, 1fr); } #cl-body > .cl-files { margin-bottom: 16px; } #cl-body > * { grid-column: 1; } #cl-body > .cl-files { grid-row: auto; position: static; flex-direction: row; flex-wrap: wrap; } }
+@media (max-width: 980px) { #cl-body { grid-template-columns: minmax(0, 1fr); } #cl-body > .cl-files { margin-bottom: 16px; } #cl-body > * { grid-column: 1; } #cl-body > .cl-files { grid-row: auto; position: relative; flex-direction: row; flex-wrap: wrap; } }
 .cl-files { display: flex; flex-wrap: wrap; gap: 6px; }
 .ftab { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 34px; padding: 6px 10px; border: 1px solid transparent; border-radius: var(--r-m); background: transparent; font-size: 13.5px; text-align: left; cursor: pointer; overflow-wrap: anywhere; color: var(--ink); }
 .ftab.on { background: var(--deck); color: var(--deck-ink); }
@@ -885,11 +942,15 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
         <h2 class="step"><b>4</b> Проверка <small>кнопка «слушать» — проверить на слух, «Другой кусок» — выбрать из записи</small></h2>
         <div class="sum" id="rv-sum"></div>
         <div id="rv-rerec"></div>
-        <div class="filters" id="rv-filter">
-          <button data-f="all" class="on">Все</button><button data-f="check">Проверить</button><button data-f="miss">Нет записи</button><button data-f="slips">Оговорки</button><button data-f="dirs">Озвученные ремарки</button>
-          <label><input type="checkbox" id="dirs-t"> показывать ремарки</label>
+        <button class="rv-toggle" id="rv-toggle" aria-expanded="false" aria-controls="rv-fold"><span class="rv-t">Показать все реплики</span><span class="rv-n" data-num="rv:n"></span><svg class="ic rv-chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
+        <div class="rv-fold" id="rv-fold" hidden>
+          <div class="filters" id="rv-filter">
+            <button data-f="all" class="on">Все</button><button data-f="check">Проверить</button><button data-f="miss">Нет записи</button><button data-f="slips">Оговорки</button><button data-f="dirs">Озвученные ремарки</button>
+            <label><input type="checkbox" id="dirs-t"> показывать ремарки</label>
+          </div>
+          <div id="rv-list"></div>
+          <button class="ghost-b rv-close" data-rv="close"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg>Свернуть реплики</button>
         </div>
-        <div id="rv-list"></div>
       </section>
       <section class="card" id="mix" hidden>
         <h2 class="step"><b>5</b> Сведение <small>меняется только громкость — звук записей не обрабатывается</small></h2>
@@ -2790,7 +2851,7 @@ function velocityOf(hist, now = performance.now()) {
   return { x: (b.x - a.x) / dt * 1000, y: (b.y - a.y) / dt * 1000 };
 }
 // ------------------------------------------------------------------ касание: сжатие в момент нажатия
-const PRESS_SEL = '.primary, .ghost-b, .icon, .icon-b, .play, .chip.as-btn, .filters button, .ftab, .tog, .m-fx button, .m-row button, .theme-b, .acc-head, .tabs button, .rail a, .models label, .tl-menu > button, .pick-files';
+const PRESS_SEL = '.primary, .ghost-b, .icon, .icon-b, .play, .chip.as-btn, .filters button, .ftab, .tog, .m-fx button, .m-row button, .theme-b, .acc-head, .tabs button, .rail a, .models label, .t-morph-menu > button, .pick-files, button.pill, .rv-toggle';
 const LEAN_SEL = '.icon, .icon-b, .play, .theme-b, .primary, .ghost-b, .ftab';
 let pressed = null;
 function pressScale(el) { const w = el.offsetWidth; return w < 48 ? 0.9 : w < 140 ? 0.95 : w < 320 ? 0.97 : 0.985; }   // большое — тяжелее
@@ -3475,7 +3536,7 @@ function renderCleanup() {
   if (!S.cleanFile || !files.includes(S.cleanFile)) S.cleanFile = files[0];
   const f = S.cleanFile, c = cl(f);
   const tabs = `<div class="cl-files">${files.map(x => `<button class="ftab ${x === f ? 'on' : ''}" data-name="${esc(x.name)}">${esc(x.name)}${x.raw48 ? ` <i title="очищено">${ic('check')}</i>` : ''}</button>`).join('')}</div>`;
-  if (!c.A) { pane.innerHTML = tabs + `<p class="muted">${c.busy ? 'Смотрю, что с записью…' : 'Разбираю…'}</p>`; if (!c.busy) analyzeFile(f); return; }
+  if (!c.A) { pane.innerHTML = tabs + `<p class="muted">${c.busy ? 'Смотрю, что с записью…' : 'Разбираю…'}</p>`; if (typeof segInd === 'function') segInd(pane.querySelector('.cl-files'), 'cl-files'); if (!c.busy) analyzeFile(f); return; }
   const chain = c.chain, dur = srcOf(f).length / C.SR;
   const mods = MODULES.map(m => `
     <div class="mod ${chain[m.k].on ? 'on' : ''}">
@@ -3510,6 +3571,7 @@ function renderCleanup() {
       ${f.raw48 ? '<button class="ghost-b" data-act="revert">Вернуть оригинал</button><button class="ghost-b" data-act="wav">Скачать WAV</button>' : ''}
       <span class="muted small" id="cl-applied">${f.raw48 ? 'В сведение идёт обработанная версия. ' + (c.log ? c.log.join(' · ') : '') : 'Пока в сведение идёт оригинал.'}</span>
     </div>`;
+  if (typeof segInd === 'function') { segInd(pane.querySelector('.presets'), 'cl-presets'); segInd(pane.querySelector('.cl-files'), 'cl-files'); }
   requestAnimationFrame(() => { drawWave($('#cl-wave'), f); if (c.before && (c.sgBefore || SPEC_IMG.has(c.before))) drawSpec($('#cl-spec-a'), c.before, c.sgBefore); refreshPreviewUI(f); abButtons(); if (c.specOpen) drawSpecView(f); });
 }
 // ------------------------------------------------------------------ спектр всего файла с зумом
@@ -4464,6 +4526,24 @@ function tlFlash(t) {
 // Использует S, $, esc, fmt, charName, colorOf, cssVar, saveEdits, remixSoon, voiceIds, TP, tpTime, tpSeek,
 // tpPlay, tpPause из app.js; histPush, histUndo, histRedo, histUi, tlFlash из history.js; C — ядро.
 const TL = { HEAD: 150, RULER: 22, PAD: 6, MAX_ZOOM: 400, OV: 30 };
+// Живые детали таймлайна на пружинах (spring.js): подъём взятой реплики, подсветка под курсором, пульс при
+// приземлении и выделении, гаснущая рамка. Всё рисуется в drawTimeline, пружины просят перерисовку сами.
+const TLFX = { liftIds: null, hoverId: null, pulse: null, band: null };
+TLFX.owner = { render() { drawTimeline(); if (TLFX.pulse && !SPRING.live.has(TLFX.pulse.m)) TLFX.pulse = null; if (TLFX.band && !SPRING.live.has(TLFX.band.m)) TLFX.band = null; if (TLFX.liftIds && TLFX.lift.v < 0.003 && !SPRING.live.has(TLFX.lift)) TLFX.liftIds = null; } };
+TLFX.lift = mv(0, 0.002, TLFX.owner); TLFX.hover = mv(0, 0.01, TLFX.owner);
+function tlLiftUp(clips) { TLFX.liftIds = new Set(clips.map(c => c.row.cue.id)); mvTo(TLFX.lift, 1, { damping: 0.7, response: 0.22 }); try { navigator.vibrate && navigator.vibrate(5); } catch {} }
+function tlPulse(ids) { if (!ids.size || ids.size > 60 || (typeof MOTION !== 'undefined' && (MOTION.reduce || !MOTION.ready))) return; TLFX.pulse = { ids: new Set(ids), m: mv(0, 0.004, TLFX.owner) }; mvTo(TLFX.pulse.m, 1, { damping: 1, response: 0.5 }); }
+/** Прилипание при перетаскивании: край реплики тянется к краю соседней (на любой дорожке), к курсору плеера и к
+ *  началу сцены, если до него меньше 7 px. Возвращает сдвиг с прилипанием и время, к которому прилипло. */
+function tlSnap(st, d) {
+  const dr = st.drag, c = dr.clip, tol = 7 / st.zoom, moving = x => dr.group ? dr.group.has(x.row.cue.id) : dr.own ? x === c : x.idx >= c.idx;
+  const edges = [c.row.at, c.row.at + c.row.dur]; let best = null;
+  const test = T => { for (const e of edges) { const diff = T - (e + d); if (Math.abs(diff) < tol && (!best || Math.abs(diff) < Math.abs(best.diff))) best = { diff, t: T }; } };
+  test(tpTime()); for (const sc of (S.result && S.result.lay.scenes) || []) test(sc.start);
+  const t0 = st.scroll - 5, t1 = st.scroll + ((st.W || 800) - TL.HEAD) / st.zoom + 5;
+  for (const x of tlAllClips()) { if (x.fixed || x.idx < 0 || moving(x)) continue; const a = x.row.at, b = a + x.row.dur; if (b < t0 || a > t1) continue; test(a); test(b); }
+  return best ? { d: d + best.diff, t: best.t } : { d, t: null };
+}
 let tlLastInput = 'pointer';                           // чем закрыли меню: с клавиатуры — без анимации
 addEventListener('keydown', () => { tlLastInput = 'key'; }, true); addEventListener('pointerdown', () => { tlLastInput = 'pointer'; }, true);
 function tlState() {
@@ -4535,16 +4615,25 @@ function drawTimeline() {
   const settle = st.settle && st.settle.m.v, sAt = clip => st.settle && (st.settle.ids ? st.settle.ids.has(clip.row.cue.id) : st.settle.own ? clip.idx === st.settle.idx : clip.idx >= st.settle.idx) ? settle : 0;
   const shift = clip => !drag || !drag.moved ? (settle ? sAt(clip) : 0) : multi ? (drag.group.has(clip.row.cue.id) ? drag.delta : 0) : (drag.own ? clip.idx === drag.clip.idx : clip.idx >= drag.clip.idx) ? drag.delta : 0;
   g.save(); g.beginPath(); g.rect(TL.HEAD, TL.RULER, areaW, H - TL.RULER); g.clip();
-  const pad = Math.max(5, Math.round(ROW * 0.14));
+  const pad = Math.max(5, Math.round(ROW * 0.14)), FX = TLFX, lift = FX.lift.v, pk = FX.pulse ? FX.pulse.m.v : 0;
   tracks.forEach((tr, i) => {
-    const y = TL.RULER + i * ROW + pad, h = ROW - 2 * pad, [col, soft] = tlColor(tr);
+    const y0 = TL.RULER + i * ROW + pad, h0 = ROW - 2 * pad, [col, soft] = tlColor(tr);
     for (const clip of tr.clips) {
       const at = clip.row.at + shift(clip), x0 = tlX(st, at), w = Math.max(3, clip.row.dur * st.zoom);
       if (x0 + w < TL.HEAD || x0 > W) continue;
-      const sel = st.sel.has(clip.row.cue.id), menu = st.menuIds && st.menuIds.has(clip.row.cue.id);
+      const id = clip.row.cue.id, sel = st.sel.has(id), menu = st.menuIds && st.menuIds.has(id);
+      // взятая реплика приподнята: выше, чуть больше и с тенью; отпущенная — опускается на пружине
+      const L = lift > 0.002 && FX.liftIds && FX.liftIds.has(id) ? lift : 0, y = y0 - 3 * L, h = h0 + 2 * L;
+      if (L) { g.save(); g.shadowColor = `rgba(0,0,0,${(0.38 * L).toFixed(3)})`; g.shadowBlur = 16 * L; g.shadowOffsetY = 6 * L; }
       g.beginPath(); g.roundRect(x0, y, w, h, 5);
-      if (clip.kind === 'pause') { g.setLineDash([4, 3]); g.strokeStyle = sel ? ink : col; g.lineWidth = sel ? 2 : 1; g.stroke(); g.setLineDash([]); g.lineWidth = 1; }
-      else { g.fillStyle = sel ? col : soft; g.globalAlpha = clip.kind === 'bed' ? 0.55 : sel ? 0.35 : 1; g.fill(); g.globalAlpha = 1; g.strokeStyle = sel || menu ? ink : col; g.lineWidth = sel ? 2 : 1; g.stroke(); g.lineWidth = 1; }
+      if (clip.kind === 'pause') { if (L) g.restore(); g.setLineDash([4, 3]); g.strokeStyle = sel ? ink : col; g.lineWidth = sel ? 2 : 1; g.stroke(); g.setLineDash([]); g.lineWidth = 1; }
+      else {
+        if (L) { g.fillStyle = soft; g.fill(); g.restore(); }            // непрозрачная подложка отбрасывает тень, контур и выделение — уже без неё
+        g.fillStyle = sel ? col : soft; g.globalAlpha = clip.kind === 'bed' ? 0.55 : sel ? 0.35 : 1; g.fill(); g.globalAlpha = 1;
+        g.strokeStyle = sel || menu || L ? ink : col; g.lineWidth = sel || L ? 2 : 1; g.stroke(); g.lineWidth = 1;
+      }
+      if (FX.hoverId === id && FX.hover.v > 0.01 && !L) { g.fillStyle = ink; g.globalAlpha = 0.07 * FX.hover.v; g.fill(); g.globalAlpha = 0.5 * FX.hover.v; g.strokeStyle = ink; g.lineWidth = 1.5; g.stroke(); g.globalAlpha = 1; g.lineWidth = 1; }
+      if (pk && FX.pulse.ids.has(id)) { const e = 7 * pk; g.beginPath(); g.roundRect(x0 - e, y - e, w + 2 * e, h + 2 * e, 5 + e); g.strokeStyle = accent; g.globalAlpha = (1 - pk) * 0.9; g.lineWidth = 2; g.stroke(); g.globalAlpha = 1; g.lineWidth = 1; }
       if (clip.peaks && w >= 24) {
         g.strokeStyle = col; g.globalAlpha = 0.55; g.beginPath();
         const n = clip.peaks.length, mid = y + h / 2;
@@ -4556,9 +4645,18 @@ function drawTimeline() {
     }
   });
   g.restore();
+  const bgh = TLFX.band; if (!st.band && bgh && bgh.m.v > 0.02) { g.globalAlpha = bgh.m.v; g.fillStyle = accent; g.globalAlpha = 0.12 * bgh.m.v; g.fillRect(bgh.x, bgh.y, bgh.w, bgh.h); g.globalAlpha = 0.8 * bgh.m.v; g.strokeStyle = accent; g.setLineDash([4, 3]); g.strokeRect(bgh.x + 0.5, bgh.y + 0.5, bgh.w, bgh.h); g.setLineDash([]); g.globalAlpha = 1; }   // рамка гаснет, а не пропадает
   if (st.band) { const b = st.band, x = Math.min(b.x0, b.x1), y = Math.min(b.y0, b.y1); g.fillStyle = accent; g.globalAlpha = 0.12; g.fillRect(x, y, Math.abs(b.x1 - b.x0), Math.abs(b.y1 - b.y0)); g.globalAlpha = 1; g.strokeStyle = accent; g.setLineDash([4, 3]); g.strokeRect(x + 0.5, y + 0.5, Math.abs(b.x1 - b.x0), Math.abs(b.y1 - b.y0)); g.setLineDash([]); }
   tlHeadUpdate();
-  if (drag && drag.moved) { g.fillStyle = ink; g.font = '600 12px ' + cssVar('--mono'); g.textAlign = 'right'; g.fillText(`${drag.delta > 0 ? '+' : ''}${drag.delta.toFixed(2)} с${drag.group ? ` (${drag.group.size} реплик)` : drag.own ? ' (только эта)' : ''}`, W - 8, 9); g.textAlign = 'left'; }
+  if (drag && drag.moved) {
+    // прилипание: пунктир там, к чему прилипло (край соседней реплики, курсор, начало сцены)
+    if (drag.snapT != null) { const x = Math.round(tlX(st, drag.snapT)) + 0.5; g.save(); g.strokeStyle = accent; g.lineWidth = 1.5; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(x, TL.RULER); g.lineTo(x, H); g.stroke(); g.setLineDash([]); g.fillStyle = accent; g.beginPath(); g.moveTo(x - 5, TL.RULER - 7); g.lineTo(x + 5, TL.RULER - 7); g.lineTo(x, TL.RULER); g.closePath(); g.fill(); g.restore(); }
+    // бейдж сдвига — у самой реплики, а не в углу
+    const c = drag.clip, ti = tracks.findIndex(t => t.clips.includes(c)), bx = tlX(st, c.row.at + drag.delta), by = TL.RULER + Math.max(0, ti) * ROW + pad - 3 * lift;
+    const txt = `${drag.delta > 0.004 ? '+' : drag.delta < -0.004 ? '−' : ''}${Math.abs(drag.delta).toFixed(2).replace('.', ',')} с${drag.group ? ` · ${drag.group.size} реплик` : drag.own ? ' · только эта' : ''}${drag.snapT != null ? ' · прилипла' : ''}`;
+    g.font = '600 11px ' + cssVar('--mono'); const tw = g.measureText(txt).width + 16, px = Math.max(TL.HEAD + 2, Math.min(W - tw - 2, bx)), py = by - 24 < TL.RULER + 2 ? by + (ROW - 2 * pad) + 6 : by - 24;
+    g.globalAlpha = Math.min(1, 0.3 + lift); g.fillStyle = ink; g.beginPath(); g.roundRect(px, py, tw, 19, 9.5); g.fill(); g.fillStyle = surface; g.textBaseline = 'middle'; g.textAlign = 'left'; g.fillText(txt, px + 8, py + 10); g.globalAlpha = 1;
+  }
   st.W = W; st.H = H;
   drawOverview();
 }
@@ -4676,9 +4774,13 @@ function tlBarHtml() {
     <div class="tl-group"><button class="ghost-b tiny ${st.own ? 'on' : ''}" data-act="tl-own" title="Двигать только выбранную реплику, не сдвигая остальные" aria-pressed="${st.own}">только эта реплика</button>${n ? `<button class="ghost-b tiny" data-act="tl-reset-all">сбросить все сдвиги (${n})</button>` : ''}</div>
     <button class="ghost-b tl-fullbtn" data-act="tl-full" title="${st.full ? 'Свернуть (Esc)' : 'Таймлайн на весь экран (F)'}">${st.full ? ic('collapse') + 'Свернуть' : ic('expand') + 'На весь экран'}</button>`;
 }
-function tlRefreshInfo() { const el = $('#tl-info'); if (el) el.innerHTML = tlInfoHtml(); drawTimeline(); }
+function tlRefreshInfo() {
+  const el = $('#tl-info');
+  if (el) { const html = tlInfoHtml(); if (el._html !== html) { const swap = el._html != null && !tlState().drag; el._html = html; el.innerHTML = html; if (swap && typeof mIn === 'function' && typeof MOTION !== 'undefined' && MOTION.ready) mIn(el, { opacity: 0.35, transform: 'translateY(3px)' }, [1, 0.26]); } }
+  drawTimeline();
+}
 function tlRefreshBar() { const el = $('.tl-bar'); if (el) el.innerHTML = tlBarHtml(); histUi(); }
-function tlSelect(ids, add = false) { const st = tlState(); if (!add) st.sel.clear(); for (const id of ids) st.sel.add(id); tlRefreshInfo(); }
+function tlSelect(ids, add = false) { const st = tlState(), was = new Set(st.sel); if (!add) st.sel.clear(); for (const id of ids) st.sel.add(id); tlPulse(new Set([...st.sel].filter(id => !was.has(id)))); tlRefreshInfo(); }
 /** Курсор плеера — отдельный слой поверх холста: двигается каждый кадр, холст не перерисовывается. */
 function tlHeadUpdate() {
   const el = $('#mix-out .tl-head'), st = tlState(); if (!el || !S.result || !S.result.out) return;
@@ -4741,17 +4843,42 @@ function tlMenuHtml(ctx) {
     ${n ? `<button role="menuitem" data-m="clear"><span>Снять выделение</span>${kbd('Esc')}</button>` : ''}
     <button role="menuitem" data-m="full"><span>${tlState().full ? 'Свернуть таймлайн' : 'Таймлайн на весь экран'}</span>${kbd(tlState().full ? 'Esc' : 'F')}</button>${hist}`;
 }
+/** Меню по правому щелчку (transitions.dev: plus to menu morph): у курсора появляется кружок «+», «+» уезжает внутрь
+ *  и поворачивается в «×», а кружок вырастает в панель — в ту сторону, где есть место. Уже открытое меню при
+ *  смене содержимого (эффект, громкость) только меняет размер. С клавиатуры и при «меньше движения» — сразу. */
 function tlMenuOpen(cx, cy, ctx) {
   const st = tlState(), m = $('#tl-menu'); if (!m) return;
-  st.menu = ctx; st.menuIds = ctx.ids || null;
-  m.innerHTML = tlMenuHtml(ctx); m.hidden = false;
-  const r = m.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight;
-  const left = Math.max(8, Math.min(cx, vw - r.width - 8)), top = Math.max(8, Math.min(cy, vh - r.height - 8));
-  m.style.left = left + 'px'; m.style.top = top + 'px'; m.style.setProperty('--origin', `${Math.max(0, Math.min(r.width, cx - left)).toFixed(0)}px ${Math.max(0, Math.min(r.height, cy - top)).toFixed(0)}px`);
+  const was = !m.hidden && m.dataset.open === 'true', sc = was ? (m.querySelector('.t-morph-menu') || {}).scrollTop || 0 : 0;
+  st.menu = ctx; st.menuIds = ctx.ids || null; st.menuAt = { x: cx, y: cy };
+  clearTimeout(m._hide); m.style.pointerEvents = '';
+  const instant = tlLastInput === 'key' || (typeof MOTION !== 'undefined' && (MOTION.reduce || performance.now() - MOTION.kbd < 150));
+  m.classList.add('t-morph'); m.classList.toggle('t-instant', instant && !was);
+  if (!was) m.dataset.open = 'false';        // сначала кружок: замер ниже заодно закрепит его — отдельный перерасчёт не нужен
+  m.innerHTML = `<div class="t-morph-menu">${tlMenuHtml(ctx)}</div><span class="t-morph-plus" aria-hidden="true">${ic('plus')}</span>`;
+  m.hidden = false;
+  // размер открытого меню — по содержимому; кружок стоит центром на курсоре, меню растёт туда, где есть место
+  const inner = m.firstElementChild, vw = innerWidth, vh = innerHeight, W = Math.min(340, vw - 16);
+  inner.style.width = W + 'px'; inner.style.height = 'auto'; const H = Math.min(inner.scrollHeight, vh - 16); inner.style.width = inner.style.height = '';
+  const toL = cx - 20 + W > vw - 8, toT = cy - 20 + H > vh - 8;
+  const ax = toL ? Math.min(vw - 8, Math.max(W + 8, cx + 20)) : Math.max(8, Math.min(vw - 8 - W, cx - 20)), ay = toT ? Math.min(vh - 8, Math.max(H + 8, cy + 20)) : Math.max(8, Math.min(vh - 8 - H, cy - 20));
+  m.dataset.ax = toL ? 'r' : 'l'; m.dataset.ay = toT ? 'b' : 't';
+  m.style.left = toL ? 'auto' : ax + 'px'; m.style.right = toL ? (vw - ax) + 'px' : 'auto'; m.style.top = toT ? 'auto' : ay + 'px'; m.style.bottom = toT ? (vh - ay) + 'px' : 'auto';
+  m.style.setProperty('--mw', W + 'px'); m.style.setProperty('--mh', H + 'px'); m.dataset.open = 'true';
+  if (sc) m.firstElementChild.scrollTop = sc;
+  // выбор эффекта: подложка переезжает к новому (в только что открытом меню переезжать неоткуда — стоит сразу)
+  if (typeof segInd === 'function') m.querySelectorAll('.m-fx').forEach((b, i) => segInd(b, 'm-fx' + i));
   drawTimeline();
-  const f = m.querySelector('button:not([disabled])'); if (f) f.focus();
+  const f = m.querySelector('button:not([disabled])'); if (f) f.focus({ preventScroll: true });
 }
-function tlMenuClose(refocus = true) { const st = tlState(), m = $('#tl-menu'); if (!m || m.hidden) return; if (typeof motionGhostOut === 'function' && tlLastInput !== 'key') motionGhostOut(m, { transform: 'scale(0.99)' }, 150); m.hidden = true; st.menu = null; st.menuIds = null; drawTimeline(); if (refocus) $('#tl-cv')?.focus(); }
+/** Закрытие — обратно в кружок у курсора; логика не ждёт: меню уже закрыто, кружок только доигрывает. */
+function tlMenuClose(refocus = true) {
+  const st = tlState(), m = $('#tl-menu'); if (!m || m.hidden || m.dataset.open !== 'true') return;
+  st.menu = null; st.menuIds = null; drawTimeline();
+  const instant = tlLastInput === 'key' || (typeof MOTION !== 'undefined' && MOTION.reduce);
+  m.classList.toggle('t-instant', instant); m.dataset.open = 'false'; m.style.pointerEvents = 'none';
+  clearTimeout(m._hide); if (instant) m.hidden = true; else m._hide = setTimeout(() => { if (m.dataset.open !== 'true') { m.hidden = true; m.style.pointerEvents = ''; } }, 270);
+  if (refocus) $('#tl-cv')?.focus();
+}
 function tlMenuAct(b) {
   const st = tlState(), ctx = st.menu, a = b.dataset.m, v = b.dataset.v; if (!ctx) return;
   const ids = ctx.ids || new Set(), keep = ['fx', 'g', 'vfx', 'vg', 'nudge'].includes(a);
@@ -4769,7 +4896,7 @@ function tlMenuAct(b) {
   else if (a === 'full') { tlMenuClose(false); tlSetFull(!st.full); return; }
   else if (a === 'undo') histUndo();
   else if (a === 'redo') histRedo();
-  if (keep && st.menu) { const sc = $('#tl-menu').scrollTop; tlMenuOpen(parseFloat($('#tl-menu').style.left), parseFloat($('#tl-menu').style.top), st.menu); $('#tl-menu').scrollTop = sc; const again = $('#tl-menu').querySelector(`[data-m="${a}"][data-v="${CSS.escape(v || '')}"]`); if (again) again.focus(); }
+  if (keep && st.menu) { tlMenuOpen(st.menuAt.x, st.menuAt.y, st.menu); const again = $('#tl-menu').querySelector(`[data-m="${a}"][data-v="${CSS.escape(v || '')}"]`); if (again) again.focus(); }
   else tlMenuClose();
 }
 /** Меню с клавиатуры: у выбранной реплики или в начале видимой части. */
@@ -4834,7 +4961,12 @@ function bindTimeline() {
       }
     }
     if (st.drag) {
-      const d = (e.clientX - st.drag.x0) / st.zoom; if (Math.abs(e.clientX - st.drag.x0) > 3) st.drag.moved = true;
+      const raw = (e.clientX - st.drag.x0) / st.zoom;
+      if (!st.drag.moved && Math.abs(e.clientX - st.drag.x0) > 3) { st.drag.moved = true; if (!TLFX.liftIds) tlLiftUp(st.drag.clips); }
+      // прилипание к краям соседних реплик, курсору и сценам; с Shift — свободно
+      const sn = e.shiftKey ? { d: raw, t: null } : tlSnap(st, raw), d = sn.d;
+      if (sn.t != null && sn.t !== st.drag.snapT) { try { navigator.vibrate && navigator.vibrate(4); } catch {} }
+      st.drag.snapT = d < st.drag.min || d > 60 ? null : sn.t;
       // упёрлась в соседнюю или в предел — не стоп, а резина: чем дальше тянешь, тем меньше идёт
       const rb = over => (typeof rubber === 'function' ? rubber(over * st.zoom, 90) : 0) / st.zoom;
       st.drag.delta = d < st.drag.min ? st.drag.min - rb(st.drag.min - d) : d > 60 ? 60 + rb(d - 60) : d;
@@ -4848,19 +4980,27 @@ function bindTimeline() {
     }
     else if (st.pan) { st.pan.hist.push({ t: performance.now(), x: e.clientX, y: 0 }); if (st.pan.hist.length > 8) st.pan.hist.shift(); st.scroll = st.pan.scroll0 - (e.clientX - st.pan.x0) / st.zoom; drawTimeline(); }
     else if (st.scrub) { const hit = tlHit(e); if (hit && hit.t != null) { tlSeek(hit.t); tlGrain(Math.max(0, hit.t)); } }
-    else { const hit = tlHit(e); e.target.style.cursor = hit && hit.clip ? 'grab' : hit && hit.ruler ? 'col-resize' : hit && hit.head ? 'pointer' : 'crosshair'; }
+    else {
+      const hit = tlHit(e); e.target.style.cursor = hit && hit.clip ? 'grab' : hit && hit.ruler ? 'col-resize' : hit && hit.head ? 'pointer' : 'crosshair';
+      // реплика под курсором мягко подсвечивается (только мышь и не во время прокрутки)
+      const hid = e.pointerType === 'mouse' && !(typeof scrolling === 'function' && scrolling()) && hit && hit.clip ? hit.clip.row.cue.id : null;
+      if (hid !== TLFX.hoverId) { TLFX.hoverId = hid; mvSet(TLFX.hover, 0); if (hid) mvTo(TLFX.hover, 1, { damping: 1, response: 0.14 }); else drawTimeline(); }
+    }
   });
   const up = () => {
     const st = tlState(); st.ovDrag = false;
     if (st.drag) {
       const d = st.drag; st.drag = null;
       const commit = Math.max(d.min, Math.min(60, d.delta)), over = d.delta - commit;
+      mvTo(TLFX.lift, 0, { damping: 0.55, response: 0.34 });                       // опускается с лёгким отскоком
+      if (d.moved && Math.abs(commit) >= 0.01 && TLFX.liftIds) tlPulse(TLFX.liftIds);  // и приземляется — кольцо расходится
       if (d.moved && Math.abs(over) > 0.005) tlSettle(d, over);
       if (d.moved && Math.abs(commit) >= 0.01) { if (!d.group) st.sel = new Set([d.clip.row.cue.id]); tlCommit(d.clips, commit, d.own); }
       else tlSelect([d.clip.row.cue.id]);
     }
     if (st.band) {
       const b = st.band; st.band = null;
+      if (Math.abs(b.x1 - b.x0) >= 4 || Math.abs(b.y1 - b.y0) >= 4) { TLFX.band = { x: Math.min(b.x0, b.x1), y: Math.min(b.y0, b.y1), w: Math.abs(b.x1 - b.x0), h: Math.abs(b.y1 - b.y0), m: mv(1, 0.02, TLFX.owner) }; mvTo(TLFX.band.m, 0, { damping: 1, response: 0.2 }); }
       if (Math.abs(b.x1 - b.x0) < 4 && Math.abs(b.y1 - b.y0) < 4) { if (b.toggle) { if (b.base.has(b.toggle)) st.sel.delete(b.toggle); else st.sel.add(b.toggle); } else if (!b.add) st.sel.clear(); }
       tlRefreshInfo();
     }
@@ -4876,6 +5016,7 @@ function bindTimeline() {
     }
     if (e.target.id === 'tl-cv' || e.target.id === 'tl-ov') up();
   };
+  host.addEventListener('pointerout', e => { if (e.target.id === 'tl-cv' && TLFX.hoverId) { TLFX.hoverId = null; drawTimeline(); } });
   host.addEventListener('pointerup', end);
   host.addEventListener('pointercancel', end);
   host.addEventListener('dblclick', e => { if (e.target.id !== 'tl-cv') return; const hit = tlHit(e); if (hit && hit.clip) tlSeek(hit.clip.row.at, true); });
@@ -4965,7 +5106,7 @@ function tlDragStart(clip, x0, alt) {
 /** Долгое нажатие пальцем: реплика «поднимается» (выделяется, телефон коротко вздрагивает) и дальше идёт за пальцем. */
 function tlLift(st) {
   const h = st.hold; if (!h) return; st.hold = null;
-  st.drag = tlDragStart(h.clip, h.x, false);
+  st.drag = tlDragStart(h.clip, h.x, false); tlLiftUp(st.drag.clips);
   if (!st.sel.has(h.clip.row.cue.id)) tlSelect([h.clip.row.cue.id]); else drawTimeline();
   try { navigator.vibrate && navigator.vibrate(8); } catch {}
 }
@@ -5081,7 +5222,7 @@ function motionInit() {
   tabIndicator(true);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { tabIndicator(true); railIndicator(true); });
   const tabs = document.querySelector('.tabs'); if (tabs && window.ResizeObserver) new ResizeObserver(() => tabIndicator(true)).observe(tabs);
-  initRail(); initAccordions(); initTabsDrag(); initToast(); initFileDrag();
+  initRail(); initAccordions(); segInit(); initTabsDrag(); initToast(); initFileDrag();
   if (typeof initTouch === 'function') { initTouch(); initTilt('.models', 7); }
   new MutationObserver(list => { for (const m of list) if (m.attributeName === 'hidden' && !m.target.hidden && m.oldValue != null) appear(m.target); })
     .observe(document.body, { attributes: true, attributeFilter: ['hidden'], attributeOldValue: true, subtree: true });
@@ -5099,8 +5240,8 @@ function appear(el) {
   if (el.id === 'prog') { cancelGhost(el); islandIn(el); return; }
   if (el.id === 'msg') { cancelGhost(el); toastReset(el); const dy = atTop(el) ? -22 : 22; mIn(el, { opacity: 0, transform: `translate(-50%, ${dy}px) scale(0.9)`, filter: 'blur(6px)' }, [0.7, 0.5], { rest: { transform: 'translate(-50%, 0px) scale(1)' } }); return; }
   if (el.classList.contains('sheetbox')) { sheetIn(el); return; }
-  if (el.id === 'tl-menu') { if (performance.now() - MOTION.kbd < 150) return; mIn(el, { opacity: 0, transform: 'scale(0.9)' }, [0.78, 0.34]); return; }
-  if (el.classList.contains('picker')) { mIn(el, { opacity: 0, transform: 'translateY(-6px) scale(0.98)', filter: 'blur(2px)' }, [0.85, 0.36]); staggerList([...el.children].slice(0, 8), 30); return; }
+  if (el.id === 'tl-menu') return;                                     // своё движение: кружок «+» вырастает в меню (timeline.js)
+  if (el.classList.contains('picker')) { foldIn(el); staggerList([...el.children].slice(0, 8), 30); return; }   // раздвигает строки, а не прыгает
   if (el.matches('section.card')) { if (MOTION.ready) mIn(el, { opacity: 0, transform: 'translateY(14px) scale(0.99)' }, [0.88, 0.5]); return; }   // большие поверхности — без размытия
   if (el.matches('[data-tabpane]')) { paneIn(el); return; }
 }
@@ -5430,6 +5571,76 @@ function replay(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.cla
 const plural = (n, a, b, c) => { const m = n % 100, k = n % 10; return m > 10 && m < 20 ? c : k === 1 ? a : k >= 2 && k <= 4 ? b : c; };
 /** Число в плашке: изменившиеся цифры въезжают снизу (transitions.dev: number pop-in). */
 function motionCount(el, key) { const out = el.querySelector('b') || el; out.dataset.num = 'pill:' + key; if (typeof numCheck === 'function') numCheck(out); }
+/** Раскрыть блок (список реплик, «другой кусок»): высота, отступы и прозрачность растут на пружине до видимой части
+ *  экрана (дальше — сразу, этого не видно), первые строки въезжают лесенкой. Соседи ниже отъезжают плавно, а не прыжком. */
+function foldBox(el) { const cs = getComputedStyle(el); return { paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom, marginTop: cs.marginTop }; }
+const FOLD0 = { height: '0px', paddingTop: '0px', paddingBottom: '0px', marginTop: '0px' };
+function foldIn(el, list) {
+  el.hidden = false; el._closing = false; el.getAnimations().forEach(a => a.cancel()); if (!mOK()) return;
+  const h = Math.min(el.offsetHeight, innerHeight * 0.85), sp = springEase(0.92, 0.46);
+  el.style.overflow = 'hidden';
+  const a = el.animate([{ ...FOLD0, opacity: 0.2 }, { ...foldBox(el), height: h + 'px', opacity: 1 }], { duration: sp.duration, easing: sp.easing });
+  a.onfinish = a.oncancel = () => { el.style.overflow = ''; };
+  if (list) staggerList([...list.querySelectorAll(':scope > .row, :scope > .scene')].slice(0, 9), 32);
+}
+/** Свернуть: уходит быстрее, чем приходил; логика не ждёт — блок уже закрыт, он только доигрывает. */
+function foldOut(el) {
+  if (!mOK() || el.hidden) { el.hidden = true; el._closing = false; return; }
+  const h = Math.min(el.offsetHeight, innerHeight * 0.85); el._closing = true; el.style.overflow = 'hidden';
+  const a = el.animate([{ ...foldBox(el), height: h + 'px', opacity: 1 }, { ...FOLD0, opacity: 0 }], { duration: 260, easing: EASE, fill: 'forwards' });
+  a.onfinish = () => { if (el._closing) { el.hidden = true; el._closing = false; } el.style.overflow = ''; a.cancel(); };
+}
+/** Скользящая подложка переключателя (transitions.dev: sliding tabs). В покое выбранная кнопка рисует себя сама —
+ *  ни замеров, ни слоёв. Щёлкнули другую — на время переезда появляется подложка: от места, где была прежняя
+ *  кнопка в момент нажатия, к новой, на пружинах; доехала — убирается. Группу перерисовали посреди переезда —
+ *  подложка продолжает в новой. С клавиатуры — сразу, без переезда. */
+const SEG = new Map();
+const segSel = on => on.dataset.f || on.dataset.preset || on.dataset.name || on.dataset.v || on.textContent;
+function segRect(box, el) { const b = box.getBoundingClientRect(), o = el.getBoundingClientRect(); return { x: o.left - b.left - box.clientLeft, y: o.top - b.top - box.clientTop, w: o.width, h: o.height }; }
+function segInit() {
+  document.addEventListener('pointerdown', e => {
+    const box = e.button > 0 ? null : e.target.closest && e.target.closest('[data-seg]'); if (!box) return;
+    const on = box.querySelector(':scope > button.on'), s = SEG.get(box.dataset.seg); if (!on || !s) return;
+    const run = s.run && s.run.live() ? s.run : null;
+    s.from = { ...(run ? { x: run.x.v, y: run.y.v, w: run.w.v, h: run.h.v } : segRect(box, on)), r: getComputedStyle(on).borderTopLeftRadius, sel: run ? s.runSel : segSel(on), t: performance.now() };
+  }, true);
+}
+function segAttach(box, run) {
+  let ind = box.querySelector(':scope > .seg-ind');
+  if (!ind) { ind = document.createElement('span'); ind.className = 'seg-ind'; ind.setAttribute('aria-hidden', 'true'); box.prepend(ind); }
+  ind.style.borderRadius = run.r; box.classList.add('seg'); run.el = ind; run.box = box; run.owner.render();
+}
+function segInd(box, key) {
+  if (!box) return; box.dataset.seg = key;
+  let s = SEG.get(key); if (!s) SEG.set(key, s = {});
+  s.box = box;                                                              // замер в кадре — по последней перерисовке
+  const on = box.querySelector(':scope > button.on'), sel = on ? segSel(on) : null, live = s.run && s.run.live();
+  if ((live || s.pending) && sel === s.runSel) { if (live) segAttach(box, s.run); return; }   // перерисовали посреди переезда
+  const from = s.from; s.from = null;
+  if (!on || !from || sel === from.sel || performance.now() - from.t > 1500 || !mOK() || !MOTION.ready) { if (live) segStop(s); s.pending = false; return; }
+  s.runSel = sel; s.pending = true;
+  requestAnimationFrame(() => {
+    s.pending = false; const box = s.box, on = box.querySelector(':scope > button.on');
+    if (!box.isConnected || !on || segSel(on) !== s.runSel || !on.getClientRects().length) return;
+    const to = segRect(box, on);
+    if (!s.run || !s.run.live()) {
+      const run = { r: from.r }, owner = { render() {
+        const el = run.el; if (!el || !el.isConnected) return;
+        if (!run.live()) { el.remove(); segOff(run.box); if (s.run === run) s.run = null; return; }
+        el.style.transform = `translate(${run.x.v.toFixed(2)}px, ${run.y.v.toFixed(2)}px)`; el.style.width = run.w.v.toFixed(2) + 'px'; el.style.height = run.h.v.toFixed(2) + 'px';
+      } };
+      run.owner = owner; run.x = mv(from.x, 0.05, owner); run.y = mv(from.y, 0.05, owner); run.w = mv(from.w, 0.05, owner); run.h = mv(from.h, 0.05, owner);
+      run.live = () => SPRING.live.has(run.x) || SPRING.live.has(run.y) || SPRING.live.has(run.w) || SPRING.live.has(run.h);
+      s.run = run;
+    }
+    const run = s.run; run.r = getComputedStyle(on).borderTopLeftRadius;
+    mvTo(run.x, to.x, { damping: 0.78, response: 0.36 }); mvTo(run.y, to.y, { damping: 0.86, response: 0.36 }); mvTo(run.w, to.w, { damping: 0.9, response: 0.36 }); mvTo(run.h, to.h, { damping: 0.9, response: 0.36 });
+    segAttach(box, run);
+  });
+}
+function segStop(s) { const run = s.run; s.run = null; if (!run) return; for (const k of ['x', 'y', 'w', 'h']) mvSet(run[k], run[k].v); if (run.el) run.el.remove(); if (run.box) segOff(run.box); }
+/** Подложка доехала — кнопка снова рисует себя сама, в тот же кадр и без перехода цвета (иначе фон мигнёт). */
+function segOff(box) { box.classList.remove('seg'); box.classList.add('seg-off'); requestAnimationFrame(() => requestAnimationFrame(() => box.classList.remove('seg-off'))); }
 /** Раскрывашка (transitions.dev: accordion): высота через grid-rows 0fr → 1fr на пружине, шеврон переворачивается. */
 function initAccordions() {
   document.addEventListener('click', e => {
@@ -6752,7 +6963,7 @@ function refreshMix() {
   const st = out.querySelector('.stat'); if (st) st.innerHTML = mixStatHtml(r);
   const ms = $('#mix-status'); if (ms) ms.innerHTML = mixStatusHtml(r);
   const sk = $('#tp-seek'); if (sk) sk.max = (r.out.length / C.SR).toFixed(1);
-  if ($('#tl-info')) $('#tl-info').innerHTML = tlInfoHtml(); tlRefreshBar();
+  if ($('#tl-info')) tlRefreshInfo(); tlRefreshBar();
   const note = $('#vg-note'); if (note) note.textContent = '';
   tpUi();
 }
@@ -6939,16 +7150,23 @@ function renderReview() {
   const sec = $('#review'), ready = S.matches.size > 0 || S.uploads.size > 0;
   sec.hidden = !ready; if (!ready) return;
   const c = counts();
+  // счётчики — кнопки: открывают список реплик сразу с нужным фильтром
   $('#rv-sum').innerHTML = `
-    <span class="pill ok" data-n="${c.ok + c.own}">найдено <b>${c.ok + c.own}</b></span>
-    <span class="pill check" data-n="${c.check}">проверить <b>${c.check}</b></span>
-    <span class="pill miss" data-n="${c.miss}">нет записи <b>${c.miss}</b></span>
-    ${c.none ? `<span class="pill none" data-n="${c.none}">роли без записей <b>${c.none}</b></span>` : ''}
-    ${c.slips ? `<span class="pill slips" data-n="${c.slips}">оговорки <b>${c.slips}</b></span>` : ''}`;
+    <button class="pill ok" data-f="all" data-n="${c.ok + c.own}" title="Показать все реплики">найдено <b>${c.ok + c.own}</b></button>
+    <button class="pill check" data-f="check" data-n="${c.check}" title="Показать те, что стоит проверить">проверить <b>${c.check}</b></button>
+    <button class="pill miss" data-f="miss" data-n="${c.miss}" title="Показать реплики без записи">нет записи <b>${c.miss}</b></button>
+    ${c.none ? `<button class="pill none" data-f="all" data-n="${c.none}">роли без записей <b>${c.none}</b></button>` : ''}
+    ${c.slips ? `<button class="pill slips" data-f="slips" data-n="${c.slips}" title="Показать оговорки">оговорки <b>${c.slips}</b></button>` : ''}`;
   if (typeof motionCount === 'function') $('#rv-sum').querySelectorAll('.pill').forEach(p => motionCount(p, p.classList[1]));
   if ($('#rv-rerec')) $('#rv-rerec').innerHTML = typeof rerecHtml === 'function' ? rerecHtml() : '';
   document.querySelectorAll('#rv-filter button').forEach(b => b.classList.toggle('on', b.dataset.f === S.filter));
   $('#dirs-t').checked = S.showDirs;
+  // список реплик свёрнут, пока его не откроют: не строится вовсе (337 строк — это сотни мс раскладки)
+  const tg = $('#rv-toggle'), fold = $('#rv-fold');
+  tg.setAttribute('aria-expanded', String(!!S.rvOpen)); tg.querySelector('.rv-t').textContent = S.rvOpen ? 'Свернуть реплики' : 'Показать все реплики';
+  tg.querySelector('.rv-n').textContent = String(S.P.cues.filter(q => q.type === 'line').length);
+  if (!S.rvOpen) { if (!fold._closing) fold.hidden = true; return; }
+  fold.hidden = false;
   const rows = [];
   let scene = null;
   for (const cue of S.P.cues) {
@@ -6969,6 +7187,17 @@ function renderReview() {
   }
   $('#rv-list').dataset.v = `${S.filter}|${S.showDirs}|${S.matches.size}`;
   setHtml($('#rv-list'), rows.join('') || '<p class="muted pad">Здесь пусто — под этот фильтр ничего не подходит.</p>');
+  if (typeof segInd === 'function') segInd($('#rv-filter'), 'rv-filter');
+}
+/** Раскрыть или свернуть список реплик. Снизу («Свернуть реплики» в конце списка) — сначала вернуться к началу. */
+function rvToggle(open, fromBottom) {
+  if (!!S.rvOpen === open) return;
+  const fold = $('#rv-fold');
+  if (open) { S.rvOpen = true; renderReview(); if (typeof foldIn === 'function') foldIn(fold, $('#rv-list')); return; }
+  const tg = $('#rv-toggle'), r = tg.getBoundingClientRect();
+  if (fromBottom && (r.top < 60 || r.bottom > innerHeight)) tg.scrollIntoView({ block: 'center' });
+  if (typeof foldOut === 'function') foldOut(fold); else fold.hidden = true;             // сначала уход (он держит блок), потом состояние
+  S.rvOpen = false; renderReview();
 }
 /** Заменить содержимое, только если оно правда другое: пересборка списка на 337 строк стоит сотни миллисекунд
  *  раскладки, а после многих действий (темп, громкость, сведение) сам список не меняется. */
@@ -7004,7 +7233,7 @@ function rowHtml(cue, st, hasFile) {
 }
 function openPicker(row, cue) {
   const box = row.querySelector('.picker');
-  if (!box.hidden) { box.hidden = true; return; }
+  if (!box.hidden && !box._closing) { if (typeof foldOut === 'function') foldOut(box); else box.hidden = true; return; }
   const spk = cue.type === 'line' ? cue.spk : null;
   const t = C.norm(cue.text);
   const cands = [];
@@ -7030,6 +7259,8 @@ function openPicker(row, cue) {
       onClick: e => { const b = e.target.closest('button'); if (!b || !b.dataset.act) return; rvAct(b, cue.id); if (b.dataset.act === 'take' || b.dataset.act === 'add') sheetClose(); } });
     return;
   }
+  // закрывался и его снова открыли — прервать уход и открыть заново с того же места
+  if (box._closing) { box._closing = false; box.getAnimations().forEach(a => a.cancel()); box.hidden = true; }
   box.innerHTML = html; box.hidden = false;
 }
 /** Кнопки реплики в разборе — из строки списка или из шторки «Другой кусок» на телефоне. */
@@ -7037,7 +7268,7 @@ function rvAct(b, id, row = null) {
   row = row || document.querySelector(`#rv-list .row[data-id="${CSS.escape(id)}"]`);
   const cue = S.P.cues.find(c => c.id === id), a = b.dataset.act; if (!cue) return;
   if (a === 'play') { if (playing && playing.btn === b) return stop(); const y = audioOfSource(sourceOf(cue)); if (y) play(y, b); return; }
-  if (a === 'pick') return openPicker(row, cue);
+  if (a === 'pick') return row && openPicker(row, cue);
   if (a === 'rec') return recOpen([cue]);
   if (a === 'cplay') { if (playing && playing.btn === b) return stop(); const cd = b.closest('.cand'); play(slice(S.files[+cd.dataset.f], +cd.dataset.a, +cd.dataset.b), b); return; }
   if (a === 'take' || a === 'add') {
@@ -7156,6 +7387,9 @@ function bind() {
   document.querySelectorAll('input[name=preset]').forEach(r => r.addEventListener('change', () => { S.preset = r.value; render(); }));
   $('#go').addEventListener('click', analyze);
   $('#rv-filter').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { S.filter = b.dataset.f; renderReview(); } });
+  $('#rv-sum').addEventListener('click', e => { const b = e.target.closest('button.pill'); if (!b) return; S.filter = b.dataset.f; if (S.rvOpen) renderReview(); else rvToggle(true); });
+  $('#rv-toggle').addEventListener('click', () => rvToggle(!S.rvOpen));
+  $('#rv-fold').addEventListener('click', e => { if (e.target.closest('[data-rv=close]')) rvToggle(false, true); });
   $('#dirs-t').addEventListener('change', e => { S.showDirs = e.target.checked; renderReview(); });
   $('#rv-rerec').addEventListener('click', e => { const r = e.target.closest('button[data-act=rec-spk]'); if (r) { recOpenFor(r.dataset.spk); return; } const b = e.target.closest('button[data-act=rerec]'); if (!b) return; const spk = b.dataset.spk || null;
     download(new Blob([rerecText(spk)], { type: 'text/plain;charset=utf-8' }), `дозапись${spk ? '-' + charName(spk) : ''}.txt`); });
@@ -7213,7 +7447,7 @@ function bind() {
 }
 
 // для проверки из консоли и автотестов
-window.montage = { S, C, PRESETS, play: (y, btn) => play(y, btn), stop: () => stop(), progress: (t, p) => progress(t, p), notify: t => notify(t), DECK: typeof DECK !== 'undefined' ? DECK : null, MOTION: typeof MOTION !== 'undefined' ? MOTION : null, audioLevel: () => audioLevel(), projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses, recOpenFor: k => recOpenFor(k), recOpen: l => recOpen(l), REC: typeof REC !== 'undefined' ? REC : null, srtText: () => srtText(), vttText: () => vttText(), subCues: () => subCues(), buildVideo: o => buildVideo(o), videoFormat: () => videoFormat(1280, 720, 24), slipDiff: (a, b) => slipDiff(a, b), slipOf: c => slipOf(c) };
+window.montage = { tlFx: () => ({ lift: +TLFX.lift.v.toFixed(3), liftIds: TLFX.liftIds && [...TLFX.liftIds], hoverId: TLFX.hoverId, hover: +TLFX.hover.v.toFixed(3), pulse: TLFX.pulse ? +TLFX.pulse.m.v.toFixed(3) : null, band: !!TLFX.band, snap: tlState().drag ? tlState().drag.snapT : undefined, delta: tlState().drag ? tlState().drag.delta : undefined }), S, C, PRESETS, play: (y, btn) => play(y, btn), stop: () => stop(), progress: (t, p) => progress(t, p), notify: t => notify(t), DECK: typeof DECK !== 'undefined' ? DECK : null, MOTION: typeof MOTION !== 'undefined' ? MOTION : null, audioLevel: () => audioLevel(), projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses, recOpenFor: k => recOpenFor(k), recOpen: l => recOpen(l), REC: typeof REC !== 'undefined' ? REC : null, srtText: () => srtText(), vttText: () => vttText(), subCues: () => subCues(), buildVideo: o => buildVideo(o), videoFormat: () => videoFormat(1280, 720, 24), slipDiff: (a, b) => slipDiff(a, b), slipOf: c => slipOf(c) };
 if (typeof fdrInit === 'function') fdrInit();
 if (typeof numInit === 'function') numInit();
 bind(); render();

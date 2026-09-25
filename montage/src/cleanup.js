@@ -453,7 +453,7 @@ function renderCleanup() {
   if (!S.cleanFile || !files.includes(S.cleanFile)) S.cleanFile = files[0];
   const f = S.cleanFile, c = cl(f);
   const tabs = `<div class="cl-files">${files.map(x => `<button class="ftab ${x === f ? 'on' : ''}" data-name="${esc(x.name)}">${esc(x.name)}${x.raw48 ? ` <i title="очищено">${ic('check')}</i>` : ''}</button>`).join('')}</div>`;
-  if (!c.A) { pane.innerHTML = tabs + `<p class="muted">${c.busy ? 'Смотрю, что с записью…' : 'Разбираю…'}</p>`; if (!c.busy) analyzeFile(f); return; }
+  if (!c.A) { pane.innerHTML = tabs + `<p class="muted">${c.busy ? 'Смотрю, что с записью…' : 'Разбираю…'}</p>`; if (typeof segInd === 'function') segInd(pane.querySelector('.cl-files'), 'cl-files'); if (!c.busy) analyzeFile(f); return; }
   const chain = c.chain, dur = srcOf(f).length / C.SR;
   const mods = MODULES.map(m => `
     <div class="mod ${chain[m.k].on ? 'on' : ''}">
@@ -488,6 +488,7 @@ function renderCleanup() {
       ${f.raw48 ? '<button class="ghost-b" data-act="revert">Вернуть оригинал</button><button class="ghost-b" data-act="wav">Скачать WAV</button>' : ''}
       <span class="muted small" id="cl-applied">${f.raw48 ? 'В сведение идёт обработанная версия. ' + (c.log ? c.log.join(' · ') : '') : 'Пока в сведение идёт оригинал.'}</span>
     </div>`;
+  if (typeof segInd === 'function') { segInd(pane.querySelector('.presets'), 'cl-presets'); segInd(pane.querySelector('.cl-files'), 'cl-files'); }
   requestAnimationFrame(() => { drawWave($('#cl-wave'), f); if (c.before && (c.sgBefore || SPEC_IMG.has(c.before))) drawSpec($('#cl-spec-a'), c.before, c.sgBefore); refreshPreviewUI(f); abButtons(); if (c.specOpen) drawSpecView(f); });
 }
 // ------------------------------------------------------------------ спектр всего файла с зумом

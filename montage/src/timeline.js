@@ -9,6 +9,24 @@
 // Использует S, $, esc, fmt, charName, colorOf, cssVar, saveEdits, remixSoon, voiceIds, TP, tpTime, tpSeek,
 // tpPlay, tpPause из app.js; histPush, histUndo, histRedo, histUi, tlFlash из history.js; C — ядро.
 const TL = { HEAD: 150, RULER: 22, PAD: 6, MAX_ZOOM: 400, OV: 30 };
+// Живые детали таймлайна на пружинах (spring.js): подъём взятой реплики, подсветка под курсором, пульс при
+// приземлении и выделении, гаснущая рамка. Всё рисуется в drawTimeline, пружины просят перерисовку сами.
+const TLFX = { liftIds: null, hoverId: null, pulse: null, band: null };
+TLFX.owner = { render() { drawTimeline(); if (TLFX.pulse && !SPRING.live.has(TLFX.pulse.m)) TLFX.pulse = null; if (TLFX.band && !SPRING.live.has(TLFX.band.m)) TLFX.band = null; if (TLFX.liftIds && TLFX.lift.v < 0.003 && !SPRING.live.has(TLFX.lift)) TLFX.liftIds = null; } };
+TLFX.lift = mv(0, 0.002, TLFX.owner); TLFX.hover = mv(0, 0.01, TLFX.owner);
+function tlLiftUp(clips) { TLFX.liftIds = new Set(clips.map(c => c.row.cue.id)); mvTo(TLFX.lift, 1, { damping: 0.7, response: 0.22 }); try { navigator.vibrate && navigator.vibrate(5); } catch {} }
+function tlPulse(ids) { if (!ids.size || ids.size > 60 || (typeof MOTION !== 'undefined' && (MOTION.reduce || !MOTION.ready))) return; TLFX.pulse = { ids: new Set(ids), m: mv(0, 0.004, TLFX.owner) }; mvTo(TLFX.pulse.m, 1, { damping: 1, response: 0.5 }); }
+/** Прилипание при перетаскивании: край реплики тянется к краю соседней (на любой дорожке), к курсору плеера и к
+ *  началу сцены, если до него меньше 7 px. Возвращает сдвиг с прилипанием и время, к которому прилипло. */
+function tlSnap(st, d) {
+  const dr = st.drag, c = dr.clip, tol = 7 / st.zoom, moving = x => dr.group ? dr.group.has(x.row.cue.id) : dr.own ? x === c : x.idx >= c.idx;
+  const edges = [c.row.at, c.row.at + c.row.dur]; let best = null;
+  const test = T => { for (const e of edges) { const diff = T - (e + d); if (Math.abs(diff) < tol && (!best || Math.abs(diff) < Math.abs(best.diff))) best = { diff, t: T }; } };
+  test(tpTime()); for (const sc of (S.result && S.result.lay.scenes) || []) test(sc.start);
+  const t0 = st.scroll - 5, t1 = st.scroll + ((st.W || 800) - TL.HEAD) / st.zoom + 5;
+  for (const x of tlAllClips()) { if (x.fixed || x.idx < 0 || moving(x)) continue; const a = x.row.at, b = a + x.row.dur; if (b < t0 || a > t1) continue; test(a); test(b); }
+  return best ? { d: d + best.diff, t: best.t } : { d, t: null };
+}
 let tlLastInput = 'pointer';                           // чем закрыли меню: с клавиатуры — без анимации
 addEventListener('keydown', () => { tlLastInput = 'key'; }, true); addEventListener('pointerdown', () => { tlLastInput = 'pointer'; }, true);
 function tlState() {
@@ -80,16 +98,25 @@ function drawTimeline() {
   const settle = st.settle && st.settle.m.v, sAt = clip => st.settle && (st.settle.ids ? st.settle.ids.has(clip.row.cue.id) : st.settle.own ? clip.idx === st.settle.idx : clip.idx >= st.settle.idx) ? settle : 0;
   const shift = clip => !drag || !drag.moved ? (settle ? sAt(clip) : 0) : multi ? (drag.group.has(clip.row.cue.id) ? drag.delta : 0) : (drag.own ? clip.idx === drag.clip.idx : clip.idx >= drag.clip.idx) ? drag.delta : 0;
   g.save(); g.beginPath(); g.rect(TL.HEAD, TL.RULER, areaW, H - TL.RULER); g.clip();
-  const pad = Math.max(5, Math.round(ROW * 0.14));
+  const pad = Math.max(5, Math.round(ROW * 0.14)), FX = TLFX, lift = FX.lift.v, pk = FX.pulse ? FX.pulse.m.v : 0;
   tracks.forEach((tr, i) => {
-    const y = TL.RULER + i * ROW + pad, h = ROW - 2 * pad, [col, soft] = tlColor(tr);
+    const y0 = TL.RULER + i * ROW + pad, h0 = ROW - 2 * pad, [col, soft] = tlColor(tr);
     for (const clip of tr.clips) {
       const at = clip.row.at + shift(clip), x0 = tlX(st, at), w = Math.max(3, clip.row.dur * st.zoom);
       if (x0 + w < TL.HEAD || x0 > W) continue;
-      const sel = st.sel.has(clip.row.cue.id), menu = st.menuIds && st.menuIds.has(clip.row.cue.id);
+      const id = clip.row.cue.id, sel = st.sel.has(id), menu = st.menuIds && st.menuIds.has(id);
+      // взятая реплика приподнята: выше, чуть больше и с тенью; отпущенная — опускается на пружине
+      const L = lift > 0.002 && FX.liftIds && FX.liftIds.has(id) ? lift : 0, y = y0 - 3 * L, h = h0 + 2 * L;
+      if (L) { g.save(); g.shadowColor = `rgba(0,0,0,${(0.38 * L).toFixed(3)})`; g.shadowBlur = 16 * L; g.shadowOffsetY = 6 * L; }
       g.beginPath(); g.roundRect(x0, y, w, h, 5);
-      if (clip.kind === 'pause') { g.setLineDash([4, 3]); g.strokeStyle = sel ? ink : col; g.lineWidth = sel ? 2 : 1; g.stroke(); g.setLineDash([]); g.lineWidth = 1; }
-      else { g.fillStyle = sel ? col : soft; g.globalAlpha = clip.kind === 'bed' ? 0.55 : sel ? 0.35 : 1; g.fill(); g.globalAlpha = 1; g.strokeStyle = sel || menu ? ink : col; g.lineWidth = sel ? 2 : 1; g.stroke(); g.lineWidth = 1; }
+      if (clip.kind === 'pause') { if (L) g.restore(); g.setLineDash([4, 3]); g.strokeStyle = sel ? ink : col; g.lineWidth = sel ? 2 : 1; g.stroke(); g.setLineDash([]); g.lineWidth = 1; }
+      else {
+        if (L) { g.fillStyle = soft; g.fill(); g.restore(); }            // непрозрачная подложка отбрасывает тень, контур и выделение — уже без неё
+        g.fillStyle = sel ? col : soft; g.globalAlpha = clip.kind === 'bed' ? 0.55 : sel ? 0.35 : 1; g.fill(); g.globalAlpha = 1;
+        g.strokeStyle = sel || menu || L ? ink : col; g.lineWidth = sel || L ? 2 : 1; g.stroke(); g.lineWidth = 1;
+      }
+      if (FX.hoverId === id && FX.hover.v > 0.01 && !L) { g.fillStyle = ink; g.globalAlpha = 0.07 * FX.hover.v; g.fill(); g.globalAlpha = 0.5 * FX.hover.v; g.strokeStyle = ink; g.lineWidth = 1.5; g.stroke(); g.globalAlpha = 1; g.lineWidth = 1; }
+      if (pk && FX.pulse.ids.has(id)) { const e = 7 * pk; g.beginPath(); g.roundRect(x0 - e, y - e, w + 2 * e, h + 2 * e, 5 + e); g.strokeStyle = accent; g.globalAlpha = (1 - pk) * 0.9; g.lineWidth = 2; g.stroke(); g.globalAlpha = 1; g.lineWidth = 1; }
       if (clip.peaks && w >= 24) {
         g.strokeStyle = col; g.globalAlpha = 0.55; g.beginPath();
         const n = clip.peaks.length, mid = y + h / 2;
@@ -101,9 +128,18 @@ function drawTimeline() {
     }
   });
   g.restore();
+  const bgh = TLFX.band; if (!st.band && bgh && bgh.m.v > 0.02) { g.globalAlpha = bgh.m.v; g.fillStyle = accent; g.globalAlpha = 0.12 * bgh.m.v; g.fillRect(bgh.x, bgh.y, bgh.w, bgh.h); g.globalAlpha = 0.8 * bgh.m.v; g.strokeStyle = accent; g.setLineDash([4, 3]); g.strokeRect(bgh.x + 0.5, bgh.y + 0.5, bgh.w, bgh.h); g.setLineDash([]); g.globalAlpha = 1; }   // рамка гаснет, а не пропадает
   if (st.band) { const b = st.band, x = Math.min(b.x0, b.x1), y = Math.min(b.y0, b.y1); g.fillStyle = accent; g.globalAlpha = 0.12; g.fillRect(x, y, Math.abs(b.x1 - b.x0), Math.abs(b.y1 - b.y0)); g.globalAlpha = 1; g.strokeStyle = accent; g.setLineDash([4, 3]); g.strokeRect(x + 0.5, y + 0.5, Math.abs(b.x1 - b.x0), Math.abs(b.y1 - b.y0)); g.setLineDash([]); }
   tlHeadUpdate();
-  if (drag && drag.moved) { g.fillStyle = ink; g.font = '600 12px ' + cssVar('--mono'); g.textAlign = 'right'; g.fillText(`${drag.delta > 0 ? '+' : ''}${drag.delta.toFixed(2)} с${drag.group ? ` (${drag.group.size} реплик)` : drag.own ? ' (только эта)' : ''}`, W - 8, 9); g.textAlign = 'left'; }
+  if (drag && drag.moved) {
+    // прилипание: пунктир там, к чему прилипло (край соседней реплики, курсор, начало сцены)
+    if (drag.snapT != null) { const x = Math.round(tlX(st, drag.snapT)) + 0.5; g.save(); g.strokeStyle = accent; g.lineWidth = 1.5; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(x, TL.RULER); g.lineTo(x, H); g.stroke(); g.setLineDash([]); g.fillStyle = accent; g.beginPath(); g.moveTo(x - 5, TL.RULER - 7); g.lineTo(x + 5, TL.RULER - 7); g.lineTo(x, TL.RULER); g.closePath(); g.fill(); g.restore(); }
+    // бейдж сдвига — у самой реплики, а не в углу
+    const c = drag.clip, ti = tracks.findIndex(t => t.clips.includes(c)), bx = tlX(st, c.row.at + drag.delta), by = TL.RULER + Math.max(0, ti) * ROW + pad - 3 * lift;
+    const txt = `${drag.delta > 0.004 ? '+' : drag.delta < -0.004 ? '−' : ''}${Math.abs(drag.delta).toFixed(2).replace('.', ',')} с${drag.group ? ` · ${drag.group.size} реплик` : drag.own ? ' · только эта' : ''}${drag.snapT != null ? ' · прилипла' : ''}`;
+    g.font = '600 11px ' + cssVar('--mono'); const tw = g.measureText(txt).width + 16, px = Math.max(TL.HEAD + 2, Math.min(W - tw - 2, bx)), py = by - 24 < TL.RULER + 2 ? by + (ROW - 2 * pad) + 6 : by - 24;
+    g.globalAlpha = Math.min(1, 0.3 + lift); g.fillStyle = ink; g.beginPath(); g.roundRect(px, py, tw, 19, 9.5); g.fill(); g.fillStyle = surface; g.textBaseline = 'middle'; g.textAlign = 'left'; g.fillText(txt, px + 8, py + 10); g.globalAlpha = 1;
+  }
   st.W = W; st.H = H;
   drawOverview();
 }
@@ -221,9 +257,13 @@ function tlBarHtml() {
     <div class="tl-group"><button class="ghost-b tiny ${st.own ? 'on' : ''}" data-act="tl-own" title="Двигать только выбранную реплику, не сдвигая остальные" aria-pressed="${st.own}">только эта реплика</button>${n ? `<button class="ghost-b tiny" data-act="tl-reset-all">сбросить все сдвиги (${n})</button>` : ''}</div>
     <button class="ghost-b tl-fullbtn" data-act="tl-full" title="${st.full ? 'Свернуть (Esc)' : 'Таймлайн на весь экран (F)'}">${st.full ? ic('collapse') + 'Свернуть' : ic('expand') + 'На весь экран'}</button>`;
 }
-function tlRefreshInfo() { const el = $('#tl-info'); if (el) el.innerHTML = tlInfoHtml(); drawTimeline(); }
+function tlRefreshInfo() {
+  const el = $('#tl-info');
+  if (el) { const html = tlInfoHtml(); if (el._html !== html) { const swap = el._html != null && !tlState().drag; el._html = html; el.innerHTML = html; if (swap && typeof mIn === 'function' && typeof MOTION !== 'undefined' && MOTION.ready) mIn(el, { opacity: 0.35, transform: 'translateY(3px)' }, [1, 0.26]); } }
+  drawTimeline();
+}
 function tlRefreshBar() { const el = $('.tl-bar'); if (el) el.innerHTML = tlBarHtml(); histUi(); }
-function tlSelect(ids, add = false) { const st = tlState(); if (!add) st.sel.clear(); for (const id of ids) st.sel.add(id); tlRefreshInfo(); }
+function tlSelect(ids, add = false) { const st = tlState(), was = new Set(st.sel); if (!add) st.sel.clear(); for (const id of ids) st.sel.add(id); tlPulse(new Set([...st.sel].filter(id => !was.has(id)))); tlRefreshInfo(); }
 /** Курсор плеера — отдельный слой поверх холста: двигается каждый кадр, холст не перерисовывается. */
 function tlHeadUpdate() {
   const el = $('#mix-out .tl-head'), st = tlState(); if (!el || !S.result || !S.result.out) return;
@@ -286,17 +326,42 @@ function tlMenuHtml(ctx) {
     ${n ? `<button role="menuitem" data-m="clear"><span>Снять выделение</span>${kbd('Esc')}</button>` : ''}
     <button role="menuitem" data-m="full"><span>${tlState().full ? 'Свернуть таймлайн' : 'Таймлайн на весь экран'}</span>${kbd(tlState().full ? 'Esc' : 'F')}</button>${hist}`;
 }
+/** Меню по правому щелчку (transitions.dev: plus to menu morph): у курсора появляется кружок «+», «+» уезжает внутрь
+ *  и поворачивается в «×», а кружок вырастает в панель — в ту сторону, где есть место. Уже открытое меню при
+ *  смене содержимого (эффект, громкость) только меняет размер. С клавиатуры и при «меньше движения» — сразу. */
 function tlMenuOpen(cx, cy, ctx) {
   const st = tlState(), m = $('#tl-menu'); if (!m) return;
-  st.menu = ctx; st.menuIds = ctx.ids || null;
-  m.innerHTML = tlMenuHtml(ctx); m.hidden = false;
-  const r = m.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight;
-  const left = Math.max(8, Math.min(cx, vw - r.width - 8)), top = Math.max(8, Math.min(cy, vh - r.height - 8));
-  m.style.left = left + 'px'; m.style.top = top + 'px'; m.style.setProperty('--origin', `${Math.max(0, Math.min(r.width, cx - left)).toFixed(0)}px ${Math.max(0, Math.min(r.height, cy - top)).toFixed(0)}px`);
+  const was = !m.hidden && m.dataset.open === 'true', sc = was ? (m.querySelector('.t-morph-menu') || {}).scrollTop || 0 : 0;
+  st.menu = ctx; st.menuIds = ctx.ids || null; st.menuAt = { x: cx, y: cy };
+  clearTimeout(m._hide); m.style.pointerEvents = '';
+  const instant = tlLastInput === 'key' || (typeof MOTION !== 'undefined' && (MOTION.reduce || performance.now() - MOTION.kbd < 150));
+  m.classList.add('t-morph'); m.classList.toggle('t-instant', instant && !was);
+  if (!was) m.dataset.open = 'false';        // сначала кружок: замер ниже заодно закрепит его — отдельный перерасчёт не нужен
+  m.innerHTML = `<div class="t-morph-menu">${tlMenuHtml(ctx)}</div><span class="t-morph-plus" aria-hidden="true">${ic('plus')}</span>`;
+  m.hidden = false;
+  // размер открытого меню — по содержимому; кружок стоит центром на курсоре, меню растёт туда, где есть место
+  const inner = m.firstElementChild, vw = innerWidth, vh = innerHeight, W = Math.min(340, vw - 16);
+  inner.style.width = W + 'px'; inner.style.height = 'auto'; const H = Math.min(inner.scrollHeight, vh - 16); inner.style.width = inner.style.height = '';
+  const toL = cx - 20 + W > vw - 8, toT = cy - 20 + H > vh - 8;
+  const ax = toL ? Math.min(vw - 8, Math.max(W + 8, cx + 20)) : Math.max(8, Math.min(vw - 8 - W, cx - 20)), ay = toT ? Math.min(vh - 8, Math.max(H + 8, cy + 20)) : Math.max(8, Math.min(vh - 8 - H, cy - 20));
+  m.dataset.ax = toL ? 'r' : 'l'; m.dataset.ay = toT ? 'b' : 't';
+  m.style.left = toL ? 'auto' : ax + 'px'; m.style.right = toL ? (vw - ax) + 'px' : 'auto'; m.style.top = toT ? 'auto' : ay + 'px'; m.style.bottom = toT ? (vh - ay) + 'px' : 'auto';
+  m.style.setProperty('--mw', W + 'px'); m.style.setProperty('--mh', H + 'px'); m.dataset.open = 'true';
+  if (sc) m.firstElementChild.scrollTop = sc;
+  // выбор эффекта: подложка переезжает к новому (в только что открытом меню переезжать неоткуда — стоит сразу)
+  if (typeof segInd === 'function') m.querySelectorAll('.m-fx').forEach((b, i) => segInd(b, 'm-fx' + i));
   drawTimeline();
-  const f = m.querySelector('button:not([disabled])'); if (f) f.focus();
+  const f = m.querySelector('button:not([disabled])'); if (f) f.focus({ preventScroll: true });
 }
-function tlMenuClose(refocus = true) { const st = tlState(), m = $('#tl-menu'); if (!m || m.hidden) return; if (typeof motionGhostOut === 'function' && tlLastInput !== 'key') motionGhostOut(m, { transform: 'scale(0.99)' }, 150); m.hidden = true; st.menu = null; st.menuIds = null; drawTimeline(); if (refocus) $('#tl-cv')?.focus(); }
+/** Закрытие — обратно в кружок у курсора; логика не ждёт: меню уже закрыто, кружок только доигрывает. */
+function tlMenuClose(refocus = true) {
+  const st = tlState(), m = $('#tl-menu'); if (!m || m.hidden || m.dataset.open !== 'true') return;
+  st.menu = null; st.menuIds = null; drawTimeline();
+  const instant = tlLastInput === 'key' || (typeof MOTION !== 'undefined' && MOTION.reduce);
+  m.classList.toggle('t-instant', instant); m.dataset.open = 'false'; m.style.pointerEvents = 'none';
+  clearTimeout(m._hide); if (instant) m.hidden = true; else m._hide = setTimeout(() => { if (m.dataset.open !== 'true') { m.hidden = true; m.style.pointerEvents = ''; } }, 270);
+  if (refocus) $('#tl-cv')?.focus();
+}
 function tlMenuAct(b) {
   const st = tlState(), ctx = st.menu, a = b.dataset.m, v = b.dataset.v; if (!ctx) return;
   const ids = ctx.ids || new Set(), keep = ['fx', 'g', 'vfx', 'vg', 'nudge'].includes(a);
@@ -314,7 +379,7 @@ function tlMenuAct(b) {
   else if (a === 'full') { tlMenuClose(false); tlSetFull(!st.full); return; }
   else if (a === 'undo') histUndo();
   else if (a === 'redo') histRedo();
-  if (keep && st.menu) { const sc = $('#tl-menu').scrollTop; tlMenuOpen(parseFloat($('#tl-menu').style.left), parseFloat($('#tl-menu').style.top), st.menu); $('#tl-menu').scrollTop = sc; const again = $('#tl-menu').querySelector(`[data-m="${a}"][data-v="${CSS.escape(v || '')}"]`); if (again) again.focus(); }
+  if (keep && st.menu) { tlMenuOpen(st.menuAt.x, st.menuAt.y, st.menu); const again = $('#tl-menu').querySelector(`[data-m="${a}"][data-v="${CSS.escape(v || '')}"]`); if (again) again.focus(); }
   else tlMenuClose();
 }
 /** Меню с клавиатуры: у выбранной реплики или в начале видимой части. */
@@ -379,7 +444,12 @@ function bindTimeline() {
       }
     }
     if (st.drag) {
-      const d = (e.clientX - st.drag.x0) / st.zoom; if (Math.abs(e.clientX - st.drag.x0) > 3) st.drag.moved = true;
+      const raw = (e.clientX - st.drag.x0) / st.zoom;
+      if (!st.drag.moved && Math.abs(e.clientX - st.drag.x0) > 3) { st.drag.moved = true; if (!TLFX.liftIds) tlLiftUp(st.drag.clips); }
+      // прилипание к краям соседних реплик, курсору и сценам; с Shift — свободно
+      const sn = e.shiftKey ? { d: raw, t: null } : tlSnap(st, raw), d = sn.d;
+      if (sn.t != null && sn.t !== st.drag.snapT) { try { navigator.vibrate && navigator.vibrate(4); } catch {} }
+      st.drag.snapT = d < st.drag.min || d > 60 ? null : sn.t;
       // упёрлась в соседнюю или в предел — не стоп, а резина: чем дальше тянешь, тем меньше идёт
       const rb = over => (typeof rubber === 'function' ? rubber(over * st.zoom, 90) : 0) / st.zoom;
       st.drag.delta = d < st.drag.min ? st.drag.min - rb(st.drag.min - d) : d > 60 ? 60 + rb(d - 60) : d;
@@ -393,19 +463,27 @@ function bindTimeline() {
     }
     else if (st.pan) { st.pan.hist.push({ t: performance.now(), x: e.clientX, y: 0 }); if (st.pan.hist.length > 8) st.pan.hist.shift(); st.scroll = st.pan.scroll0 - (e.clientX - st.pan.x0) / st.zoom; drawTimeline(); }
     else if (st.scrub) { const hit = tlHit(e); if (hit && hit.t != null) { tlSeek(hit.t); tlGrain(Math.max(0, hit.t)); } }
-    else { const hit = tlHit(e); e.target.style.cursor = hit && hit.clip ? 'grab' : hit && hit.ruler ? 'col-resize' : hit && hit.head ? 'pointer' : 'crosshair'; }
+    else {
+      const hit = tlHit(e); e.target.style.cursor = hit && hit.clip ? 'grab' : hit && hit.ruler ? 'col-resize' : hit && hit.head ? 'pointer' : 'crosshair';
+      // реплика под курсором мягко подсвечивается (только мышь и не во время прокрутки)
+      const hid = e.pointerType === 'mouse' && !(typeof scrolling === 'function' && scrolling()) && hit && hit.clip ? hit.clip.row.cue.id : null;
+      if (hid !== TLFX.hoverId) { TLFX.hoverId = hid; mvSet(TLFX.hover, 0); if (hid) mvTo(TLFX.hover, 1, { damping: 1, response: 0.14 }); else drawTimeline(); }
+    }
   });
   const up = () => {
     const st = tlState(); st.ovDrag = false;
     if (st.drag) {
       const d = st.drag; st.drag = null;
       const commit = Math.max(d.min, Math.min(60, d.delta)), over = d.delta - commit;
+      mvTo(TLFX.lift, 0, { damping: 0.55, response: 0.34 });                       // опускается с лёгким отскоком
+      if (d.moved && Math.abs(commit) >= 0.01 && TLFX.liftIds) tlPulse(TLFX.liftIds);  // и приземляется — кольцо расходится
       if (d.moved && Math.abs(over) > 0.005) tlSettle(d, over);
       if (d.moved && Math.abs(commit) >= 0.01) { if (!d.group) st.sel = new Set([d.clip.row.cue.id]); tlCommit(d.clips, commit, d.own); }
       else tlSelect([d.clip.row.cue.id]);
     }
     if (st.band) {
       const b = st.band; st.band = null;
+      if (Math.abs(b.x1 - b.x0) >= 4 || Math.abs(b.y1 - b.y0) >= 4) { TLFX.band = { x: Math.min(b.x0, b.x1), y: Math.min(b.y0, b.y1), w: Math.abs(b.x1 - b.x0), h: Math.abs(b.y1 - b.y0), m: mv(1, 0.02, TLFX.owner) }; mvTo(TLFX.band.m, 0, { damping: 1, response: 0.2 }); }
       if (Math.abs(b.x1 - b.x0) < 4 && Math.abs(b.y1 - b.y0) < 4) { if (b.toggle) { if (b.base.has(b.toggle)) st.sel.delete(b.toggle); else st.sel.add(b.toggle); } else if (!b.add) st.sel.clear(); }
       tlRefreshInfo();
     }
@@ -421,6 +499,7 @@ function bindTimeline() {
     }
     if (e.target.id === 'tl-cv' || e.target.id === 'tl-ov') up();
   };
+  host.addEventListener('pointerout', e => { if (e.target.id === 'tl-cv' && TLFX.hoverId) { TLFX.hoverId = null; drawTimeline(); } });
   host.addEventListener('pointerup', end);
   host.addEventListener('pointercancel', end);
   host.addEventListener('dblclick', e => { if (e.target.id !== 'tl-cv') return; const hit = tlHit(e); if (hit && hit.clip) tlSeek(hit.clip.row.at, true); });
@@ -510,7 +589,7 @@ function tlDragStart(clip, x0, alt) {
 /** Долгое нажатие пальцем: реплика «поднимается» (выделяется, телефон коротко вздрагивает) и дальше идёт за пальцем. */
 function tlLift(st) {
   const h = st.hold; if (!h) return; st.hold = null;
-  st.drag = tlDragStart(h.clip, h.x, false);
+  st.drag = tlDragStart(h.clip, h.x, false); tlLiftUp(st.drag.clips);
   if (!st.sel.has(h.clip.row.cue.id)) tlSelect([h.clip.row.cue.id]); else drawTimeline();
   try { navigator.vibrate && navigator.vibrate(8); } catch {}
 }

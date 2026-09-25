@@ -31,7 +31,7 @@ function motionInit() {
   tabIndicator(true);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { tabIndicator(true); railIndicator(true); });
   const tabs = document.querySelector('.tabs'); if (tabs && window.ResizeObserver) new ResizeObserver(() => tabIndicator(true)).observe(tabs);
-  initRail(); initAccordions(); initTabsDrag(); initToast(); initFileDrag();
+  initRail(); initAccordions(); segInit(); initTabsDrag(); initToast(); initFileDrag();
   if (typeof initTouch === 'function') { initTouch(); initTilt('.models', 7); }
   new MutationObserver(list => { for (const m of list) if (m.attributeName === 'hidden' && !m.target.hidden && m.oldValue != null) appear(m.target); })
     .observe(document.body, { attributes: true, attributeFilter: ['hidden'], attributeOldValue: true, subtree: true });
@@ -49,8 +49,8 @@ function appear(el) {
   if (el.id === 'prog') { cancelGhost(el); islandIn(el); return; }
   if (el.id === 'msg') { cancelGhost(el); toastReset(el); const dy = atTop(el) ? -22 : 22; mIn(el, { opacity: 0, transform: `translate(-50%, ${dy}px) scale(0.9)`, filter: 'blur(6px)' }, [0.7, 0.5], { rest: { transform: 'translate(-50%, 0px) scale(1)' } }); return; }
   if (el.classList.contains('sheetbox')) { sheetIn(el); return; }
-  if (el.id === 'tl-menu') { if (performance.now() - MOTION.kbd < 150) return; mIn(el, { opacity: 0, transform: 'scale(0.9)' }, [0.78, 0.34]); return; }
-  if (el.classList.contains('picker')) { mIn(el, { opacity: 0, transform: 'translateY(-6px) scale(0.98)', filter: 'blur(2px)' }, [0.85, 0.36]); staggerList([...el.children].slice(0, 8), 30); return; }
+  if (el.id === 'tl-menu') return;                                     // своё движение: кружок «+» вырастает в меню (timeline.js)
+  if (el.classList.contains('picker')) { foldIn(el); staggerList([...el.children].slice(0, 8), 30); return; }   // раздвигает строки, а не прыгает
   if (el.matches('section.card')) { if (MOTION.ready) mIn(el, { opacity: 0, transform: 'translateY(14px) scale(0.99)' }, [0.88, 0.5]); return; }   // большие поверхности — без размытия
   if (el.matches('[data-tabpane]')) { paneIn(el); return; }
 }
@@ -380,6 +380,76 @@ function replay(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.cla
 const plural = (n, a, b, c) => { const m = n % 100, k = n % 10; return m > 10 && m < 20 ? c : k === 1 ? a : k >= 2 && k <= 4 ? b : c; };
 /** Число в плашке: изменившиеся цифры въезжают снизу (transitions.dev: number pop-in). */
 function motionCount(el, key) { const out = el.querySelector('b') || el; out.dataset.num = 'pill:' + key; if (typeof numCheck === 'function') numCheck(out); }
+/** Раскрыть блок (список реплик, «другой кусок»): высота, отступы и прозрачность растут на пружине до видимой части
+ *  экрана (дальше — сразу, этого не видно), первые строки въезжают лесенкой. Соседи ниже отъезжают плавно, а не прыжком. */
+function foldBox(el) { const cs = getComputedStyle(el); return { paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom, marginTop: cs.marginTop }; }
+const FOLD0 = { height: '0px', paddingTop: '0px', paddingBottom: '0px', marginTop: '0px' };
+function foldIn(el, list) {
+  el.hidden = false; el._closing = false; el.getAnimations().forEach(a => a.cancel()); if (!mOK()) return;
+  const h = Math.min(el.offsetHeight, innerHeight * 0.85), sp = springEase(0.92, 0.46);
+  el.style.overflow = 'hidden';
+  const a = el.animate([{ ...FOLD0, opacity: 0.2 }, { ...foldBox(el), height: h + 'px', opacity: 1 }], { duration: sp.duration, easing: sp.easing });
+  a.onfinish = a.oncancel = () => { el.style.overflow = ''; };
+  if (list) staggerList([...list.querySelectorAll(':scope > .row, :scope > .scene')].slice(0, 9), 32);
+}
+/** Свернуть: уходит быстрее, чем приходил; логика не ждёт — блок уже закрыт, он только доигрывает. */
+function foldOut(el) {
+  if (!mOK() || el.hidden) { el.hidden = true; el._closing = false; return; }
+  const h = Math.min(el.offsetHeight, innerHeight * 0.85); el._closing = true; el.style.overflow = 'hidden';
+  const a = el.animate([{ ...foldBox(el), height: h + 'px', opacity: 1 }, { ...FOLD0, opacity: 0 }], { duration: 260, easing: EASE, fill: 'forwards' });
+  a.onfinish = () => { if (el._closing) { el.hidden = true; el._closing = false; } el.style.overflow = ''; a.cancel(); };
+}
+/** Скользящая подложка переключателя (transitions.dev: sliding tabs). В покое выбранная кнопка рисует себя сама —
+ *  ни замеров, ни слоёв. Щёлкнули другую — на время переезда появляется подложка: от места, где была прежняя
+ *  кнопка в момент нажатия, к новой, на пружинах; доехала — убирается. Группу перерисовали посреди переезда —
+ *  подложка продолжает в новой. С клавиатуры — сразу, без переезда. */
+const SEG = new Map();
+const segSel = on => on.dataset.f || on.dataset.preset || on.dataset.name || on.dataset.v || on.textContent;
+function segRect(box, el) { const b = box.getBoundingClientRect(), o = el.getBoundingClientRect(); return { x: o.left - b.left - box.clientLeft, y: o.top - b.top - box.clientTop, w: o.width, h: o.height }; }
+function segInit() {
+  document.addEventListener('pointerdown', e => {
+    const box = e.button > 0 ? null : e.target.closest && e.target.closest('[data-seg]'); if (!box) return;
+    const on = box.querySelector(':scope > button.on'), s = SEG.get(box.dataset.seg); if (!on || !s) return;
+    const run = s.run && s.run.live() ? s.run : null;
+    s.from = { ...(run ? { x: run.x.v, y: run.y.v, w: run.w.v, h: run.h.v } : segRect(box, on)), r: getComputedStyle(on).borderTopLeftRadius, sel: run ? s.runSel : segSel(on), t: performance.now() };
+  }, true);
+}
+function segAttach(box, run) {
+  let ind = box.querySelector(':scope > .seg-ind');
+  if (!ind) { ind = document.createElement('span'); ind.className = 'seg-ind'; ind.setAttribute('aria-hidden', 'true'); box.prepend(ind); }
+  ind.style.borderRadius = run.r; box.classList.add('seg'); run.el = ind; run.box = box; run.owner.render();
+}
+function segInd(box, key) {
+  if (!box) return; box.dataset.seg = key;
+  let s = SEG.get(key); if (!s) SEG.set(key, s = {});
+  s.box = box;                                                              // замер в кадре — по последней перерисовке
+  const on = box.querySelector(':scope > button.on'), sel = on ? segSel(on) : null, live = s.run && s.run.live();
+  if ((live || s.pending) && sel === s.runSel) { if (live) segAttach(box, s.run); return; }   // перерисовали посреди переезда
+  const from = s.from; s.from = null;
+  if (!on || !from || sel === from.sel || performance.now() - from.t > 1500 || !mOK() || !MOTION.ready) { if (live) segStop(s); s.pending = false; return; }
+  s.runSel = sel; s.pending = true;
+  requestAnimationFrame(() => {
+    s.pending = false; const box = s.box, on = box.querySelector(':scope > button.on');
+    if (!box.isConnected || !on || segSel(on) !== s.runSel || !on.getClientRects().length) return;
+    const to = segRect(box, on);
+    if (!s.run || !s.run.live()) {
+      const run = { r: from.r }, owner = { render() {
+        const el = run.el; if (!el || !el.isConnected) return;
+        if (!run.live()) { el.remove(); segOff(run.box); if (s.run === run) s.run = null; return; }
+        el.style.transform = `translate(${run.x.v.toFixed(2)}px, ${run.y.v.toFixed(2)}px)`; el.style.width = run.w.v.toFixed(2) + 'px'; el.style.height = run.h.v.toFixed(2) + 'px';
+      } };
+      run.owner = owner; run.x = mv(from.x, 0.05, owner); run.y = mv(from.y, 0.05, owner); run.w = mv(from.w, 0.05, owner); run.h = mv(from.h, 0.05, owner);
+      run.live = () => SPRING.live.has(run.x) || SPRING.live.has(run.y) || SPRING.live.has(run.w) || SPRING.live.has(run.h);
+      s.run = run;
+    }
+    const run = s.run; run.r = getComputedStyle(on).borderTopLeftRadius;
+    mvTo(run.x, to.x, { damping: 0.78, response: 0.36 }); mvTo(run.y, to.y, { damping: 0.86, response: 0.36 }); mvTo(run.w, to.w, { damping: 0.9, response: 0.36 }); mvTo(run.h, to.h, { damping: 0.9, response: 0.36 });
+    segAttach(box, run);
+  });
+}
+function segStop(s) { const run = s.run; s.run = null; if (!run) return; for (const k of ['x', 'y', 'w', 'h']) mvSet(run[k], run[k].v); if (run.el) run.el.remove(); if (run.box) segOff(run.box); }
+/** Подложка доехала — кнопка снова рисует себя сама, в тот же кадр и без перехода цвета (иначе фон мигнёт). */
+function segOff(box) { box.classList.remove('seg'); box.classList.add('seg-off'); requestAnimationFrame(() => requestAnimationFrame(() => box.classList.remove('seg-off'))); }
 /** Раскрывашка (transitions.dev: accordion): высота через grid-rows 0fr → 1fr на пружине, шеврон переворачивается. */
 function initAccordions() {
   document.addEventListener('click', e => {

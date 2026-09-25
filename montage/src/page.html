@@ -310,6 +310,25 @@ input[type=radio] { accent-color: var(--accent); }
 .pill.ok { background: var(--ok-soft); color: var(--ok); } .pill.check { background: var(--warn-soft); color: var(--warn); }
 .pill.miss { background: var(--bad-soft); color: var(--bad); } .pill.none { background: var(--none-soft); color: var(--none); }
 .pill.slips { background: var(--accent-soft); color: var(--accent-text); }
+/* счётчики разбора — кнопки: открывают список сразу с нужным фильтром */
+button.pill { border: 0; cursor: pointer; font-family: inherit; transition: box-shadow var(--duration-quick) ease, filter var(--duration-quick) ease; }
+@media (hover: hover) and (pointer: fine) { button.pill:hover { box-shadow: inset 0 0 0 1.5px currentColor; } }
+button.pill:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* список реплик свёрнут: полоса-кнопка со счётчиком; раскрывается на пружине */
+.rv-toggle { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 8px 14px; border: 1px dashed var(--line); border-radius: var(--r-m); background: var(--well); color: var(--ink); font: 600 14px var(--sans); text-align: left; cursor: pointer; transition: border-color var(--duration-quick) ease, background-color var(--duration-quick) ease; }
+.rv-toggle .rv-n { font: 600 13px var(--mono); color: var(--muted); }
+.rv-toggle .rv-chev { margin-left: auto; width: 18px; height: 18px; transition: transform var(--spring-bouncy-dur, 300ms) var(--spring-bouncy, ease); }
+.rv-toggle[aria-expanded="true"] { border-style: solid; background: var(--surface); }
+.rv-toggle[aria-expanded="true"] .rv-chev { transform: rotate(180deg); }
+@media (hover: hover) and (pointer: fine) { .rv-toggle:hover { border-color: var(--accent); background: var(--accent-soft); } }
+.rv-fold { display: flow-root; } .rv-fold > * + * { margin-top: 12px; }   /* не сетка: вложенные сетки вокруг 337 строк раскладываются в разы дольше */
+.rv-close { display: flex; width: fit-content; margin-inline: auto; }
+/* скользящая подложка у переключателей (фильтры разбора, пресеты и файлы чистки): едет к выбранному на пружине */
+.seg { position: relative; isolation: isolate; }
+.seg > button, .seg-off > button { transition: none !important; }   /* цвет кнопок меняется ровно вместе с подложкой, без встречного перехода */
+.seg-ind { position: absolute; left: 0; top: 0; z-index: -1; background: var(--deck); pointer-events: none; will-change: transform; }
+.seg > button.on, .seg > .ghost-b.on, .filters.seg > button.on, .presets.seg > .ghost-b.on { background: transparent; border-color: transparent; }
+@media (hover: hover) and (pointer: fine) { .seg > .ghost-b.on:hover:not(:disabled) { background: transparent; border-color: transparent; } }
 /* цифры, которые поменялись, въезжают снизу (transitions.dev: number pop-in) */
 /* Transitions.dev — Number pop-in (src/nums.js ставит ячейки сам по data-num).
    Токены и кривая — как в рецепте; дополнения: .t-still — цифра не менялась и стоит; .is-tick — число меняется
@@ -416,7 +435,7 @@ input[type=radio] { accent-color: var(--accent); }
 .rerec { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line2); border-bottom: 1px solid var(--line2); }
 .rerec > b { font: 600 14.5px var(--display); font-stretch: 95%; }
 #rv-rerec:empty { display: none; }
-#rv-list { display: grid; }
+#rv-list { display: flow-root; }
 .scene { position: sticky; top: var(--scene-top, var(--deck-h)); z-index: 2; font: 700 12px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 18px 0 8px; background: var(--surface); }
 .dir { font-size: 13px; color: var(--muted); font-style: italic; padding: 3px 0 3px 58px; }
 .row { position: relative; display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; gap: 12px; padding: 11px 8px 11px 0; border-bottom: 1px solid var(--line2); transition: background-color var(--duration-quick) ease; }
@@ -545,13 +564,50 @@ input[type=radio] { accent-color: var(--accent); }
 .tl:fullscreen { background: var(--bg); }
 body.tl-full-open { overflow: hidden; }
 /* контекстное меню: растёт из точки щелчка (transitions.dev: menu dropdown) */
-.tl-menu { position: fixed; z-index: 80; width: min(340px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: auto; overflow-x: hidden; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; padding: 6px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--sh-2); font-size: 13px; transform-origin: var(--origin, top left); }
+.tl-menu { position: fixed; z-index: 80; background: var(--surface); color: var(--ink); border: 1px solid var(--line); box-shadow: var(--sh-2); font-size: 13px; }
+/* Transitions.dev — Plus to menu morph: меню по правому щелчку вырастает из кружка «+» у курсора.
+   Токены и кривые — как в рецепте; дополнения: размер открытого меню (--mw, --mh) меряется по содержимому,
+   угол, из которого растёт, — ближайший к курсору (data-ax/ay), и содержимое въезжает с той же стороны. */
+:root {
+  --morph-open-dur: 350ms;
+  --morph-close-dur: 250ms;
+  --morph-ease: cubic-bezier(0.34, 1.25, 0.64, 1);
+  --morph-close-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --morph-r-closed: 40px;
+  --morph-r-open: 20px;
+  --morph-fade-dur: 200ms;
+  --morph-slide: 40px;
+  --morph-rotate: 45deg;
+  --morph-scale: 0.97;
+  --morph-blur: 2px;
+}
+.t-morph { --sx: -1; --sy: -1; width: 40px; height: 40px; border-radius: var(--morph-r-closed); overflow: hidden;
+  transition: width var(--morph-close-dur) var(--morph-close-ease), height var(--morph-close-dur) var(--morph-close-ease), border-radius var(--morph-close-dur) var(--morph-close-ease), box-shadow var(--morph-close-dur) var(--morph-close-ease); }
+.t-morph[data-ax="r"] { --sx: 1; } .t-morph[data-ay="b"] { --sy: 1; }
+.t-morph[data-open="true"] { width: var(--mw); height: var(--mh); border-radius: var(--morph-r-open);
+  transition: width var(--morph-open-dur) var(--morph-ease), height var(--morph-open-dur) var(--morph-ease), border-radius var(--morph-open-dur) var(--morph-ease), box-shadow var(--morph-open-dur) var(--morph-ease); }
+.t-morph:not([data-open="true"]) { box-shadow: 0 6px 16px -6px rgb(0 0 0 / 40%); }
+/* «+» уезжает внутрь и поворачивается в «×» */
+.t-morph-plus { position: absolute; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--accent-ink); pointer-events: none;
+  transition: opacity var(--morph-fade-dur) var(--morph-close-ease), transform var(--morph-open-dur) var(--morph-close-ease), filter var(--morph-fade-dur) var(--morph-close-ease); }
+.t-morph-plus svg { width: 18px; height: 18px; stroke-width: 2; transition: transform var(--morph-open-dur) var(--morph-close-ease); }
+.t-morph[data-open="true"] .t-morph-plus { opacity: 0; transform: translate(calc(-1 * var(--morph-slide) * var(--sx)), calc(-.5 * var(--morph-slide) * var(--sy))); filter: blur(var(--morph-blur)); }
+.t-morph[data-open="true"] .t-morph-plus svg { transform: scale(var(--morph-scale)) rotate(var(--morph-rotate)); }
+/* меню — въезжает со стороны кружка, чуть уменьшенное и размытое */
+.t-morph-menu { position: absolute; width: var(--mw); height: var(--mh); overflow: auto; overflow-x: hidden; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 1px; padding: 6px; box-sizing: border-box;
+  opacity: 0; transform: translate(calc(var(--morph-slide) * var(--sx)), calc(.5 * var(--morph-slide) * var(--sy))) scale(var(--morph-scale)); filter: blur(var(--morph-blur)); pointer-events: none;
+  transition: opacity var(--morph-fade-dur) var(--morph-close-ease), transform var(--morph-open-dur) var(--morph-close-ease), filter var(--morph-fade-dur) var(--morph-close-ease); }
+.t-morph[data-open="true"] .t-morph-menu { opacity: 1; transform: translate(0, 0) scale(1); filter: blur(0); pointer-events: auto; }
+.t-morph[data-ax="l"] .t-morph-plus, .t-morph[data-ax="l"] .t-morph-menu { left: 0; } .t-morph[data-ax="r"] .t-morph-plus, .t-morph[data-ax="r"] .t-morph-menu { right: 0; }
+.t-morph[data-ay="t"] .t-morph-plus, .t-morph[data-ay="t"] .t-morph-menu { top: 0; } .t-morph[data-ay="b"] .t-morph-plus, .t-morph[data-ay="b"] .t-morph-menu { bottom: 0; }
+.t-morph.t-instant, .t-morph.t-instant * { transition: none !important; }                 /* с клавиатуры — сразу */
+@media (prefers-reduced-motion: reduce) { .t-morph, .t-morph-plus, .t-morph-menu, .t-morph-plus svg { transition: none !important; } }
 .tl-menu[hidden] { display: none; }
-.tl-menu > button { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; min-height: 30px; padding: 5px 9px; border: 0; border-radius: var(--r-s); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.tl-menu > button span { display: inline-flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tl-menu > button kbd { flex: none; }
-.tl-menu > button:hover:not(:disabled), .tl-menu > button:focus-visible { background: var(--accent-soft); outline: none; }
-.tl-menu > button:disabled { opacity: .45; cursor: default; }
+.t-morph-menu > button { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; min-height: 30px; padding: 5px 9px; border: 0; border-radius: var(--r-s); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.t-morph-menu > button span { display: inline-flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-morph-menu > button kbd { flex: none; }
+.t-morph-menu > button:hover:not(:disabled), .t-morph-menu > button:focus-visible { background: var(--accent-soft); outline: none; }
+.t-morph-menu > button:disabled { opacity: .45; cursor: default; }
 .tl-menu kbd { font: 11px var(--mono); color: var(--muted); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; white-space: nowrap; background: var(--well); }
 .m-head { display: flex; gap: 8px; align-items: center; padding: 6px 9px 8px; border-bottom: 1px solid var(--line2); margin-bottom: 4px; min-width: 0; }
 .m-head .m-txt { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -561,6 +617,7 @@ body.tl-full-open { overflow: hidden; }
 .m-fx button, .m-row button { min-height: 28px; padding: 4px 8px; border: 1px solid var(--line2); border-radius: var(--r-s); background: var(--well); color: inherit; font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .m-fx button:hover, .m-row button:hover, .m-fx button:focus-visible, .m-row button:focus-visible { border-color: var(--ink); outline: none; }
 .m-fx button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.m-fx.seg > button.on { background: transparent; border-color: transparent; } .m-fx > .seg-ind { background: var(--accent); }
 .m-row { display: flex; flex-wrap: wrap; gap: 3px; padding: 0 4px 2px; }
 .m-row button { flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-variant-numeric: tabular-nums; }
 .m-row .ic { width: 13px; height: 13px; }
@@ -572,7 +629,7 @@ body.tl-full-open { overflow: hidden; }
 #cl-body > *:not(.cl-files):not(:last-child) { margin-bottom: 16px; }
 #cl-body > .cl-files { grid-column: 1; grid-row: 1 / span 20; position: sticky; top: calc(var(--deck-h) + 24px); flex-direction: column; flex-wrap: nowrap; gap: 2px; }
 #cl-body > p.muted:only-child { grid-column: 1 / -1; }
-@media (max-width: 980px) { #cl-body { grid-template-columns: minmax(0, 1fr); } #cl-body > .cl-files { margin-bottom: 16px; } #cl-body > * { grid-column: 1; } #cl-body > .cl-files { grid-row: auto; position: static; flex-direction: row; flex-wrap: wrap; } }
+@media (max-width: 980px) { #cl-body { grid-template-columns: minmax(0, 1fr); } #cl-body > .cl-files { margin-bottom: 16px; } #cl-body > * { grid-column: 1; } #cl-body > .cl-files { grid-row: auto; position: relative; flex-direction: row; flex-wrap: wrap; } }
 .cl-files { display: flex; flex-wrap: wrap; gap: 6px; }
 .ftab { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 34px; padding: 6px 10px; border: 1px solid transparent; border-radius: var(--r-m); background: transparent; font-size: 13.5px; text-align: left; cursor: pointer; overflow-wrap: anywhere; color: var(--ink); }
 .ftab.on { background: var(--deck); color: var(--deck-ink); }
@@ -885,11 +942,15 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
         <h2 class="step"><b>4</b> Проверка <small>кнопка «слушать» — проверить на слух, «Другой кусок» — выбрать из записи</small></h2>
         <div class="sum" id="rv-sum"></div>
         <div id="rv-rerec"></div>
-        <div class="filters" id="rv-filter">
-          <button data-f="all" class="on">Все</button><button data-f="check">Проверить</button><button data-f="miss">Нет записи</button><button data-f="slips">Оговорки</button><button data-f="dirs">Озвученные ремарки</button>
-          <label><input type="checkbox" id="dirs-t"> показывать ремарки</label>
+        <button class="rv-toggle" id="rv-toggle" aria-expanded="false" aria-controls="rv-fold"><span class="rv-t">Показать все реплики</span><span class="rv-n" data-num="rv:n"></span><svg class="ic rv-chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
+        <div class="rv-fold" id="rv-fold" hidden>
+          <div class="filters" id="rv-filter">
+            <button data-f="all" class="on">Все</button><button data-f="check">Проверить</button><button data-f="miss">Нет записи</button><button data-f="slips">Оговорки</button><button data-f="dirs">Озвученные ремарки</button>
+            <label><input type="checkbox" id="dirs-t"> показывать ремарки</label>
+          </div>
+          <div id="rv-list"></div>
+          <button class="ghost-b rv-close" data-rv="close"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg>Свернуть реплики</button>
         </div>
-        <div id="rv-list"></div>
       </section>
       <section class="card" id="mix" hidden>
         <h2 class="step"><b>5</b> Сведение <small>меняется только громкость — звук записей не обрабатывается</small></h2>

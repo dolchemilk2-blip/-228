@@ -71,7 +71,7 @@ function velocityOf(hist, now = performance.now()) {
   return { x: (b.x - a.x) / dt * 1000, y: (b.y - a.y) / dt * 1000 };
 }
 // ------------------------------------------------------------------ касание: сжатие в момент нажатия
-const PRESS_SEL = '.primary, .ghost-b, .icon, .icon-b, .play, .chip.as-btn, .filters button, .ftab, .tog, .m-fx button, .m-row button, .theme-b, .acc-head, .tabs button, .rail a, .models label, .tl-menu > button, .pick-files';
+const PRESS_SEL = '.primary, .ghost-b, .icon, .icon-b, .play, .chip.as-btn, .filters button, .ftab, .tog, .m-fx button, .m-row button, .theme-b, .acc-head, .tabs button, .rail a, .models label, .t-morph-menu > button, .pick-files, button.pill, .rv-toggle';
 const LEAN_SEL = '.icon, .icon-b, .play, .theme-b, .primary, .ghost-b, .ftab';
 let pressed = null;
 function pressScale(el) { const w = el.offsetWidth; return w < 48 ? 0.9 : w < 140 ? 0.95 : w < 320 ? 0.97 : 0.985; }   // большое — тяжелее
