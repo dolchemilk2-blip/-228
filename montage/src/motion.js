@@ -1,94 +1,246 @@
-// Монтажка — движение интерфейса. Без библиотек: CSS-переходы и Web Animations — они идут на композиторе
-// и не дёргаются, когда основной поток занят распознаванием или сведением.
-// Правила (emilkowalski/skills, transitions.dev, impeccable):
-// - шкала токенов transitions.dev: 150 мс — закрыть, 250 мс — открыть/переключить, 350–400 мс — панели,
-//   500 мс — отметка «готово»; кривая открытия cubic-bezier(0.22, 1, 0.36, 1);
-// - уход быстрее входа; всё, что вызвано с клавиатуры, — мгновенно; частое — тише редкого;
-// - меню растёт из точки щелчка, тост и прогресс поднимаются снизу с лёгким размытием, вкладки съезжают на 8 px;
-// - при закрытии логика не ждёт анимацию: уходит «призрак» — копия, а настоящий элемент скрыт сразу;
-// - prefers-reduced-motion: только прозрачность, без сдвигов, масштаба и размытия.
-// Использует S, render, counts, fmt, $, C из app.js и drawTimeline из timeline.js.
-const MOTION = { reduce: false, kbd: 0, ready: false, lastKeys: new Map(), counts: new Map(), done: new Map(), view: 0, pinStep: null, railCur: null };
+// Монтажка — движение интерфейса: пружины (spring.js), CSS-переходы и Web Animations, без библиотек.
+// Правила (apple-design, emilkowalski/skills, transitions.dev, impeccable):
+// - то, чего касаешься, отвечает сразу: кнопки сжимаются в момент нажатия, значки тянутся к курсору;
+// - то, что тянешь, идёт за пальцем 1:1, у краёв — резиновое сопротивление, после броска — по инерции
+//   (проекция импульса Apple) и на пружине с той же скоростью: подложка вкладок, уведомление, файлы;
+// - любое движение можно перехватить: пружины стартуют с текущего значения;
+// - открытие — пружина из точки вызова, уход — короче; всё, что вызвано с клавиатуры, — мгновенно;
+// - прогресс — «остров» в деке: вырастает из пилюли и сворачивается обратно;
+// - смена вкладок — View Transitions: старая уезжает, новая приезжает с той стороны, куда нажали;
+// - prefers-reduced-motion: только проявления, пружины встают на место сразу.
+// Использует S, render, counts, fmt, $, C, moveFile из app.js, drawTimeline из timeline.js, пружины из spring.js.
+const MOTION = { reduce: false, kbd: 0, ready: false, vt: false, lastKeys: new Map(), counts: new Map(), done: new Map(), view: 0, pinStep: null, railCur: null };
 const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
 const mOK = () => !MOTION.reduce && typeof Element.prototype.animate === 'function';
-/** Вход: из «до» в покой. В режиме без движения — только прозрачность. */
-function mIn(el, from, ms = 250, extra = {}) {
+/** Вход: из «до» в покой на пружине (или на кривой, если задана). В режиме без движения — только прозрачность. */
+function mIn(el, from, spring = [0.86, 0.45], extra = {}) {
   if (!el || typeof el.animate !== 'function') return null;
-  if (MOTION.reduce) from = { opacity: 0 };
   const to = {}; for (const k of Object.keys(from)) to[k] = k === 'opacity' ? 1 : k === 'filter' ? 'blur(0px)' : extra.rest && extra.rest[k] != null ? extra.rest[k] : 'none';
-  if (MOTION.reduce && extra.rest) Object.assign(from, extra.rest), Object.assign(to, extra.rest), from.opacity = 0;
-  return el.animate([from, to], { duration: MOTION.reduce ? 150 : ms, easing: EASE, fill: 'backwards', delay: extra.delay || 0 });
+  if (MOTION.reduce) { const f = { opacity: 0 }, t = { opacity: 1 }; if (extra.rest) Object.assign(f, extra.rest), Object.assign(t, extra.rest); return el.animate([f, t], { duration: 150, easing: 'ease-out', fill: 'backwards', delay: extra.delay || 0 }); }
+  const sp = springEase(spring[0], spring[1]);
+  return el.animate([from, to], { duration: sp.duration, easing: sp.easing, fill: 'backwards', delay: extra.delay || 0 });
 }
 function motionInit() {
   const mq = window.matchMedia('(prefers-reduced-motion: reduce)'); MOTION.reduce = mq.matches;
   mq.addEventListener('change', () => { MOTION.reduce = mq.matches; });
-  // высота деки — для липких заголовков
+  // пружины для CSS: переходы галочек, тумблеров, раскрывашки, значков
+  const root = document.documentElement.style;
+  for (const [name, d, r] of [['snappy', 0.72, 0.32], ['smooth', 1, 0.38], ['bouncy', 0.6, 0.42], ['pane', 0.9, 0.5]]) { const sp = springEase(d, r); root.setProperty(`--spring-${name}`, sp.easing); root.setProperty(`--spring-${name}-dur`, sp.duration + 'ms'); }
   const deck = document.querySelector('.deck');
   if (deck && window.ResizeObserver) new ResizeObserver(() => document.documentElement.style.setProperty('--deck-h', (deck.getBoundingClientRect().height - (parseFloat(getComputedStyle(deck).paddingTop) || 0)) + 'px')).observe(deck);
   tabIndicator(true);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { tabIndicator(true); railIndicator(true); });
   const tabs = document.querySelector('.tabs'); if (tabs && window.ResizeObserver) new ResizeObserver(() => tabIndicator(true)).observe(tabs);
-  initRail(); initAccordions();
-  // появление скрытых блоков: секции, вкладки, прогресс, сообщение, меню, выбор кусков
+  initRail(); initAccordions(); initTabsDrag(); initToast(); initFileDrag();
+  if (typeof initTouch === 'function') { initTouch(); initTilt('.models', 7); }
   new MutationObserver(list => { for (const m of list) if (m.attributeName === 'hidden' && !m.target.hidden && m.oldValue != null) appear(m.target); })
     .observe(document.body, { attributes: true, attributeFilter: ['hidden'], attributeOldValue: true, subtree: true });
-  // новые списки: файлы, строки проверки, модули чистки, звуки, результат сведения
   const watch = (sel, fn) => { const el = document.querySelector(sel); if (el) new MutationObserver(() => fn(el)).observe(el, { childList: true }); };
-  watch('#files', el => staggerList([...el.querySelectorAll('.file')].filter(x => !MOTION.lastKeys.has('f:' + x.dataset.i + ':' + (x.querySelector('.fname') || {}).textContent)).map(x => (MOTION.lastKeys.set('f:' + x.dataset.i + ':' + (x.querySelector('.fname') || {}).textContent, 1), x))));
+  watch('#files', el => staggerList([...el.querySelectorAll('.file')].filter(x => { const k = 'f:' + (x.querySelector('.fname') || {}).textContent; if (MOTION.lastKeys.has(k)) return false; MOTION.lastKeys.set(k, 1); return true; })));
   watch('#rv-list', el => { const key = el.dataset.v || ''; const prev = MOTION.lastKeys.get('rv'); if (prev === key) return; MOTION.lastKeys.set('rv', key);
-    // первый показ и новый разбор — лесенкой; смена фильтра (часто) — только быстрая проявка
     if (prev == null || prev.split('|')[2] !== key.split('|')[2]) staggerList([...el.children].slice(0, 10)); else fadeList(el); });
   watch('#cl-body', el => { const key = (S.cleanFile && S.cleanFile.name) || ''; if (MOTION.lastKeys.get('cl') === key || !el.querySelector('.mods')) return; MOTION.lastKeys.set('cl', key); staggerList([el.querySelector('.cl-head'), ...el.querySelectorAll('.mod')].filter(Boolean).slice(0, 10)); });
   watch('#sfx-body', el => { if (MOTION.lastKeys.get('sfx') || !el.querySelector('.srow, .arow')) return; MOTION.lastKeys.set('sfx', 1); staggerList([...el.querySelectorAll('.ambbox, .dbbox, .srow')].slice(0, 10)); });
   watch('#mix-out', el => { const tl = el.querySelector('.tl'); if (!tl || tl.dataset.m) return; tl.dataset.m = '1'; splice(tl); staggerList([el.querySelector('#mix-top'), el.querySelector('#mix-rest')].filter(Boolean), 60); });
   requestAnimationFrame(() => requestAnimationFrame(() => { MOTION.ready = true; }));
 }
+const atTop = el => el.getBoundingClientRect().top < innerHeight / 2;
 function appear(el) {
-  if (el.id === 'prog' || el.id === 'msg') { cancelGhost(el); mIn(el, { opacity: 0, transform: 'translate(-50%, 16px) scale(0.97)', filter: 'blur(2px)' }, 350, { rest: { transform: 'translate(-50%, 0px) scale(1)' } }); return; }
-  if (el.id === 'tl-menu') { if (performance.now() - MOTION.kbd < 150) return; mIn(el, { opacity: 0, transform: 'scale(0.97)' }, 250); return; }
-  if (el.classList.contains('picker')) { mIn(el, { opacity: 0, transform: 'translateY(-4px)', filter: 'blur(2px)' }, 250); return; }
-  if (el.matches('section.card')) { if (MOTION.ready) mIn(el, { opacity: 0, transform: 'translateY(12px)', filter: 'blur(3px)' }, 400); return; }
+  if (el.id === 'prog') { cancelGhost(el); islandIn(el); return; }
+  if (el.id === 'msg') { cancelGhost(el); toastReset(el); const dy = atTop(el) ? -22 : 22; mIn(el, { opacity: 0, transform: `translate(-50%, ${dy}px) scale(0.9)`, filter: 'blur(6px)' }, [0.7, 0.5], { rest: { transform: 'translate(-50%, 0px) scale(1)' } }); return; }
+  if (el.id === 'tl-menu') { if (performance.now() - MOTION.kbd < 150) return; mIn(el, { opacity: 0, transform: 'scale(0.9)' }, [0.78, 0.34]); return; }
+  if (el.classList.contains('picker')) { mIn(el, { opacity: 0, transform: 'translateY(-6px) scale(0.98)', filter: 'blur(2px)' }, [0.85, 0.36]); staggerList([...el.children].slice(0, 8), 30); return; }
+  if (el.matches('section.card')) { if (MOTION.ready) mIn(el, { opacity: 0, transform: 'translateY(18px) scale(0.985)', filter: 'blur(3px)' }, [0.86, 0.55]); return; }
   if (el.matches('[data-tabpane]')) { paneIn(el); return; }
 }
+// ------------------------------------------------------------------ остров: прогресс вырастает из пилюли
+function islandIn(el) {
+  if (!mOK()) return;
+  const R = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 20, w = el.offsetWidth, pill = Math.max(0, w / 2 - 22);
+  const sp = springEase(0.74, 0.55);
+  el.animate([{ clipPath: `inset(0 ${pill}px round ${R}px)`, opacity: 0.4 }, { clipPath: `inset(0 0px round ${R}px)`, opacity: 1 }], { duration: sp.duration, easing: sp.easing });
+  const inner = el.querySelector('.in'); if (inner) mIn(inner, { opacity: 0, transform: 'scale(0.96)', filter: 'blur(5px)' }, [1, 0.4], { delay: 90 });
+}
+function islandOut(el) {
+  if (!mOK() || el.hidden || !el.isConnected) return;
+  const R = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 20, pill = Math.max(0, el.offsetWidth / 2 - 22);
+  motionGhostOut(el, { clipPath: `inset(0 ${pill}px round ${R}px)`, filter: 'blur(3px)' }, 300, { clipPath: `inset(0 0px round ${R}px)` });
+}
+/** Надпись прогресса: меняется «этап» — старая уходит вверх, новая приходит снизу (transitions.dev: text swap). */
+function progText(el, t) {
+  const phase = t.replace(/[\d.,]+\s*%?/g, '#').replace(/\s+/g, ' ').trim();
+  if (MOTION.progPhase && phase !== MOTION.progPhase && t && mOK()) mIn(el, { opacity: 0, transform: 'translateY(5px)', filter: 'blur(2px)' }, [1, 0.3]);
+  MOTION.progPhase = t ? phase : null;
+}
 /** Уход без ожидания: копия уходит, настоящий элемент уже скрыт. Вызывать до того, как элемент спрятан. */
-function motionGhostOut(el, to, ms = 150) {
+function motionGhostOut(el, to, ms = 150, from = {}) {
   if (!mOK() || !el || el.hidden || !el.isConnected) return;
   const r = el.getBoundingClientRect(); if (!r.width) return;
   const g = el.cloneNode(true); g.removeAttribute('id'); g.querySelectorAll('[id]').forEach(x => x.removeAttribute('id'));
   g.inert = true; g.setAttribute('aria-hidden', 'true'); g.removeAttribute('role'); g.dataset.ghost = el.id || '1';
-  Object.assign(g.style, { position: 'fixed', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', margin: '0', pointerEvents: 'none', transform: 'none', bottom: 'auto', right: 'auto', zIndex: 90, maxHeight: 'none' });
+  Object.assign(g.style, { position: 'fixed', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', margin: '0', pointerEvents: 'none', transform: 'none', bottom: 'auto', right: 'auto', zIndex: 90, maxHeight: 'none', flex: 'none' });
   (el.parentNode || document.body).appendChild(g);
-  const a = g.animate([{ opacity: 1, transform: 'none', filter: 'blur(0px)' }, { opacity: 0, ...to }], { duration: ms, easing: EASE, fill: 'forwards' });
+  const a = g.animate([{ opacity: 1, transform: 'none', filter: 'blur(0px)', ...from }, { opacity: 0, ...to }], { duration: ms, easing: EASE, fill: 'forwards' });
   a.onfinish = a.oncancel = () => g.remove();
 }
 function cancelGhost(el) { document.querySelectorAll(`[data-ghost="${el.id}"]`).forEach(g => g.remove()); }
-/** Сообщение: уходит вниз за 250 мс, потом скрывается. */
+// ------------------------------------------------------------------ уведомление: смахнуть пальцем, наведение держит
+const TOAST = { drag: null, m: null };
+function toastReset(el) { TOAST.drag = null; if (TOAST.m) mvSet(TOAST.m, 0); el.style.transform = ''; el.style.opacity = ''; }
+/** Сообщение уходит туда, откуда пришло, и скрывается. */
 function motionHide(el, done) {
   if (!mOK() || el.hidden) { el.hidden = true; done && done(); return; }
-  const a = el.animate([{ opacity: 1, transform: 'translate(-50%, 0px) scale(1)', filter: 'blur(0px)' }, { opacity: 0, transform: 'translate(-50%, 16px) scale(0.97)', filter: 'blur(2px)' }], { duration: 250, easing: EASE, fill: 'forwards' });
+  const dy = atTop(el) ? -26 : 26;
+  const a = el.animate([{ opacity: 1, transform: 'translate(-50%, 0px) scale(1)', filter: 'blur(0px)' }, { opacity: 0, transform: `translate(-50%, ${dy}px) scale(0.94)`, filter: 'blur(4px)' }], { duration: 220, easing: EASE, fill: 'forwards' });
   a.onfinish = () => { el.hidden = true; a.cancel(); done && done(); };
 }
-/** Список: лесенка по 40 мс, не больше 10 строк, всего ≤ 400 мс. Во время лесенки всё уже кликабельно. */
+function initToast() {
+  const el = document.getElementById('msg'); if (!el) return;
+  const owner = { render() { el.style.transform = Math.abs(TOAST.m.v) < 0.05 && !SPRING.live.has(TOAST.m) ? '' : `translate(-50%, ${TOAST.m.v.toFixed(2)}px)`; el.style.opacity = TOAST.fade(TOAST.m.v); } };
+  TOAST.m = mv(0, 0.05, owner);
+  TOAST.fade = y => { const dir = atTop(el) ? -1 : 1, out = y * dir; return out > 0 ? String(Math.max(0.2, 1 - out / 120)) : ''; };
+  el.addEventListener('pointerdown', e => {
+    if (MOTION.reduce || e.button !== 0) return;
+    el.setPointerCapture(e.pointerId);
+    TOAST.drag = { y0: e.clientY - TOAST.m.v, dir: atTop(el) ? -1 : 1, hist: [{ t: performance.now(), x: e.clientX, y: e.clientY }] };
+  });
+  el.addEventListener('pointermove', e => {
+    const d = TOAST.drag; if (!d) return;
+    d.hist.push({ t: performance.now(), x: e.clientX, y: e.clientY }); if (d.hist.length > 8) d.hist.shift();
+    let y = e.clientY - d.y0; if (y * d.dir < 0) y = rubber(y, 80);           // против направления ухода — резина
+    mvSet(TOAST.m, y);
+  });
+  const end = () => {
+    const d = TOAST.drag; if (!d) return; TOAST.drag = null;
+    const v = velocityOf(d.hist).y, y = TOAST.m.v, proj = y + project(v, 0.99);
+    if (proj * d.dir > 60 || v * d.dir > 600) {                                   // бросили — улетает с той же скоростью
+      const h = el.offsetHeight + 40, dist = Math.abs(d.dir * h - y), ms = Math.max(120, Math.min(320, dist / Math.max(0.6, Math.abs(v) / 1000)));
+      const a = el.animate([{ transform: `translate(-50%, ${y}px)`, opacity: el.style.opacity || 1 }, { transform: `translate(-50%, ${d.dir * h}px)`, opacity: 0 }], { duration: ms, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)', fill: 'forwards' });
+      a.onfinish = () => { el.hidden = true; a.cancel(); toastReset(el); };
+    } else mvTo(TOAST.m, 0, { damping: 0.7, response: 0.4, velocity: v });        // не добросили — пружиной обратно
+  };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+}
+/** Список: лесенка по 40 мс на пружине, не больше 10 строк. Во время лесенки всё уже кликабельно. */
 function staggerList(els, each = 40) {
   if (!els.length || typeof els[0].animate !== 'function' || !MOTION.ready) return;
-  els.forEach((el, i) => mIn(el, { opacity: 0, transform: 'translateY(8px)' }, 300, { delay: Math.min(i, 9) * each }));
+  els.forEach((el, i) => mIn(el, { opacity: 0, transform: 'translateY(10px) scale(0.99)' }, [0.88, 0.42], { delay: Math.min(i, 9) * each }));
 }
 function fadeList(el) { if (typeof el.animate === 'function') el.animate([{ opacity: 0.4 }, { opacity: 1 }], { duration: 150, easing: 'ease-out' }); }
-/** Вкладка: новая приходит на 8 px со стороны, куда нажали, с размытием 3 px (transitions.dev: page side-by-side). */
+// ------------------------------------------------------------------ вкладки
 let paneDir = 1;
-function paneIn(pane) { if (MOTION.ready) mIn(pane, { opacity: 0, transform: `translateX(${8 * paneDir}px)`, filter: 'blur(3px)' }, 250); }
+function paneIn(pane) { if (MOTION.ready && !MOTION.vt) mIn(pane, { opacity: 0, transform: `translateX(${14 * paneDir}px)`, filter: 'blur(3px)' }, [0.9, 0.45]); }
 function motionTab(prev, next) {
   const order = ['build', 'clean', 'sfx'], a = order.indexOf(prev), b = order.indexOf(next); paneDir = b >= a ? 1 : -1;
   tabIndicator(false);
 }
-/** Подложка вкладок: JS пишет положение, CSS ведёт переход; первый раз и при смене размеров — без перехода. */
+/** Смена вкладки через View Transitions: старая уезжает в сторону, новая приезжает с другой. */
+function motionTabSwitch(next, apply) {
+  const order = ['build', 'clean', 'sfx'], dir = order.indexOf(next) >= order.indexOf(S.tab) ? 1 : -1;
+  if (!document.startViewTransition || MOTION.reduce || !MOTION.ready || next === S.tab) { apply(); return; }
+  const root = document.documentElement; root.classList.add('vt-tab'); root.style.setProperty('--vt-dir', dir);
+  const vt = document.startViewTransition(() => { MOTION.vt = true; try { apply(); } finally { MOTION.vt = false; } });
+  vt.finished.finally(() => root.classList.remove('vt-tab'));
+}
+/** Подложка вкладок на пружине: при движении тянется в сторону хода, как капля; её можно схватить и протащить. */
+const PILL = { drag: null, suppress: false };
+PILL.render = () => {
+  const ind = document.querySelector('.tab-ind'); if (!ind) return;
+  const v = PILL.x.vel, st = PILL.drag ? 0 : Math.min(22, Math.abs(v) * 0.02), left = PILL.x.v - (v < 0 ? st : 0);
+  ind.style.width = (PILL.w.v + st).toFixed(2) + 'px';
+  ind.style.transform = `translateX(${left.toFixed(2)}px) scale(${PILL.drag ? 1.04 : 1}, ${(1 - st / 140).toFixed(4)})`;
+  // подписи под подложкой — тёмные ровно по её краю (клон-маска), без смены цвета «рывком»
+  const clip = ind.parentElement.querySelector('.tabs-clip');
+  if (clip) { const x0 = left - clip.offsetLeft, w = PILL.w.v + st, W = clip.scrollWidth; clip.style.clipPath = `inset(0 ${(W - x0 - w).toFixed(2)}px 0 ${x0.toFixed(2)}px round 16px)`; }
+};
+function tabsClipSync() {
+  const tabs = document.querySelector('.tabs'); if (!tabs) return;
+  const list = [...tabs.querySelectorAll('button[data-tab]')]; if (!list.length) return;
+  let clip = tabs.querySelector('.tabs-clip');
+  if (!clip) { clip = document.createElement('div'); clip.className = 'tabs-clip'; clip.setAttribute('aria-hidden', 'true'); tabs.appendChild(clip); tabs.classList.add('clipped'); }
+  clip.innerHTML = list.map(b => `<span style="width:${b.offsetWidth}px">${b.textContent}</span>`).join('');
+  clip.style.left = list[0].offsetLeft + 'px'; clip.style.top = list[0].offsetTop + 'px';
+}
+PILL.x = mv(0, 0.05, PILL); PILL.w = mv(0, 0.05, PILL);
 function tabIndicator(instant) {
   const tabs = document.querySelector('.tabs'); if (!tabs) return;
-  const ind = tabs.querySelector('.tab-ind'), on = tabs.querySelector('button.on'); if (!ind || !on) return;
-  const set = () => { ind.style.transform = `translateX(${on.offsetLeft}px)`; ind.style.width = on.offsetWidth + 'px'; };
-  if (instant) { ind.style.transition = 'none'; set(); void ind.offsetWidth; ind.style.transition = ''; } else set();
+  const on = tabs.querySelector('button.on'); if (!on || PILL.drag) return;
+  if (instant || !MOTION.ready) { tabsClipSync(); mvSet(PILL.x, on.offsetLeft); mvSet(PILL.w, on.offsetWidth); PILL.render(); return; }
+  mvTo(PILL.x, on.offsetLeft, { damping: 0.74, response: 0.42 }); mvTo(PILL.w, on.offsetWidth, { damping: 0.9, response: 0.42 });
+}
+function initTabsDrag() {
+  const tabs = document.querySelector('.tabs'); if (!tabs) return;
+  const btns = () => [...tabs.querySelectorAll('button[data-tab]')];
+  tabs.addEventListener('click', e => { if (PILL.suppress) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+  tabs.addEventListener('pointerdown', e => {
+    const b = e.target.closest('button'); if (!b || !b.classList.contains('on') || e.button !== 0 || MOTION.reduce) return;
+    const r = tabs.getBoundingClientRect();
+    PILL.drag = { x0: e.clientX, grab: e.clientX - r.left - tabs.clientLeft - PILL.x.v, moved: false, hist: [{ t: performance.now(), x: e.clientX, y: 0 }], id: e.pointerId };
+  });
+  tabs.addEventListener('pointermove', e => {
+    const d = PILL.drag; if (!d) return;
+    if (!d.moved) { if (Math.abs(e.clientX - d.x0) < 6) return; d.moved = true; try { tabs.setPointerCapture(d.id); } catch {} }
+    d.hist.push({ t: performance.now(), x: e.clientX, y: 0 }); if (d.hist.length > 8) d.hist.shift();
+    const list = btns(), r = tabs.getBoundingClientRect(), lo = list[0].offsetLeft, hi = list[list.length - 1].offsetLeft + list[list.length - 1].offsetWidth - PILL.w.v;
+    let x = e.clientX - r.left - tabs.clientLeft - d.grab;
+    if (x < lo) x = lo - rubber(lo - x, 60); else if (x > hi) x = hi + rubber(x - hi, 60);
+    mvSet(PILL.x, x);
+    const c = x + PILL.w.v / 2, near = list.reduce((a, b) => Math.abs(b.offsetLeft + b.offsetWidth / 2 - c) < Math.abs(a.offsetLeft + a.offsetWidth / 2 - c) ? b : a);
+    mvTo(PILL.w, near.offsetWidth, { damping: 1, response: 0.25 });
+    list.forEach(b => b.classList.toggle('near', b === near));
+  });
+  const end = () => {
+    const d = PILL.drag; if (!d) return; PILL.drag = null;
+    btns().forEach(b => b.classList.remove('near'));
+    if (!d.moved) { PILL.render(); return; }
+    const v = velocityOf(d.hist).x, c = PILL.x.v + PILL.w.v / 2 + project(v, 0.99) * 0.35;
+    const list = btns(), near = list.reduce((a, b) => Math.abs(b.offsetLeft + b.offsetWidth / 2 - c) < Math.abs(a.offsetLeft + a.offsetWidth / 2 - c) ? b : a);
+    PILL.x.vel = v;                                                   // скорость пальца переходит в пружину
+    if (!near.classList.contains('on')) near.click(); else tabIndicator(false);
+    PILL.suppress = true; setTimeout(() => { PILL.suppress = false; }, 0);
+  };
+  tabs.addEventListener('pointerup', end); tabs.addEventListener('pointercancel', end);
+}
+// ------------------------------------------------------------------ файлы: перетащить за ручку, соседи расступаются
+function initFileDrag() {
+  const box = document.getElementById('files'); if (!box) return;
+  let d = null;
+  box.addEventListener('pointerdown', e => {
+    const g = e.target.closest('.grip'); if (!g || e.button !== 0) return;
+    e.preventDefault(); g.setPointerCapture(e.pointerId);
+    const cards = [...box.querySelectorAll('.file')], card = g.closest('.file'), idx = cards.indexOf(card);
+    d = { g, card, idx, cards, rects: cards.map(c => c.getBoundingClientRect()), y0: e.clientY, target: idx, hist: [{ t: performance.now(), x: 0, y: e.clientY }] };
+    card.classList.add('lift'); const T = tform(card); mvTo(T.s, 1.025, { damping: 0.8, response: 0.3 });
+  });
+  box.addEventListener('pointermove', e => {
+    if (!d) return;
+    d.hist.push({ t: performance.now(), x: 0, y: e.clientY }); if (d.hist.length > 8) d.hist.shift();
+    const r = d.rects, me = r[d.idx], lo = r[0].top - me.top, hi = r[r.length - 1].bottom - me.bottom;
+    let y = e.clientY - d.y0; if (y < lo) y = lo - rubber(lo - y, 80); else if (y > hi) y = hi + rubber(y - hi, 80);
+    mvSet(tform(d.card).y, y);
+    d.target = fileSlot(d, me.top + y + me.height / 2);
+    fileMakeRoom(d);
+  });
+  const end = () => {
+    if (!d) return; const s = d; d = null;
+    const v = velocityOf(s.hist).y, me = s.rects[s.idx], T = tform(s.card);
+    s.target = fileSlot(s, me.top + T.y.v + me.height / 2 + project(v, 0.99) * 0.25); fileMakeRoom(s);
+    const to = fileOffset(s);
+    mvTo(T.y, to, { damping: 0.82, response: 0.35, velocity: v }); mvTo(T.s, 1, { damping: 0.7, response: 0.35 });
+    const finish = () => { s.card.classList.remove('lift'); s.cards.forEach(c => { const t = tform(c); mvSet(t.y, 0); mvSet(t.s, 1); }); if (s.target !== s.idx && typeof moveFile === 'function') moveFile(s.idx, s.target); };
+    if (MOTION.reduce) finish(); else setTimeout(finish, 380);
+  };
+  box.addEventListener('pointerup', end); box.addEventListener('pointercancel', end);
+}
+function fileSlot(d, center) { let t = 0; d.rects.forEach((r, i) => { if (center > r.top + r.height / 2) t = i; }); return Math.max(0, Math.min(d.rects.length - 1, center < d.rects[0].top + d.rects[0].height / 2 ? 0 : t)); }
+function fileOffset(d) { const r = d.rects, i = d.idx, t = d.target; if (t === i) return 0; return t > i ? r[t].bottom - r[i].bottom : r[t].top - r[i].top; }
+function fileMakeRoom(d) {
+  const h = d.rects[d.idx].height;
+  d.cards.forEach((c, k) => { if (k === d.idx) return; const shift = d.target > d.idx && k > d.idx && k <= d.target ? -h : d.target < d.idx && k >= d.target && k < d.idx ? h : 0; const T = tform(c); if (T.y.to !== shift) mvTo(T.y, shift, { damping: 0.85, response: 0.32 }); });
 }
 // ------------------------------------------------------------------ монтажный лист: шаги слева
+const RAIL = {}; RAIL.render = () => { const ind = document.querySelector('.rail-ind'); if (!ind) return; ind.style.transform = `translateY(${RAIL.y.v.toFixed(2)}px)`; ind.style.height = RAIL.h.v.toFixed(2) + 'px'; };
+RAIL.y = mv(0, 0.05, RAIL); RAIL.h = mv(0, 0.05, RAIL);
 function initRail() {
   const rail = document.querySelector('.rail'); if (!rail) return;
   rail.addEventListener('click', e => {
@@ -117,8 +269,9 @@ function railCurrent(id, instant) {
 }
 function railIndicator(instant) {
   const rail = document.querySelector('.rail'), ind = rail && rail.querySelector('.rail-ind'), a = rail && rail.querySelector('a.cur'); if (!ind || !a) return;
-  const li = a.parentElement, set = () => { ind.style.transform = `translateY(${li.offsetTop}px)`; ind.style.height = a.offsetHeight + 'px'; ind.classList.add('on'); };
-  if (instant) { ind.style.transition = 'none'; set(); void ind.offsetWidth; ind.style.transition = ''; } else set();
+  const y = a.parentElement.offsetTop, h = a.offsetHeight; ind.classList.add('on');
+  if (instant || !MOTION.ready) { mvSet(RAIL.y, y); mvSet(RAIL.h, h); RAIL.render(); return; }
+  mvTo(RAIL.y, y, { damping: 0.8, response: 0.42 }); mvTo(RAIL.h, h, { damping: 1, response: 0.42 });
 }
 /** Шаги: номер превращается в галочку (transitions.dev: success check), в листе — короткая сводка. */
 function motionSteps() {
@@ -138,7 +291,7 @@ function motionSteps() {
     const a = document.querySelector(`.rail a[data-step="${id}"]`); if (!a) continue;
     a.classList.toggle('done', ok); if (just) replay(a, 'just');
     const sec = document.getElementById(id); a.setAttribute('aria-disabled', sec && sec.hidden ? 'true' : 'false');
-    const m = a.querySelector('.m'); if (m && m.textContent !== meta) m.textContent = meta;
+    const m = a.querySelector('.m'); if (m && m.textContent !== meta) { const swap = MOTION.ready && m.textContent && !MOTION.reduce; m.textContent = meta; if (swap) mIn(m, { opacity: 0, transform: 'translateY(4px)', filter: 'blur(2px)' }, [1, 0.3]); }
   }
   const intro = document.getElementById('intro'); if (intro) intro.hidden = !!(S.P || S.files.length);
 }
@@ -152,7 +305,7 @@ function motionCount(el, key) {
   out.classList.add('digits'); out.innerHTML = [...String(to)].map(ch => `<span class="digit">${ch}</span>`).join('');
   if (had && from !== to && !MOTION.reduce) replay(out, 'pop');
 }
-/** Раскрывашка (transitions.dev: accordion): высота через grid-rows 0fr → 1fr, шеврон переворачивается. */
+/** Раскрывашка (transitions.dev: accordion): высота через grid-rows 0fr → 1fr на пружине, шеврон переворачивается. */
 function initAccordions() {
   document.addEventListener('click', e => {
     const h = e.target.closest('.acc-head'); if (!h) return;
@@ -160,12 +313,12 @@ function initAccordions() {
     acc.dataset.open = String(open); h.setAttribute('aria-expanded', String(open));
   });
 }
-/** Плавный масштаб и прокрутка таймлайна — только для кнопок и мини-карты; клавиши и колёсико — мгновенно. */
-function motionView(st, zoom, scroll, draw) {
+/** Плавный масштаб и прокрутка таймлайна — для кнопок, мини-карты и перелистывания за плеером; клавиши — мгновенно. */
+function motionView(st, zoom, scroll, draw, ms = 250) {
   cancelAnimationFrame(MOTION.view);
   if (!mOK()) { st.zoom = zoom; st.scroll = scroll; draw(); return; }
-  const z0 = st.zoom, s0 = st.scroll, t0 = performance.now(), T = 250, ease = x => 1 - Math.pow(1 - x, 4);
-  const step = now => { const k = Math.min(1, (now - t0) / T), e = ease(k); st.zoom = z0 + (zoom - z0) * e; st.scroll = s0 + (scroll - s0) * e; draw(); if (k < 1) MOTION.view = requestAnimationFrame(step); };
+  const z0 = st.zoom, s0 = st.scroll, t0 = performance.now(), ease = x => 1 - Math.pow(1 - x, 4);
+  const step = now => { const k = Math.min(1, (now - t0) / ms), e = ease(k); st.zoom = z0 + (zoom - z0) * e; st.scroll = s0 + (scroll - s0) * e; draw(); if (k < 1) MOTION.view = requestAnimationFrame(step); else MOTION.view = 0; };
   MOTION.view = requestAnimationFrame(step);
 }
 /** Новое сведение: лента «заправляется» — таймлайн открывается слева направо за янтарной кромкой. */
@@ -195,7 +348,8 @@ function initTheme() {
     const swap = () => { themeApply(next); render(); if (typeof drawTimeline === 'function') drawTimeline(); };
     if (!document.startViewTransition || MOTION.reduce || e.detail === 0) { swap(); return; }   // с клавиатуры — сразу
     const r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, R = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+    const sp = springEase(1, 0.6);
     const vt = document.startViewTransition(swap);
-    vt.ready.then(() => document.documentElement.animate({ clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${R}px at ${x}px ${y}px)`] }, { duration: 500, easing: EASE, pseudoElement: '::view-transition-new(root)' })).catch(() => {});
+    vt.ready.then(() => document.documentElement.animate({ clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${R}px at ${x}px ${y}px)`] }, { duration: sp.duration, easing: sp.easing, pseudoElement: '::view-transition-new(root)' })).catch(() => {});
   });
 }

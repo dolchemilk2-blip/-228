@@ -72,7 +72,8 @@ function drawTimeline() {
   g.fillStyle = muted; g.font = '600 10px ' + cssVar('--mono');
   for (const sc of r.lay.scenes || []) { const x = tlX(st, sc.start); if (x < TL.HEAD - 2 || x > W) continue; g.strokeStyle = muted; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, H); g.stroke(); g.setLineDash([]); g.fillText('СЦЕНА ' + sc.n, x + 4, TL.RULER + 7); }
   const drag = st.drag, multi = drag && drag.moved && drag.group;
-  const shift = clip => !drag || !drag.moved ? 0 : multi ? (drag.group.has(clip.row.cue.id) ? drag.delta : 0) : (drag.own ? clip.idx === drag.clip.idx : clip.idx >= drag.clip.idx) ? drag.delta : 0;
+  const settle = st.settle && st.settle.m.v, sAt = clip => st.settle && (st.settle.ids ? st.settle.ids.has(clip.row.cue.id) : st.settle.own ? clip.idx === st.settle.idx : clip.idx >= st.settle.idx) ? settle : 0;
+  const shift = clip => !drag || !drag.moved ? (settle ? sAt(clip) : 0) : multi ? (drag.group.has(clip.row.cue.id) ? drag.delta : 0) : (drag.own ? clip.idx === drag.clip.idx : clip.idx >= drag.clip.idx) ? drag.delta : 0;
   g.save(); g.beginPath(); g.rect(TL.HEAD, TL.RULER, areaW, H - TL.RULER); g.clip();
   const pad = Math.max(5, Math.round(ROW * 0.14));
   tracks.forEach((tr, i) => {
@@ -96,7 +97,7 @@ function drawTimeline() {
   });
   g.restore();
   if (st.band) { const b = st.band, x = Math.min(b.x0, b.x1), y = Math.min(b.y0, b.y1); g.fillStyle = accent; g.globalAlpha = 0.12; g.fillRect(x, y, Math.abs(b.x1 - b.x0), Math.abs(b.y1 - b.y0)); g.globalAlpha = 1; g.strokeStyle = accent; g.setLineDash([4, 3]); g.strokeRect(x + 0.5, y + 0.5, Math.abs(b.x1 - b.x0), Math.abs(b.y1 - b.y0)); g.setLineDash([]); }
-  if (S.result.out) { const x = tlX(st, tpTime()); if (x >= TL.HEAD && x <= W) { g.strokeStyle = cssVar('--bad'); g.lineWidth = 2; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); g.lineWidth = 1; g.fillStyle = cssVar('--bad'); g.beginPath(); g.moveTo(x - 5, 0); g.lineTo(x + 5, 0); g.lineTo(x, 7); g.closePath(); g.fill(); } }
+  tlHeadUpdate();
   if (drag && drag.moved) { g.fillStyle = ink; g.font = '600 12px ' + cssVar('--mono'); g.textAlign = 'right'; g.fillText(`${drag.delta > 0 ? '+' : ''}${drag.delta.toFixed(2)} с${drag.group ? ` (${drag.group.size} реплик)` : drag.own ? ' (только эта)' : ''}`, W - 8, 9); g.textAlign = 'left'; }
   st.W = W; st.H = H;
   drawOverview();
@@ -217,16 +218,32 @@ function tlBarHtml() {
 function tlRefreshInfo() { const el = $('#tl-info'); if (el) el.innerHTML = tlInfoHtml(); drawTimeline(); }
 function tlRefreshBar() { const el = $('.tl-bar'); if (el) el.innerHTML = tlBarHtml(); histUi(); }
 function tlSelect(ids, add = false) { const st = tlState(); if (!add) st.sel.clear(); for (const id of ids) st.sel.add(id); tlRefreshInfo(); }
-let tlTimer = null;
-function tlFollow() {                                  // курсор плеера ведёт вид
-  clearTimeout(tlTimer);
-  const st = tlState(); drawTimeline();
-  const total = S.result && S.result.out ? S.result.out.length / C.SR : 0;
-  document.querySelectorAll('#tp-time, .tp-time-txt').forEach(el => { el.textContent = `${fmt(tpTime())} / ${fmt(total)}`; });
-  const sk = $('#tp-seek'); if (sk && !sk.matches(':active')) sk.value = tpTime();
-  if (!TP.playing) return;
-  const x = tlX(st, tpTime()), W = st.W || 800; if (x > W - 40 || x < TL.HEAD) st.scroll = Math.max(0, tpTime() - (W - TL.HEAD) / st.zoom * 0.15);
-  tlTimer = setTimeout(tlFollow, 80);
+/** Курсор плеера — отдельный слой поверх холста: двигается каждый кадр, холст не перерисовывается. */
+function tlHeadUpdate() {
+  const el = $('#mix-out .tl-head'), st = tlState(); if (!el || !S.result || !S.result.out) return;
+  const x = tlX(st, tpTime()), W = st.W || 800, show = x >= TL.HEAD - 1 && x <= W + 1;
+  el.style.transform = `translate3d(${(x - 1).toFixed(2)}px, 0, 0)`; el.style.opacity = show ? '' : '0';
+}
+let tlRaf = 0, tlFrame = 0;
+function tlFollow() {                                  // курсор плеера ведёт вид: каждый кадр, плавно
+  cancelAnimationFrame(tlRaf); drawTimeline();
+  const step = () => {
+    tlRaf = 0; const st = tlState(), total = S.result && S.result.out ? S.result.out.length / C.SR : 0;
+    tlHeadUpdate(); tlFrame++;
+    const txt = `${fmt(tpTime())} / ${fmt(total)}`;
+    document.querySelectorAll('#tp-time, .tp-time-txt').forEach(el => { if (el.textContent !== txt) el.textContent = txt; });
+    const sk = $('#tp-seek'); if (sk && !sk.matches(':active') && tlFrame % 3 === 0) sk.value = tpTime();
+    if (tlFrame % 8 === 0) drawOverview();
+    if (!TP.playing) { drawTimeline(); return; }
+    // дошёл до края — вид перелистывается плавно, не рывком
+    const x = tlX(st, tpTime()), W = st.W || 800;
+    if ((x > W - 40 || x < TL.HEAD) && !st.drag && !st.pan && !(typeof MOTION !== 'undefined' && MOTION.view)) {
+      const to = Math.max(0, tpTime() - (W - TL.HEAD) / st.zoom * 0.15);
+      if (typeof motionView === 'function' && x > TL.HEAD) motionView(st, st.zoom, to, drawTimeline, 420); else { st.scroll = to; drawTimeline(); }
+    }
+    tlRaf = requestAnimationFrame(step);
+  };
+  tlRaf = requestAnimationFrame(step);
 }
 // ------------------------------------------------------------------ на весь экран
 function tlSetFull(on) {
@@ -322,7 +339,7 @@ function bindTimeline() {
     tlMenuClose(false);
     const st = tlState(), hit = tlHit(e), add = e.ctrlKey || e.metaKey || e.shiftKey, pos = tlPos(e); e.target.focus();
     if (!hit) return;
-    if (e.button === 1 || (e.altKey && !hit.clip)) st.pan = { x0: e.clientX, scroll0: st.scroll };
+    if (e.button === 1 || (e.altKey && !hit.clip)) { tlCoastStop(); st.pan = { x0: e.clientX, scroll0: st.scroll, hist: [{ t: performance.now(), x: e.clientX, y: 0 }] }; }
     else if (hit.ruler) { st.scrub = true; tlSeek(hit.t); }
     else if (hit.head) { const ids = hit.track.clips.filter(c => !c.fixed).map(c => c.row.cue.id); tlSelect(ids, add); }
     else if (hit.clip && add) { st.band = { x0: pos.x, y0: pos.y, x1: pos.x, y1: pos.y, add: true, base: new Set(st.sel), toggle: hit.clip.row.cue.id }; }
@@ -340,14 +357,20 @@ function bindTimeline() {
     if (e.target.id === 'tl-ov') { if (tlState().ovDrag) tlOvSeek(e); return; }
     if (e.target.id !== 'tl-cv') return;
     const st = tlState();
-    if (st.drag) { const d = (e.clientX - st.drag.x0) / st.zoom; if (Math.abs(e.clientX - st.drag.x0) > 3) st.drag.moved = true; st.drag.delta = Math.max(st.drag.min, Math.min(60, d)); drawTimeline(); }
+    if (st.drag) {
+      const d = (e.clientX - st.drag.x0) / st.zoom; if (Math.abs(e.clientX - st.drag.x0) > 3) st.drag.moved = true;
+      // упёрлась в соседнюю или в предел — не стоп, а резина: чем дальше тянешь, тем меньше идёт
+      const rb = over => (typeof rubber === 'function' ? rubber(over * st.zoom, 90) : 0) / st.zoom;
+      st.drag.delta = d < st.drag.min ? st.drag.min - rb(st.drag.min - d) : d > 60 ? 60 + rb(d - 60) : d;
+      drawTimeline();
+    }
     else if (st.band) {
       const p = tlPos(e); st.band.x1 = p.x; st.band.y1 = p.y;
       const inside = tlInBand(st.band).map(c => c.row.cue.id); st.sel = new Set(st.band.base); for (const id of inside) st.sel.add(id);
       if (p.x > (st.W || 800) - 20) st.scroll += 8 / st.zoom; else if (p.x < TL.HEAD + 10) st.scroll -= 8 / st.zoom;
       drawTimeline();
     }
-    else if (st.pan) { st.scroll = st.pan.scroll0 - (e.clientX - st.pan.x0) / st.zoom; drawTimeline(); }
+    else if (st.pan) { st.pan.hist.push({ t: performance.now(), x: e.clientX, y: 0 }); if (st.pan.hist.length > 8) st.pan.hist.shift(); st.scroll = st.pan.scroll0 - (e.clientX - st.pan.x0) / st.zoom; drawTimeline(); }
     else if (st.scrub) { const hit = tlHit(e); if (hit && hit.t != null) tlSeek(hit.t); }
     else { const hit = tlHit(e); e.target.style.cursor = hit && hit.clip ? 'grab' : hit && hit.ruler ? 'col-resize' : hit && hit.head ? 'pointer' : 'crosshair'; }
   });
@@ -355,7 +378,9 @@ function bindTimeline() {
     const st = tlState(); st.ovDrag = false;
     if (st.drag) {
       const d = st.drag; st.drag = null;
-      if (d.moved && Math.abs(d.delta) >= 0.01) { if (!d.group) st.sel = new Set([d.clip.row.cue.id]); tlCommit(d.clips, d.delta, d.own); }
+      const commit = Math.max(d.min, Math.min(60, d.delta)), over = d.delta - commit;
+      if (d.moved && Math.abs(over) > 0.005) tlSettle(d, over);
+      if (d.moved && Math.abs(commit) >= 0.01) { if (!d.group) st.sel = new Set([d.clip.row.cue.id]); tlCommit(d.clips, commit, d.own); }
       else tlSelect([d.clip.row.cue.id]);
     }
     if (st.band) {
@@ -363,6 +388,7 @@ function bindTimeline() {
       if (Math.abs(b.x1 - b.x0) < 4 && Math.abs(b.y1 - b.y0) < 4) { if (b.toggle) { if (b.base.has(b.toggle)) st.sel.delete(b.toggle); else st.sel.add(b.toggle); } else if (!b.add) st.sel.clear(); }
       tlRefreshInfo();
     }
+    if (st.pan && typeof velocityOf === 'function') tlCoast(-velocityOf(st.pan.hist).x / st.zoom);
     st.pan = null; st.scrub = false; drawTimeline();
   };
   host.addEventListener('pointerup', e => { if (e.target.id === 'tl-cv' || e.target.id === 'tl-ov') up(); });
@@ -416,6 +442,28 @@ function bindTimeline() {
   document.addEventListener('pointerdown', e => { const m = $('#tl-menu'); if (m && !m.hidden && !m.contains(e.target) && e.target.id !== 'tl-cv') tlMenuClose(false); });
   document.addEventListener('fullscreenchange', () => { const st = tlState(); if (!document.fullscreenElement && st.full) tlSetFull(false); else drawTimeline(); });
   window.addEventListener('resize', () => drawTimeline());
+}
+/** Инерция протяжки: вид катится дальше и тормозит, как прокрутка в iOS (замедление 0,998 за мс). */
+let tlCoastRaf = 0;
+function tlCoastStop() { cancelAnimationFrame(tlCoastRaf); tlCoastRaf = 0; }
+function tlCoast(v) {                                  // v — секунды таймлайна в секунду
+  tlCoastStop(); if (typeof MOTION !== 'undefined' && MOTION.reduce) return;
+  if (Math.abs(v * tlState().zoom) < 60) return;
+  let t0 = performance.now();
+  const step = now => {
+    const st = tlState(), dt = Math.min(40, now - t0); t0 = now;
+    const before = st.scroll; st.scroll += v * dt / 1000; v *= Math.pow(0.996, dt); drawTimeline();
+    if (Math.abs(v * st.zoom) < 12 || st.scroll === before) { tlCoastRaf = 0; return; }
+    tlCoastRaf = requestAnimationFrame(step);
+  };
+  tlCoastRaf = requestAnimationFrame(step);
+}
+/** Реплику тянули за край: отпущенная, она отпружинивает к разрешённому месту. */
+function tlSettle(d, over) {
+  const st = tlState(); if (typeof mv !== 'function' || (typeof MOTION !== 'undefined' && MOTION.reduce)) return;
+  const owner = { render() { if (!st.settle) return; drawTimeline(); if (!SPRING.live.has(st.settle.m)) st.settle = null; } };
+  st.settle = { m: mv(over, 0.002, owner), ids: d.group ? new Set(d.group) : null, own: d.own, idx: d.clip.idx };
+  mvTo(st.settle.m, 0, { damping: 0.62, response: 0.4 });
 }
 function tlOvSeek(e) {                                 // мини-карта: щелчок и протяжка — сюда вид
   const cv = $('#tl-ov'), st = tlState(), r = cv.getBoundingClientRect(), W = r.width, total = S.result.lay.total;

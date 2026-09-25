@@ -22,6 +22,7 @@ const IC = {
   file: '<path d="M4 2.5h4.8L12 5.7v7.8H4z"/><path d="M8.6 2.6v3.3H12"/>',
   open: '<path d="M2.6 12.8V3.6h3.6l1.4 1.5h5.8v7.7z"/>',
   search: '<circle cx="7" cy="7" r="4"/><path d="M10 10l3.4 3.4"/>',
+  grip: '<circle class="f" cx="5.8" cy="4" r="1.15"/><circle class="f" cx="10.2" cy="4" r="1.15"/><circle class="f" cx="5.8" cy="8" r="1.15"/><circle class="f" cx="10.2" cy="8" r="1.15"/><circle class="f" cx="5.8" cy="12" r="1.15"/><circle class="f" cx="10.2" cy="12" r="1.15"/>',
   wave: '<path d="M2 8h1.4M4.6 5.5v5M7 3.2v9.6M9.4 5v6M11.8 6.5v3M14 8h.1"/>',
 };
 const ic = (n, cls = '') => `<svg class="ic${cls ? ' ' + cls : ''}" viewBox="0 0 16 16" aria-hidden="true">${IC[n] || ''}</svg>`;

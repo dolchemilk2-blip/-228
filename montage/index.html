@@ -115,7 +115,13 @@ b, strong { font-weight: 600; }
 .tabs { position: relative; display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--deck-2); border: 1px solid var(--deck-line); }
 .tabs button { position: relative; z-index: 1; height: 32px; padding: 0 16px; border: 0; border-radius: 999px; background: transparent; color: var(--deck-muted); font-weight: 600; font-size: 14px; cursor: pointer; white-space: nowrap; transition: color var(--duration-fast) var(--ease-smooth-out); }
 .tabs button.on { color: var(--accent-ink); }
-.tab-ind { position: absolute; z-index: 0; top: 3px; left: 0; height: 32px; width: 0; border-radius: 999px; background: var(--accent); box-shadow: 0 1px 0 rgb(255 255 255 / 35%) inset, 0 2px 6px rgb(0 0 0 / 35%); transition: transform var(--duration-fast) var(--ease-smooth-out), width var(--duration-fast) var(--ease-smooth-out); will-change: transform, width; pointer-events: none; }
+.tabs.clipped button.on { color: var(--deck-muted); }
+.tab-ind { position: absolute; z-index: 0; top: 3px; left: 0; height: 32px; width: 0; border-radius: 999px; background: var(--accent); box-shadow: 0 1px 0 rgb(255 255 255 / 35%) inset, 0 2px 6px rgb(0 0 0 / 35%); will-change: transform, width; pointer-events: none; transform-origin: center; }
+.tabs { touch-action: pan-y; flex: none; }
+.tabs button.on { cursor: grab; }
+.tabs-clip { position: absolute; z-index: 2; top: 3px; left: 3px; display: flex; gap: 2px; pointer-events: none; color: var(--accent-ink); font-weight: 600; font-size: 14px; white-space: nowrap; }
+.tabs-clip span { display: inline-flex; align-items: center; justify-content: center; height: 32px; }
+.tabs.clipped button { color: var(--deck-muted); }
 .monitor { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 .vu { width: 96px; height: 40px; display: block; flex: none; }
 .vu .face { fill: var(--vu-face); stroke: var(--deck-line); }
@@ -128,11 +134,17 @@ b, strong { font-weight: 600; }
 .vu .needle { stroke: var(--deck-ink); stroke-width: 1.2; stroke-linecap: round; transform-origin: 48px 50px; transform: rotate(-48deg); }
 .onair { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--deck-line); font: 700 10.5px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--deck-muted); background: var(--deck-2); transition: background-color var(--duration-quick) ease, color var(--duration-quick) ease, border-color var(--duration-quick) ease, box-shadow var(--duration-slow) var(--ease-smooth-out); }
 .onair.on { background: var(--onair); border-color: var(--onair); color: #fff; box-shadow: 0 0 14px -2px color-mix(in srgb, var(--onair) 70%, transparent), 0 1px 0 rgb(255 255 255 / 25%) inset; }
-.theme-b { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px 0 9px; border: 1px solid var(--deck-line); border-radius: 999px; background: var(--deck-2); color: var(--deck-ink); font-size: 13px; cursor: pointer; transition: transform var(--duration-quick) var(--ease-press), border-color var(--duration-quick) ease; }
+.theme-b { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px 0 9px; border: 1px solid var(--deck-line); border-radius: 999px; background: var(--deck-2); color: var(--deck-ink); font-size: 13px; cursor: pointer; transition: border-color var(--duration-quick) ease; }
 .theme-b svg > * { transition: opacity var(--duration-fast) ease-in-out, transform var(--duration-fast) var(--ease-smooth-out), filter var(--duration-fast) ease-in-out; transform-origin: 10px 10px; }
 .theme-b .t-sun, .theme-b .t-moon, .theme-b .t-auto { opacity: 0; transform: scale(.25); filter: blur(var(--blur-small)); }
 .theme-b[data-mode="light"] .t-sun, .theme-b[data-mode="dark"] .t-moon, .theme-b[data-mode="auto"] .t-auto { opacity: 1; transform: none; filter: none; }
 ::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+html.vt-tab main.wrap { view-transition-name: pane; }
+::view-transition-group(pane) { animation-duration: var(--spring-pane-dur, 400ms); animation-timing-function: var(--spring-pane, ease-out); }
+::view-transition-old(pane) { animation: t-vt-out 200ms cubic-bezier(0.4, 0, 1, 1) both; }
+::view-transition-new(pane) { animation: t-vt-in var(--spring-pane-dur, 400ms) var(--spring-pane, ease-out) both; }
+@keyframes t-vt-out { to { opacity: 0; transform: translateX(calc(var(--vt-dir, 1) * -32px)) scale(0.985); filter: blur(4px); } }
+@keyframes t-vt-in { from { opacity: 0; transform: translateX(calc(var(--vt-dir, 1) * 32px)) scale(0.985); filter: blur(4px); } }
 @media (max-width: 860px) {
   .deck-in { flex-wrap: wrap; gap: 8px 12px; padding: 8px 16px 10px; }
   .tabs { order: 3; width: 100%; }
@@ -169,7 +181,7 @@ b, strong { font-weight: 600; }
 .rail a.done.just .n, .step b.done.just { animation: t-check-plate var(--duration-very-slow) var(--ease-bounce) both; }
 @keyframes t-check-in { from { clip-path: inset(0 100% 0 0); transform: rotate(-24deg); filter: blur(4px); opacity: 0; } 40% { opacity: 1; } to { clip-path: inset(0 0 0 0); transform: none; filter: none; } }
 @keyframes t-check-plate { from { transform: scale(.86); } }
-.rail-ind { position: absolute; z-index: 0; left: 0; right: 0; top: 0; height: 0; border-radius: var(--r-m); background: var(--surface); box-shadow: var(--sh-1); opacity: 0; transition: transform var(--duration-fast) var(--ease-smooth-out), height var(--duration-fast) var(--ease-smooth-out), opacity var(--duration-quick) ease; pointer-events: none; }
+.rail-ind { position: absolute; z-index: 0; left: 0; right: 0; top: 0; height: 0; border-radius: var(--r-m); background: var(--surface); box-shadow: var(--sh-1); opacity: 0; transition: opacity var(--duration-quick) ease; pointer-events: none; will-change: transform, height; }
 .rail-ind.on { opacity: 1; }
 .rail-note { margin: 0; padding: 0 10px; font-size: 12px; color: var(--muted); display: flex; gap: 8px; }
 .rail-note::before { content: ""; flex: none; width: 6px; height: 6px; margin-top: 6px; border-radius: 50%; background: var(--ok); }
@@ -206,9 +218,9 @@ input[type=number] { padding: 3px 6px; font-variant-numeric: tabular-nums; }
 input[type=range] { -webkit-appearance: none; appearance: none; height: 24px; background: transparent; cursor: pointer; margin: 0; min-width: 0; }
 input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--line); box-shadow: inset 0 1px 1px rgb(0 0 0 / 18%); }
 input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: var(--line); }
-input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 22px; margin-top: -9px; border-radius: 3px; border: 1px solid color-mix(in srgb, var(--ink) 45%, transparent); background: linear-gradient(to bottom, transparent 10px, var(--ink) 10px 12px, transparent 12px), linear-gradient(#FFFFFF, #D7D9D4); box-shadow: 0 1px 2px rgb(0 0 0 / 28%); transition: transform var(--duration-quick) var(--ease-press); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 22px; margin-top: -9px; transition: transform var(--spring-bouncy-dur, 250ms) var(--spring-bouncy, ease), box-shadow var(--duration-quick) ease; border-radius: 3px; border: 1px solid color-mix(in srgb, var(--ink) 45%, transparent); background: linear-gradient(to bottom, transparent 10px, var(--ink) 10px 12px, transparent 12px), linear-gradient(#FFFFFF, #D7D9D4); box-shadow: 0 1px 2px rgb(0 0 0 / 28%); transition: transform var(--duration-quick) var(--ease-press); }
 input[type=range]::-moz-range-thumb { width: 12px; height: 22px; border-radius: 3px; border: 1px solid color-mix(in srgb, var(--ink) 45%, transparent); background: linear-gradient(to bottom, transparent 10px, var(--ink) 10px 12px, transparent 12px), linear-gradient(#FFFFFF, #D7D9D4); box-shadow: 0 1px 2px rgb(0 0 0 / 28%); }
-input[type=range]:active::-webkit-slider-thumb { transform: scaleY(0.94); }
+input[type=range]:active::-webkit-slider-thumb { transform: scale(1.18); box-shadow: 0 3px 8px rgb(0 0 0 / 30%); transition-duration: var(--spring-snappy-dur, 150ms); }
 input[type=range]:focus-visible { outline: none; }
 input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent), 0 1px 2px rgb(0 0 0 / 28%); }
 input[type=range]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
@@ -216,15 +228,16 @@ input[type=range]:disabled { opacity: .45; cursor: default; }
 /* галочка: коробка заливается, потом рисуется знак */
 input[type=checkbox] { -webkit-appearance: none; appearance: none; position: relative; flex: none; width: 17px; height: 17px; margin: 0; border: 1.5px solid color-mix(in srgb, var(--muted) 80%, transparent); border-radius: 4px; background: var(--surface); cursor: pointer; vertical-align: -3px; transition: background-color var(--duration-quick) var(--ease-smooth-out), border-color var(--duration-quick) var(--ease-smooth-out), transform var(--duration-quick) var(--ease-press); }
 input[type=checkbox]::before { content: ""; position: absolute; inset: 1px; background: var(--accent-ink); -webkit-mask: var(--i-check) center / contain no-repeat; mask: var(--i-check) center / contain no-repeat; clip-path: inset(0 100% 0 0); transition: clip-path var(--duration-quick) var(--ease-smooth-out); }
-input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); animation: t-cb-pop var(--spring-bouncy-dur, 300ms) var(--spring-bouncy, ease-out); }
+@keyframes t-cb-pop { from { transform: scale(0.78); } }
 input[type=checkbox]:checked::before { clip-path: inset(0 0 0 0); transition: clip-path var(--duration-medium) var(--ease-smooth-out) var(--duration-micro); }
 input[type=checkbox]:active:not(:disabled) { transform: scale(0.92); }
 input[type=checkbox]:disabled { opacity: .4; cursor: default; }
 input[type=radio] { accent-color: var(--accent); }
 
 /* ------------------------------------------------------------------ кнопки */
-.primary, .ghost-b, .icon, .icon-b, .play, .filters button, .ftab, .tog, .chip.as-btn, .m-fx button, .m-row button, .models label, .rail a, .acc-head { transition: background-color var(--duration-quick) ease, border-color var(--duration-quick) ease, color var(--duration-quick) ease, box-shadow var(--duration-quick) ease, transform var(--duration-quick) var(--ease-press); }
-.primary:active:not(:disabled), .ghost-b:active:not(:disabled), .icon:active:not(:disabled), .icon-b:active:not(:disabled), .play:active:not(:disabled), .filters button:active, .ftab:active, .tog:active, .chip.as-btn:active, .m-fx button:active, .m-row button:active, .theme-b:active, .models label:active, .acc-head:active { transform: scale(var(--scale-press)); }
+.primary, .ghost-b, .icon, .icon-b, .play, .filters button, .ftab, .tog, .chip.as-btn, .m-fx button, .m-row button, .models label, .rail a, .acc-head { transition: background-color var(--duration-quick) ease, border-color var(--duration-quick) ease, color var(--duration-quick) ease, box-shadow var(--duration-quick) ease; }
+/* касание — пружины из spring.js: сжатие к пальцу в момент нажатия, отпружинивание, тяга к курсору */
 .primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; padding: 0 18px; border: 1px solid color-mix(in srgb, var(--accent) 70%, #000); border-radius: var(--r-m); background: var(--accent); color: var(--accent-ink); font-weight: 600; cursor: pointer; box-shadow: 0 1px 0 rgb(255 255 255 / 40%) inset, 0 1px 2px rgb(60 40 0 / 25%); white-space: nowrap; }
 .primary:disabled { opacity: .4; cursor: default; box-shadow: none; }
 .ghost-b { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--surface); color: var(--ink); font-size: 13.5px; cursor: pointer; white-space: nowrap; }
@@ -243,7 +256,7 @@ input[type=radio] { accent-color: var(--accent); }
 .icon-b:disabled { opacity: .35; cursor: default; }
 /* «слушать»: значки играть/пауза в одной ячейке, смена — с размытием (transitions.dev: icon swap) */
 .play { position: relative; display: inline-grid; place-items: center; width: 32px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--surface); color: var(--ink); cursor: pointer; font-size: 0; flex: none; }
-.play:not(.ab):not(.tp-play-btn):not(.big)::before, .play:not(.ab):not(.tp-play-btn):not(.big)::after { content: ""; position: absolute; inset: 0; margin: auto; width: 13px; height: 13px; background: currentColor; transition: opacity var(--duration-fast) ease-in-out, transform var(--duration-fast) ease-in-out, filter var(--duration-fast) ease-in-out; }
+.play:not(.ab):not(.tp-play-btn):not(.big)::before, .play:not(.ab):not(.tp-play-btn):not(.big)::after { content: ""; position: absolute; inset: 0; margin: auto; width: 13px; height: 13px; background: currentColor; transition: opacity var(--duration-fast) ease-in-out, transform var(--spring-bouncy-dur, 250ms) var(--spring-bouncy, ease), filter var(--duration-fast) ease-in-out; }
 .play:not(.ab):not(.tp-play-btn):not(.big)::before { -webkit-mask: var(--i-play) center / contain no-repeat; mask: var(--i-play) center / contain no-repeat; }
 .play:not(.ab):not(.tp-play-btn):not(.big)::after { -webkit-mask: var(--i-pause) center / contain no-repeat; mask: var(--i-pause) center / contain no-repeat; opacity: 0; transform: scale(.25); filter: blur(var(--blur-small)); }
 .play.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
@@ -253,7 +266,7 @@ input[type=radio] { accent-color: var(--accent); }
 .play.ab { width: auto; min-height: 34px; padding: 0 14px; gap: 7px; font-size: 13.5px; font-weight: 600; display: inline-flex; }
 .play.ab .ic { width: 13px; height: 13px; }
 .swap { position: relative; display: inline-grid; place-items: center; }
-.swap .ic { grid-area: 1 / 1; width: 15px; height: 15px; transition: opacity var(--duration-fast) ease-in-out, transform var(--duration-fast) ease-in-out, filter var(--duration-fast) ease-in-out; }
+.swap .ic { grid-area: 1 / 1; width: 15px; height: 15px; transition: opacity var(--duration-fast) ease-in-out, transform var(--spring-bouncy-dur, 250ms) var(--spring-bouncy, ease), filter var(--duration-fast) ease-in-out; }
 .swap[data-state="a"] [data-icon="b"], .swap[data-state="b"] [data-icon="a"] { opacity: 0; transform: scale(.25); filter: blur(var(--blur-small)); }
 @media (hover: hover) and (pointer: fine) {
   .primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, #fff); }
@@ -294,10 +307,10 @@ input[type=radio] { accent-color: var(--accent); }
 #script-sum { display: grid; gap: 10px; }
 .acc { border-top: 1px solid var(--line2); }
 .acc-head { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0 0; border: 0; background: transparent; color: var(--ink); font-size: 14px; font-weight: 500; cursor: pointer; text-align: left; }
-.acc-head .chev { transition: transform var(--duration-fast) var(--ease-smooth-out); }
+.acc-head .chev { transition: transform var(--spring-bouncy-dur, 250ms) var(--spring-bouncy, ease); }
 .acc-head .chev path { vector-effect: non-scaling-stroke; }
 .acc[data-open="true"] .acc-head .chev { transform: scaleY(-1); }
-.acc-panel { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--duration-fast) var(--ease-smooth-out); }
+.acc-panel { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--spring-smooth-dur, 250ms) var(--spring-smooth, ease); }
 .acc[data-open="true"] .acc-panel { grid-template-rows: 1fr; }
 .acc-in { overflow: hidden; min-height: 0; opacity: 0; filter: blur(var(--blur-small)); transition: opacity var(--duration-fast) var(--ease-smooth-out), filter var(--duration-fast) var(--ease-smooth-out); font-size: 14px; color: var(--muted); }
 .acc[data-open="true"] .acc-in { opacity: 1; filter: none; }
@@ -317,6 +330,11 @@ input[type=radio] { accent-color: var(--accent); }
 .file:first-child { border-top: 1px solid var(--line2); }
 .fhead { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .fname { font-weight: 600; overflow-wrap: anywhere; }
+.grip { display: inline-grid; place-items: center; width: 22px; height: 28px; margin-left: -6px; border-radius: var(--r-s); color: var(--muted); cursor: grab; touch-action: none; transition: background-color var(--duration-quick) ease, color var(--duration-quick) ease; }
+.grip:active { cursor: grabbing; }
+@media (hover: hover) and (pointer: fine) { .grip:hover { background: var(--well); color: var(--ink); } }
+.file.lift { position: relative; z-index: 3; background: var(--surface); border-radius: var(--r-m); box-shadow: var(--sh-2); border-color: transparent; }
+.file { will-change: auto; }
 .fmeta { font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 .fbtn { margin-left: auto; display: flex; gap: 4px; }
 .who { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -329,7 +347,7 @@ input[type=radio] { accent-color: var(--accent); }
 #lonely:empty { display: none; }
 
 /* ------------------------------------------------------------------ 3. разбор */
-.models { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+.models { position: relative; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
 .models label { position: relative; display: grid; gap: 2px; padding: 11px 14px 11px 40px; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--surface); cursor: pointer; }
 .models label::before { content: ""; position: absolute; left: 14px; top: 14px; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--muted) 80%, transparent); background: var(--surface); transition: border-color var(--duration-quick) ease, border-width var(--duration-quick) var(--ease-smooth-out); }
 .models label:has(input:checked) { border-color: var(--ink); background: var(--well); }
@@ -338,6 +356,9 @@ input[type=radio] { accent-color: var(--accent); }
 .models label:has(input:disabled) { opacity: .6; cursor: default; }
 .models input { position: absolute; opacity: 0; pointer-events: none; }
 .models b { font-weight: 600; font-size: 14.5px; }
+.models label { overflow: hidden; }
+.models label::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; background: radial-gradient(circle 140px at var(--gx, 50%) var(--gy, 50%), rgb(255 255 255 / 60%), rgb(255 255 255 / 0) 70%); mix-blend-mode: soft-light; transition: opacity var(--duration-fast) ease; }
+.models label.tilting::after { opacity: 1; }
 .models span { font-size: 12.5px; color: var(--muted); }
 @media (hover: hover) and (pointer: fine) { .models label:not(:has(input:checked)):hover { border-color: var(--muted); } }
 .run-note { font-size: 13px; color: var(--muted); max-width: 62ch; }
@@ -425,6 +446,8 @@ input[type=radio] { accent-color: var(--accent); }
 .tl-flash { position: absolute; left: 50%; bottom: 16px; z-index: 70; padding: 8px 14px; border-radius: 999px; background: var(--deck); color: var(--deck-ink); font-size: 13px; box-shadow: var(--sh-2); white-space: nowrap; max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis; pointer-events: none; opacity: 0; transform: translate(-50%, var(--distance-base)) scale(0.97); filter: blur(var(--blur-small)); transition: opacity var(--duration-fast) var(--ease-smooth-out), transform var(--duration-fast) var(--ease-smooth-out), filter var(--duration-fast) var(--ease-smooth-out); }
 .tl-flash.on { opacity: 1; transform: translate(-50%, 0); filter: none; transition-duration: var(--duration-medium); }
 .tl-canvas { position: relative; min-height: 0; border-radius: var(--r-m); overflow: hidden; }
+.tl-head { position: absolute; z-index: 2; top: 0; left: 0; width: 2px; height: 100%; background: var(--onair); pointer-events: none; will-change: transform; }
+.tl-head::before { content: ""; position: absolute; top: 0; left: -4px; border-style: solid; border-width: 7px 5px 0; border-color: var(--onair) transparent transparent; }
 #tl-cv { width: 100%; display: block; touch-action: none; outline: none; }
 #tl-cv:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
 #tl-ov { width: 100%; height: 30px; display: block; border-radius: var(--r-s); cursor: pointer; touch-action: none; border: 1px solid var(--line2); }
@@ -492,10 +515,12 @@ body.tl-full-open { overflow: hidden; }
 .mhead b { font: 600 15px/1.25 var(--display); font-stretch: 95%; }
 .mhead span { grid-column: 2; font-size: 12.5px; color: var(--muted); line-height: 1.4; }
 /* выключатель модуля */
-.mhead input[type=checkbox] { grid-row: span 2; align-self: start; margin-top: 1px; width: 32px; height: 19px; border-radius: 999px; border: 0; background: var(--line); }
-.mhead input[type=checkbox]::before { inset: 2px auto 2px 2px; width: 15px; height: 15px; border-radius: 50%; background: #fff; -webkit-mask: none; mask: none; clip-path: none; box-shadow: 0 1px 2px rgb(0 0 0 / 30%); transform: translateX(0); transition: transform var(--duration-fast) var(--ease-smooth-out); }
+.mhead input[type=checkbox] { grid-row: span 2; align-self: start; margin-top: 1px; width: 32px; height: 19px; border-radius: 999px; border: 0; background: var(--line); animation: none !important; }
+.mhead input[type=checkbox]::before { inset: 2px auto 2px 2px; width: 15px; height: 15px; border-radius: 999px; background: #fff; -webkit-mask: none; mask: none; clip-path: none; box-shadow: 0 1px 2px rgb(0 0 0 / 30%); transform: translateX(0); transition: transform var(--spring-bouncy-dur, 250ms) var(--spring-bouncy, ease), width var(--spring-snappy-dur, 200ms) var(--spring-snappy, ease); }
+.mhead input[type=checkbox]:active::before { width: 19px; }
+.mhead input[type=checkbox]:checked:active::before { transform: translateX(9px); }
 .mhead input[type=checkbox]:checked { background: var(--accent); }
-.mhead input[type=checkbox]:checked::before { transform: translateX(13px); transition: transform var(--duration-fast) var(--ease-smooth-out); }
+.mhead input[type=checkbox]:checked::before { transform: translateX(13px); }
 .mprm { display: grid; gap: 8px; }
 .prm { display: grid; gap: 2px; font-size: 12.5px; color: var(--muted); }
 .prm b { color: var(--ink); font-variant-numeric: tabular-nums; }
@@ -562,8 +587,16 @@ body.tl-full-open { overflow: hidden; }
 @media (max-width: 860px) { .srow { grid-template-columns: auto minmax(0, 1fr) 34px auto; } .srow select, .srow .gain { grid-column: 2; } }
 
 /* ------------------------------------------------------------------ прогресс и сообщения */
-#prog { position: fixed; left: 50%; bottom: 16px; z-index: 50; width: min(720px, calc(100% - 24px)); padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); border-radius: var(--r-l); background: var(--deck); color: var(--deck-ink); border: 1px solid var(--deck-line); box-shadow: var(--sh-2); transform: translateX(-50%); }
-#prog .in { display: grid; gap: 9px; }
+/* прогресс — «остров» в деке: вырастает из пилюли и сворачивается обратно */
+#prog { position: relative; z-index: 2; flex: 0 1 460px; min-width: 0; margin: 0 auto; height: 40px; padding: 0 18px; border-radius: 20px; background: #000; color: var(--deck-ink); border: 1px solid var(--deck-line); box-shadow: 0 1px 0 rgb(255 255 255 / 6%) inset, 0 6px 18px -6px rgb(0 0 0 / 60%); display: flex; align-items: center; }
+#prog .in { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 14px; align-items: center; width: 100%; }
+#prog-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
+#prog-t::before { white-space: nowrap; overflow: hidden; }
+@media (max-width: 1100px) {
+  #prog { position: fixed; left: 50%; bottom: 16px; z-index: 50; width: min(640px, calc(100% - 24px)); height: auto; margin: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); border-radius: 16px; transform: translateX(-50%); }
+  #prog .in { grid-template-columns: minmax(0, 1fr); gap: 9px; }
+  #prog-t { white-space: normal; font-size: 14px; }
+}
 #prog-t { position: relative; font-size: 14px; color: var(--deck-ink); }
 /* надпись «думает»: по тексту бежит блик (transitions.dev: shimmer text) */
 #prog-t::before { content: attr(data-text); position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, transparent 0%, transparent 40%, #fff 50%, transparent 60%, transparent 100%) no-repeat; background-size: 400% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; animation: t-shimmer 2000ms linear infinite; }
@@ -571,8 +604,10 @@ body.tl-full-open { overflow: hidden; }
 @keyframes t-shimmer { from { background-position: 100% 0; } to { background-position: 0% 0; } }
 #prog .bar { height: 4px; border-radius: 999px; overflow: hidden; background: var(--deck-3); }
 #prog-b { height: 100%; width: 100%; border-radius: 999px; background: var(--accent); transform-origin: left; transform: scaleX(var(--p, 0)); transition: transform var(--duration-fast) var(--ease-smooth-out); }
-#msg { position: fixed; left: 50%; bottom: 20px; z-index: 55; max-width: min(640px, calc(100% - 32px)); padding: 12px 16px; border-radius: var(--r-l); background: var(--deck); color: var(--deck-ink); border: 1px solid var(--deck-line); font-size: 14px; box-shadow: var(--sh-2); transform: translateX(-50%); }
-#prog:not([hidden]) ~ #msg { bottom: 100px; }
+/* уведомление: на компьютере падает из-под деки, на телефоне поднимается снизу; смахивается пальцем */
+#msg { position: fixed; left: 50%; top: calc(var(--deck-h) + 14px); z-index: 55; max-width: min(640px, calc(100% - 32px)); padding: 12px 18px; border-radius: 16px; background: var(--deck); color: var(--deck-ink); border: 1px solid var(--deck-line); font-size: 14px; box-shadow: var(--sh-2); transform: translateX(-50%); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+#msg:active { cursor: grabbing; }
+@media (max-width: 860px) { #msg { top: auto; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); } body:has(#prog:not([hidden])) #msg { bottom: 110px; } }
 footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
 
 /* меньше движения: полосы и блики стоят */
@@ -603,6 +638,7 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
       <button data-tab="clean" role="tab">Чистка звука</button>
       <button data-tab="sfx" role="tab">Звуки</button>
     </nav>
+    <div id="prog" role="status" hidden><div class="in"><div id="prog-t"></div><div class="bar"><div id="prog-b"></div></div></div></div>
     <div class="monitor">
       <svg class="vu" id="vu" viewBox="0 0 96 40" role="img" aria-label="Индикатор уровня">
         <defs><radialGradient id="vu-lamp" cx="50%" cy="100%" r="90%"><stop offset="0" stop-color="#F2B233" stop-opacity=".42"/><stop offset="1" stop-color="#F2B233" stop-opacity="0"/></radialGradient></defs>
@@ -713,7 +749,6 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
   </div>
   <footer><span>Сопоставление: нарезка по паузам, распознавание Whisper, выравнивание текста по порядку сценария. Громкость — по ITU-R BS.1770.</span><span>Всё считается в этом браузере. Записи и сценарий никуда не отправляются.</span></footer>
 </main>
-<div id="prog" hidden><div class="in"><div id="prog-t"></div><div class="bar"><div id="prog-b"></div></div></div></div>
 <div id="msg" role="status" hidden></div>
 <script type="module">
 const C = (() => {
@@ -2497,10 +2532,145 @@ const IC = {
   file: '<path d="M4 2.5h4.8L12 5.7v7.8H4z"/><path d="M8.6 2.6v3.3H12"/>',
   open: '<path d="M2.6 12.8V3.6h3.6l1.4 1.5h5.8v7.7z"/>',
   search: '<circle cx="7" cy="7" r="4"/><path d="M10 10l3.4 3.4"/>',
+  grip: '<circle class="f" cx="5.8" cy="4" r="1.15"/><circle class="f" cx="10.2" cy="4" r="1.15"/><circle class="f" cx="5.8" cy="8" r="1.15"/><circle class="f" cx="10.2" cy="8" r="1.15"/><circle class="f" cx="5.8" cy="12" r="1.15"/><circle class="f" cx="10.2" cy="12" r="1.15"/>',
   wave: '<path d="M2 8h1.4M4.6 5.5v5M7 3.2v9.6M9.4 5v6M11.8 6.5v3M14 8h.1"/>',
 };
 const ic = (n, cls = '') => `<svg class="ic${cls ? ' ' + cls : ''}" viewBox="0 0 16 16" aria-hidden="true">${IC[n] || ''}</svg>`;
 const tpIcon = on => `<span class="swap" data-state="${on ? 'b' : 'a'}"><svg class="ic" data-icon="a" viewBox="0 0 16 16" aria-hidden="true">${IC.play}</svg><svg class="ic" data-icon="b" viewBox="0 0 16 16" aria-hidden="true">${IC.pause}</svg></span>`;
+
+// Монтажка — пружины в духе Apple (WWDC 2018 «Designing Fluid Interfaces», скилл apple-design).
+// Параметры как у Apple: затухание (1 — без перелёта, 0,8 — лёгкий перелёт) и отклик в секундах.
+// Движение всегда начинается с текущего значения и сохраняет скорость, поэтому его можно
+// перехватить и развернуть на лету. Один цикл requestAnimationFrame на все пружины, только пока
+// что-то движется. springEase() превращает ту же пружину в CSS linear() для переходов и WAAPI.
+// Поверх — отклик на касание (кнопки сжимаются в момент нажатия и отпружинивают), лёгкая тяга
+// к курсору у значков, наклон карточек к курсору с бликом (transitions.dev: card tilt), FLIP.
+// prefers-reduced-motion: всё встаёт на место сразу. Использует MOTION из motion.js.
+const SPRING = { live: new Set(), dirty: new Set(), raf: 0, t: 0 };
+const sprReduced = () => typeof MOTION !== 'undefined' && MOTION.reduce;
+/** Значение на пружине. eps — точность, при которой пружина считается улёгшейся. */
+function mv(v = 0, eps = 0.01, owner = null) { return { v, vel: 0, to: v, k: 0, c: 0, eps, owner }; }
+function mvTo(m, to, { damping = 1, response = 0.4, velocity } = {}) {
+  if (velocity != null) m.vel = velocity;
+  m.to = to;
+  if (sprReduced()) { mvSet(m, to); return; }
+  const w = 2 * Math.PI / response; m.k = w * w; m.c = 2 * damping * w;
+  SPRING.live.add(m); sprKick();
+}
+function mvSet(m, v) { m.v = v; m.to = v; m.vel = 0; SPRING.live.delete(m); if (m.owner) { SPRING.dirty.add(m.owner); sprKick(); } }
+function sprKick() { if (!SPRING.raf) { SPRING.t = performance.now(); SPRING.raf = requestAnimationFrame(sprTick); } }
+function sprTick(now) {
+  SPRING.raf = 0;
+  let dt = Math.min(0.05, Math.max(0.001, (now - SPRING.t) / 1000)); SPRING.t = now;
+  const steps = Math.ceil(dt / (1 / 240)), h = dt / steps;
+  for (const m of SPRING.live) {
+    for (let i = 0; i < steps; i++) { const a = -m.k * (m.v - m.to) - m.c * m.vel; m.vel += a * h; m.v += m.vel * h; }
+    if (Math.abs(m.v - m.to) < m.eps && Math.abs(m.vel) < m.eps * 10) { m.v = m.to; m.vel = 0; SPRING.live.delete(m); }
+    if (m.owner) SPRING.dirty.add(m.owner);
+  }
+  for (const o of SPRING.dirty) o.render(); SPRING.dirty.clear();
+  if (SPRING.live.size) SPRING.raf = requestAnimationFrame(sprTick);
+}
+/** Пружина как CSS linear(): одна и та же физика для JS и для переходов. Кэшируется. */
+const SPR_EASE = new Map();
+function springEase(damping = 1, response = 0.4) {
+  const key = damping + '|' + response; if (SPR_EASE.has(key)) return SPR_EASE.get(key);
+  const w = 2 * Math.PI / response, k = w * w, c = 2 * damping * w, h = 1 / 600, pts = [];
+  let x = 0, v = 0, t = 0, settled = 0;
+  while (t < 3) { const a = -k * (x - 1) - c * v; v += a * h; x += v * h; t += h; pts.push(x); if (Math.abs(x - 1) < 0.001 && Math.abs(v) < 0.01) { if (++settled > 30) break; } else settled = 0; }
+  const n = 44, out = []; for (let i = 0; i <= n; i++) out.push(+pts[Math.min(pts.length - 1, Math.round(i / n * (pts.length - 1)))].toFixed(4));
+  out[n] = 1;
+  const res = { easing: `linear(${out.join(', ')})`, duration: Math.round(t * 1000) };
+  SPR_EASE.set(key, res); return res;
+}
+/** Трансформ элемента из пружин: сдвиг, масштаб, наклон. В покое трансформ снимается совсем. */
+function tform(el) {
+  if (el._tf) return el._tf;
+  const T = { el, render() {
+    const x = T.x.v, y = T.y.v, s = T.s.v, rx = T.rx.v, ry = T.ry.v;
+    const idle = Math.abs(x) < 0.01 && Math.abs(y) < 0.01 && Math.abs(s - 1) < 0.0005 && Math.abs(rx) < 0.01 && Math.abs(ry) < 0.01;
+    el.style.transform = idle ? '' : `${rx || ry ? 'perspective(700px) ' : ''}translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)${rx || ry ? ` rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg)` : ''} scale(${s.toFixed(4)})`;
+  } };
+  T.x = mv(0, 0.02, T); T.y = mv(0, 0.02, T); T.s = mv(1, 0.0004, T); T.rx = mv(0, 0.02, T); T.ry = mv(0, 0.02, T);
+  el._tf = T; return T;
+}
+/** Куда долетит брошенное (Apple: проекция импульса). v — px/с. */
+const project = (v, rate = 0.99) => (v / 1000) * rate / (1 - rate);
+/** Резиновый край: чем дальше за границу, тем меньше идёт следом. */
+const rubber = (over, dim = 200, c = 0.55) => (over * dim * c) / (dim + c * Math.abs(over));
+/** Скорость по последним точкам указателя: [{t, x, y}] → px/с. */
+function velocityOf(hist) {
+  const now = hist.length ? hist[hist.length - 1].t : 0, pts = hist.filter(p => now - p.t < 100);
+  if (pts.length < 2) return { x: 0, y: 0 };
+  const a = pts[0], b = pts[pts.length - 1], dt = Math.max(1, b.t - a.t);
+  return { x: (b.x - a.x) / dt * 1000, y: (b.y - a.y) / dt * 1000 };
+}
+// ------------------------------------------------------------------ касание: сжатие в момент нажатия
+const PRESS_SEL = '.primary, .ghost-b, .icon, .icon-b, .play, .chip.as-btn, .filters button, .ftab, .tog, .m-fx button, .m-row button, .theme-b, .acc-head, .tabs button, .rail a, .models label, .tl-menu > button, .pick-files';
+const LEAN_SEL = '.icon, .icon-b, .play, .theme-b, .primary, .ghost-b, .ftab';
+let pressed = null;
+function pressScale(el) { const w = el.offsetWidth; return w < 48 ? 0.9 : w < 140 ? 0.95 : w < 320 ? 0.97 : 0.985; }   // большое — тяжелее
+function initTouch() {
+  document.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || sprReduced()) return;
+    const el = e.target.closest(PRESS_SEL); if (!el || el.disabled || el.matches(':disabled, [aria-disabled="true"]') || el.querySelector(':scope > input:disabled')) return;
+    const T = tform(el), r = el.getBoundingClientRect();
+    if (Math.abs(T.s.v - 1) < 0.002) el.style.transformOrigin = `${((e.clientX - r.left) / r.width * 100).toFixed(1)}% ${((e.clientY - r.top) / r.height * 100).toFixed(1)}%`;   // сжимается к пальцу
+    mvTo(T.s, pressScale(el), { damping: 1, response: 0.16 });
+    pressed = { el, r };
+  }, true);
+  const release = () => { if (!pressed) return; const T = tform(pressed.el); mvTo(T.s, 1, { damping: 0.58, response: 0.42 }); pressed = null; };
+  document.addEventListener('pointerup', release, true); document.addEventListener('pointercancel', release, true);
+  document.addEventListener('pointermove', e => {                 // увели палец с кнопки — отпускает, как в iOS
+    if (!pressed) return; const r = pressed.r, pad = 14;
+    if (e.clientX < r.left - pad || e.clientX > r.right + pad || e.clientY < r.top - pad || e.clientY > r.bottom + pad) release();
+  }, { passive: true });
+  // тяга к курсору: значки и кнопки чуть идут навстречу мыши и мягко возвращаются
+  if (!matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+  let lean = null, raf = 0, last = null;
+  document.addEventListener('pointermove', e => {
+    if (e.pointerType !== 'mouse') return; last = e;
+    if (!raf) raf = requestAnimationFrame(() => {
+      raf = 0; if (sprReduced()) return;
+      const el = last.target.closest && last.target.closest(LEAN_SEL);
+      if (lean && lean !== el) { const T = tform(lean); mvTo(T.x, 0, { damping: 0.55, response: 0.5 }); mvTo(T.y, 0, { damping: 0.55, response: 0.5 }); lean = null; }
+      if (!el || el.disabled || el.closest('.tl-menu')) return;
+      const r = el.getBoundingClientRect(), L = r.width < 48 ? 2.5 : r.width < 160 ? 1.6 : 1;
+      const dx = Math.max(-1, Math.min(1, (last.clientX - r.left - r.width / 2) / (r.width / 2))), dy = Math.max(-1, Math.min(1, (last.clientY - r.top - r.height / 2) / (r.height / 2)));
+      const T = tform(el); mvTo(T.x, dx * L, { damping: 1, response: 0.22 }); mvTo(T.y, dy * L, { damping: 1, response: 0.22 }); lean = el;
+    });
+  }, { passive: true });
+  document.addEventListener('pointerleave', () => { if (lean) { const T = tform(lean); mvTo(T.x, 0, { damping: 0.55, response: 0.5 }); mvTo(T.y, 0, { damping: 0.55, response: 0.5 }); lean = null; } });
+}
+// ------------------------------------------------------------------ наклон карточек к курсору с бликом
+function initTilt(sel, max = 7) {
+  const host = document.querySelector(sel); if (!host) return;
+  host.classList.add('tilt-host');
+  let cur = null;
+  const flat = el => { if (!el) return; const T = tform(el); mvTo(T.rx, 0, { damping: 0.6, response: 0.55 }); mvTo(T.ry, 0, { damping: 0.6, response: 0.55 }); el.classList.remove('tilting'); };
+  host.addEventListener('pointermove', e => {
+    if (sprReduced()) return;
+    // считаем по раскладке (offset*), а не по наклонённому прямоугольнику — край не «уезжает» из-под курсора
+    const hr = host.getBoundingClientRect(), px = e.clientX - hr.left, py = e.clientY - hr.top;
+    const el = [...host.children].find(c => px >= c.offsetLeft && px <= c.offsetLeft + c.offsetWidth && py >= c.offsetTop && py <= c.offsetTop + c.offsetHeight);
+    if (cur !== el) { flat(cur); cur = el; }
+    if (!el) return;
+    const u = (px - el.offsetLeft) / el.offsetWidth, v = (py - el.offsetTop) / el.offsetHeight, T = tform(el);
+    mvTo(T.ry, (u - 0.5) * max, { damping: 1, response: 0.18 }); mvTo(T.rx, (0.5 - v) * max * 0.8, { damping: 1, response: 0.18 });
+    el.style.setProperty('--gx', (u * 100).toFixed(1) + '%'); el.style.setProperty('--gy', (v * 100).toFixed(1) + '%'); el.classList.add('tilting');
+  });
+  host.addEventListener('pointerleave', () => { flat(cur); cur = null; });
+}
+// ------------------------------------------------------------------ FLIP: элементы доезжают до новых мест на пружинах
+function flipRecord(sel, key) { const m = new Map(); document.querySelectorAll(sel).forEach(el => m.set(key(el), el.getBoundingClientRect().top)); return m; }
+function flipPlay(before, sel, key, opt = { damping: 0.82, response: 0.38 }) {
+  if (sprReduced()) return;
+  document.querySelectorAll(sel).forEach(el => {
+    const was = before.get(key(el)); if (was == null) return;
+    const d = was - el.getBoundingClientRect().top; if (Math.abs(d) < 1) return;
+    const T = tform(el); mvSet(T.y, d); mvTo(T.y, 0, opt);
+  });
+}
 
 
 // Монтажка — вкладка «Чистка звука». Использует S, $, esc, notify, progress, play, stop, fmt,
@@ -3771,7 +3941,8 @@ function drawTimeline() {
   g.fillStyle = muted; g.font = '600 10px ' + cssVar('--mono');
   for (const sc of r.lay.scenes || []) { const x = tlX(st, sc.start); if (x < TL.HEAD - 2 || x > W) continue; g.strokeStyle = muted; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, H); g.stroke(); g.setLineDash([]); g.fillText('СЦЕНА ' + sc.n, x + 4, TL.RULER + 7); }
   const drag = st.drag, multi = drag && drag.moved && drag.group;
-  const shift = clip => !drag || !drag.moved ? 0 : multi ? (drag.group.has(clip.row.cue.id) ? drag.delta : 0) : (drag.own ? clip.idx === drag.clip.idx : clip.idx >= drag.clip.idx) ? drag.delta : 0;
+  const settle = st.settle && st.settle.m.v, sAt = clip => st.settle && (st.settle.ids ? st.settle.ids.has(clip.row.cue.id) : st.settle.own ? clip.idx === st.settle.idx : clip.idx >= st.settle.idx) ? settle : 0;
+  const shift = clip => !drag || !drag.moved ? (settle ? sAt(clip) : 0) : multi ? (drag.group.has(clip.row.cue.id) ? drag.delta : 0) : (drag.own ? clip.idx === drag.clip.idx : clip.idx >= drag.clip.idx) ? drag.delta : 0;
   g.save(); g.beginPath(); g.rect(TL.HEAD, TL.RULER, areaW, H - TL.RULER); g.clip();
   const pad = Math.max(5, Math.round(ROW * 0.14));
   tracks.forEach((tr, i) => {
@@ -3795,7 +3966,7 @@ function drawTimeline() {
   });
   g.restore();
   if (st.band) { const b = st.band, x = Math.min(b.x0, b.x1), y = Math.min(b.y0, b.y1); g.fillStyle = accent; g.globalAlpha = 0.12; g.fillRect(x, y, Math.abs(b.x1 - b.x0), Math.abs(b.y1 - b.y0)); g.globalAlpha = 1; g.strokeStyle = accent; g.setLineDash([4, 3]); g.strokeRect(x + 0.5, y + 0.5, Math.abs(b.x1 - b.x0), Math.abs(b.y1 - b.y0)); g.setLineDash([]); }
-  if (S.result.out) { const x = tlX(st, tpTime()); if (x >= TL.HEAD && x <= W) { g.strokeStyle = cssVar('--bad'); g.lineWidth = 2; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); g.lineWidth = 1; g.fillStyle = cssVar('--bad'); g.beginPath(); g.moveTo(x - 5, 0); g.lineTo(x + 5, 0); g.lineTo(x, 7); g.closePath(); g.fill(); } }
+  tlHeadUpdate();
   if (drag && drag.moved) { g.fillStyle = ink; g.font = '600 12px ' + cssVar('--mono'); g.textAlign = 'right'; g.fillText(`${drag.delta > 0 ? '+' : ''}${drag.delta.toFixed(2)} с${drag.group ? ` (${drag.group.size} реплик)` : drag.own ? ' (только эта)' : ''}`, W - 8, 9); g.textAlign = 'left'; }
   st.W = W; st.H = H;
   drawOverview();
@@ -3916,16 +4087,32 @@ function tlBarHtml() {
 function tlRefreshInfo() { const el = $('#tl-info'); if (el) el.innerHTML = tlInfoHtml(); drawTimeline(); }
 function tlRefreshBar() { const el = $('.tl-bar'); if (el) el.innerHTML = tlBarHtml(); histUi(); }
 function tlSelect(ids, add = false) { const st = tlState(); if (!add) st.sel.clear(); for (const id of ids) st.sel.add(id); tlRefreshInfo(); }
-let tlTimer = null;
-function tlFollow() {                                  // курсор плеера ведёт вид
-  clearTimeout(tlTimer);
-  const st = tlState(); drawTimeline();
-  const total = S.result && S.result.out ? S.result.out.length / C.SR : 0;
-  document.querySelectorAll('#tp-time, .tp-time-txt').forEach(el => { el.textContent = `${fmt(tpTime())} / ${fmt(total)}`; });
-  const sk = $('#tp-seek'); if (sk && !sk.matches(':active')) sk.value = tpTime();
-  if (!TP.playing) return;
-  const x = tlX(st, tpTime()), W = st.W || 800; if (x > W - 40 || x < TL.HEAD) st.scroll = Math.max(0, tpTime() - (W - TL.HEAD) / st.zoom * 0.15);
-  tlTimer = setTimeout(tlFollow, 80);
+/** Курсор плеера — отдельный слой поверх холста: двигается каждый кадр, холст не перерисовывается. */
+function tlHeadUpdate() {
+  const el = $('#mix-out .tl-head'), st = tlState(); if (!el || !S.result || !S.result.out) return;
+  const x = tlX(st, tpTime()), W = st.W || 800, show = x >= TL.HEAD - 1 && x <= W + 1;
+  el.style.transform = `translate3d(${(x - 1).toFixed(2)}px, 0, 0)`; el.style.opacity = show ? '' : '0';
+}
+let tlRaf = 0, tlFrame = 0;
+function tlFollow() {                                  // курсор плеера ведёт вид: каждый кадр, плавно
+  cancelAnimationFrame(tlRaf); drawTimeline();
+  const step = () => {
+    tlRaf = 0; const st = tlState(), total = S.result && S.result.out ? S.result.out.length / C.SR : 0;
+    tlHeadUpdate(); tlFrame++;
+    const txt = `${fmt(tpTime())} / ${fmt(total)}`;
+    document.querySelectorAll('#tp-time, .tp-time-txt').forEach(el => { if (el.textContent !== txt) el.textContent = txt; });
+    const sk = $('#tp-seek'); if (sk && !sk.matches(':active') && tlFrame % 3 === 0) sk.value = tpTime();
+    if (tlFrame % 8 === 0) drawOverview();
+    if (!TP.playing) { drawTimeline(); return; }
+    // дошёл до края — вид перелистывается плавно, не рывком
+    const x = tlX(st, tpTime()), W = st.W || 800;
+    if ((x > W - 40 || x < TL.HEAD) && !st.drag && !st.pan && !(typeof MOTION !== 'undefined' && MOTION.view)) {
+      const to = Math.max(0, tpTime() - (W - TL.HEAD) / st.zoom * 0.15);
+      if (typeof motionView === 'function' && x > TL.HEAD) motionView(st, st.zoom, to, drawTimeline, 420); else { st.scroll = to; drawTimeline(); }
+    }
+    tlRaf = requestAnimationFrame(step);
+  };
+  tlRaf = requestAnimationFrame(step);
 }
 // ------------------------------------------------------------------ на весь экран
 function tlSetFull(on) {
@@ -4021,7 +4208,7 @@ function bindTimeline() {
     tlMenuClose(false);
     const st = tlState(), hit = tlHit(e), add = e.ctrlKey || e.metaKey || e.shiftKey, pos = tlPos(e); e.target.focus();
     if (!hit) return;
-    if (e.button === 1 || (e.altKey && !hit.clip)) st.pan = { x0: e.clientX, scroll0: st.scroll };
+    if (e.button === 1 || (e.altKey && !hit.clip)) { tlCoastStop(); st.pan = { x0: e.clientX, scroll0: st.scroll, hist: [{ t: performance.now(), x: e.clientX, y: 0 }] }; }
     else if (hit.ruler) { st.scrub = true; tlSeek(hit.t); }
     else if (hit.head) { const ids = hit.track.clips.filter(c => !c.fixed).map(c => c.row.cue.id); tlSelect(ids, add); }
     else if (hit.clip && add) { st.band = { x0: pos.x, y0: pos.y, x1: pos.x, y1: pos.y, add: true, base: new Set(st.sel), toggle: hit.clip.row.cue.id }; }
@@ -4039,14 +4226,20 @@ function bindTimeline() {
     if (e.target.id === 'tl-ov') { if (tlState().ovDrag) tlOvSeek(e); return; }
     if (e.target.id !== 'tl-cv') return;
     const st = tlState();
-    if (st.drag) { const d = (e.clientX - st.drag.x0) / st.zoom; if (Math.abs(e.clientX - st.drag.x0) > 3) st.drag.moved = true; st.drag.delta = Math.max(st.drag.min, Math.min(60, d)); drawTimeline(); }
+    if (st.drag) {
+      const d = (e.clientX - st.drag.x0) / st.zoom; if (Math.abs(e.clientX - st.drag.x0) > 3) st.drag.moved = true;
+      // упёрлась в соседнюю или в предел — не стоп, а резина: чем дальше тянешь, тем меньше идёт
+      const rb = over => (typeof rubber === 'function' ? rubber(over * st.zoom, 90) : 0) / st.zoom;
+      st.drag.delta = d < st.drag.min ? st.drag.min - rb(st.drag.min - d) : d > 60 ? 60 + rb(d - 60) : d;
+      drawTimeline();
+    }
     else if (st.band) {
       const p = tlPos(e); st.band.x1 = p.x; st.band.y1 = p.y;
       const inside = tlInBand(st.band).map(c => c.row.cue.id); st.sel = new Set(st.band.base); for (const id of inside) st.sel.add(id);
       if (p.x > (st.W || 800) - 20) st.scroll += 8 / st.zoom; else if (p.x < TL.HEAD + 10) st.scroll -= 8 / st.zoom;
       drawTimeline();
     }
-    else if (st.pan) { st.scroll = st.pan.scroll0 - (e.clientX - st.pan.x0) / st.zoom; drawTimeline(); }
+    else if (st.pan) { st.pan.hist.push({ t: performance.now(), x: e.clientX, y: 0 }); if (st.pan.hist.length > 8) st.pan.hist.shift(); st.scroll = st.pan.scroll0 - (e.clientX - st.pan.x0) / st.zoom; drawTimeline(); }
     else if (st.scrub) { const hit = tlHit(e); if (hit && hit.t != null) tlSeek(hit.t); }
     else { const hit = tlHit(e); e.target.style.cursor = hit && hit.clip ? 'grab' : hit && hit.ruler ? 'col-resize' : hit && hit.head ? 'pointer' : 'crosshair'; }
   });
@@ -4054,7 +4247,9 @@ function bindTimeline() {
     const st = tlState(); st.ovDrag = false;
     if (st.drag) {
       const d = st.drag; st.drag = null;
-      if (d.moved && Math.abs(d.delta) >= 0.01) { if (!d.group) st.sel = new Set([d.clip.row.cue.id]); tlCommit(d.clips, d.delta, d.own); }
+      const commit = Math.max(d.min, Math.min(60, d.delta)), over = d.delta - commit;
+      if (d.moved && Math.abs(over) > 0.005) tlSettle(d, over);
+      if (d.moved && Math.abs(commit) >= 0.01) { if (!d.group) st.sel = new Set([d.clip.row.cue.id]); tlCommit(d.clips, commit, d.own); }
       else tlSelect([d.clip.row.cue.id]);
     }
     if (st.band) {
@@ -4062,6 +4257,7 @@ function bindTimeline() {
       if (Math.abs(b.x1 - b.x0) < 4 && Math.abs(b.y1 - b.y0) < 4) { if (b.toggle) { if (b.base.has(b.toggle)) st.sel.delete(b.toggle); else st.sel.add(b.toggle); } else if (!b.add) st.sel.clear(); }
       tlRefreshInfo();
     }
+    if (st.pan && typeof velocityOf === 'function') tlCoast(-velocityOf(st.pan.hist).x / st.zoom);
     st.pan = null; st.scrub = false; drawTimeline();
   };
   host.addEventListener('pointerup', e => { if (e.target.id === 'tl-cv' || e.target.id === 'tl-ov') up(); });
@@ -4116,6 +4312,28 @@ function bindTimeline() {
   document.addEventListener('fullscreenchange', () => { const st = tlState(); if (!document.fullscreenElement && st.full) tlSetFull(false); else drawTimeline(); });
   window.addEventListener('resize', () => drawTimeline());
 }
+/** Инерция протяжки: вид катится дальше и тормозит, как прокрутка в iOS (замедление 0,998 за мс). */
+let tlCoastRaf = 0;
+function tlCoastStop() { cancelAnimationFrame(tlCoastRaf); tlCoastRaf = 0; }
+function tlCoast(v) {                                  // v — секунды таймлайна в секунду
+  tlCoastStop(); if (typeof MOTION !== 'undefined' && MOTION.reduce) return;
+  if (Math.abs(v * tlState().zoom) < 60) return;
+  let t0 = performance.now();
+  const step = now => {
+    const st = tlState(), dt = Math.min(40, now - t0); t0 = now;
+    const before = st.scroll; st.scroll += v * dt / 1000; v *= Math.pow(0.996, dt); drawTimeline();
+    if (Math.abs(v * st.zoom) < 12 || st.scroll === before) { tlCoastRaf = 0; return; }
+    tlCoastRaf = requestAnimationFrame(step);
+  };
+  tlCoastRaf = requestAnimationFrame(step);
+}
+/** Реплику тянули за край: отпущенная, она отпружинивает к разрешённому месту. */
+function tlSettle(d, over) {
+  const st = tlState(); if (typeof mv !== 'function' || (typeof MOTION !== 'undefined' && MOTION.reduce)) return;
+  const owner = { render() { if (!st.settle) return; drawTimeline(); if (!SPRING.live.has(st.settle.m)) st.settle = null; } };
+  st.settle = { m: mv(over, 0.002, owner), ids: d.group ? new Set(d.group) : null, own: d.own, idx: d.clip.idx };
+  mvTo(st.settle.m, 0, { damping: 0.62, response: 0.4 });
+}
 function tlOvSeek(e) {                                 // мини-карта: щелчок и протяжка — сюда вид
   const cv = $('#tl-ov'), st = tlState(), r = cv.getBoundingClientRect(), W = r.width, total = S.result.lay.total;
   const t = (e.clientX - r.left - TL.HEAD) / (W - TL.HEAD) * total, span = ((st.W || W) - TL.HEAD) / st.zoom;
@@ -4123,97 +4341,249 @@ function tlOvSeek(e) {                                 // мини-карта: �
   if (e.type === 'pointerdown' && typeof motionView === 'function') motionView(st, st.zoom, to, drawTimeline); else { st.scroll = to; drawTimeline(); }
 }
 
-// Монтажка — движение интерфейса. Без библиотек: CSS-переходы и Web Animations — они идут на композиторе
-// и не дёргаются, когда основной поток занят распознаванием или сведением.
-// Правила (emilkowalski/skills, transitions.dev, impeccable):
-// - шкала токенов transitions.dev: 150 мс — закрыть, 250 мс — открыть/переключить, 350–400 мс — панели,
-//   500 мс — отметка «готово»; кривая открытия cubic-bezier(0.22, 1, 0.36, 1);
-// - уход быстрее входа; всё, что вызвано с клавиатуры, — мгновенно; частое — тише редкого;
-// - меню растёт из точки щелчка, тост и прогресс поднимаются снизу с лёгким размытием, вкладки съезжают на 8 px;
-// - при закрытии логика не ждёт анимацию: уходит «призрак» — копия, а настоящий элемент скрыт сразу;
-// - prefers-reduced-motion: только прозрачность, без сдвигов, масштаба и размытия.
-// Использует S, render, counts, fmt, $, C из app.js и drawTimeline из timeline.js.
-const MOTION = { reduce: false, kbd: 0, ready: false, lastKeys: new Map(), counts: new Map(), done: new Map(), view: 0, pinStep: null, railCur: null };
+// Монтажка — движение интерфейса: пружины (spring.js), CSS-переходы и Web Animations, без библиотек.
+// Правила (apple-design, emilkowalski/skills, transitions.dev, impeccable):
+// - то, чего касаешься, отвечает сразу: кнопки сжимаются в момент нажатия, значки тянутся к курсору;
+// - то, что тянешь, идёт за пальцем 1:1, у краёв — резиновое сопротивление, после броска — по инерции
+//   (проекция импульса Apple) и на пружине с той же скоростью: подложка вкладок, уведомление, файлы;
+// - любое движение можно перехватить: пружины стартуют с текущего значения;
+// - открытие — пружина из точки вызова, уход — короче; всё, что вызвано с клавиатуры, — мгновенно;
+// - прогресс — «остров» в деке: вырастает из пилюли и сворачивается обратно;
+// - смена вкладок — View Transitions: старая уезжает, новая приезжает с той стороны, куда нажали;
+// - prefers-reduced-motion: только проявления, пружины встают на место сразу.
+// Использует S, render, counts, fmt, $, C, moveFile из app.js, drawTimeline из timeline.js, пружины из spring.js.
+const MOTION = { reduce: false, kbd: 0, ready: false, vt: false, lastKeys: new Map(), counts: new Map(), done: new Map(), view: 0, pinStep: null, railCur: null };
 const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
 const mOK = () => !MOTION.reduce && typeof Element.prototype.animate === 'function';
-/** Вход: из «до» в покой. В режиме без движения — только прозрачность. */
-function mIn(el, from, ms = 250, extra = {}) {
+/** Вход: из «до» в покой на пружине (или на кривой, если задана). В режиме без движения — только прозрачность. */
+function mIn(el, from, spring = [0.86, 0.45], extra = {}) {
   if (!el || typeof el.animate !== 'function') return null;
-  if (MOTION.reduce) from = { opacity: 0 };
   const to = {}; for (const k of Object.keys(from)) to[k] = k === 'opacity' ? 1 : k === 'filter' ? 'blur(0px)' : extra.rest && extra.rest[k] != null ? extra.rest[k] : 'none';
-  if (MOTION.reduce && extra.rest) Object.assign(from, extra.rest), Object.assign(to, extra.rest), from.opacity = 0;
-  return el.animate([from, to], { duration: MOTION.reduce ? 150 : ms, easing: EASE, fill: 'backwards', delay: extra.delay || 0 });
+  if (MOTION.reduce) { const f = { opacity: 0 }, t = { opacity: 1 }; if (extra.rest) Object.assign(f, extra.rest), Object.assign(t, extra.rest); return el.animate([f, t], { duration: 150, easing: 'ease-out', fill: 'backwards', delay: extra.delay || 0 }); }
+  const sp = springEase(spring[0], spring[1]);
+  return el.animate([from, to], { duration: sp.duration, easing: sp.easing, fill: 'backwards', delay: extra.delay || 0 });
 }
 function motionInit() {
   const mq = window.matchMedia('(prefers-reduced-motion: reduce)'); MOTION.reduce = mq.matches;
   mq.addEventListener('change', () => { MOTION.reduce = mq.matches; });
-  // высота деки — для липких заголовков
+  // пружины для CSS: переходы галочек, тумблеров, раскрывашки, значков
+  const root = document.documentElement.style;
+  for (const [name, d, r] of [['snappy', 0.72, 0.32], ['smooth', 1, 0.38], ['bouncy', 0.6, 0.42], ['pane', 0.9, 0.5]]) { const sp = springEase(d, r); root.setProperty(`--spring-${name}`, sp.easing); root.setProperty(`--spring-${name}-dur`, sp.duration + 'ms'); }
   const deck = document.querySelector('.deck');
   if (deck && window.ResizeObserver) new ResizeObserver(() => document.documentElement.style.setProperty('--deck-h', (deck.getBoundingClientRect().height - (parseFloat(getComputedStyle(deck).paddingTop) || 0)) + 'px')).observe(deck);
   tabIndicator(true);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { tabIndicator(true); railIndicator(true); });
   const tabs = document.querySelector('.tabs'); if (tabs && window.ResizeObserver) new ResizeObserver(() => tabIndicator(true)).observe(tabs);
-  initRail(); initAccordions();
-  // появление скрытых блоков: секции, вкладки, прогресс, сообщение, меню, выбор кусков
+  initRail(); initAccordions(); initTabsDrag(); initToast(); initFileDrag();
+  if (typeof initTouch === 'function') { initTouch(); initTilt('.models', 7); }
   new MutationObserver(list => { for (const m of list) if (m.attributeName === 'hidden' && !m.target.hidden && m.oldValue != null) appear(m.target); })
     .observe(document.body, { attributes: true, attributeFilter: ['hidden'], attributeOldValue: true, subtree: true });
-  // новые списки: файлы, строки проверки, модули чистки, звуки, результат сведения
   const watch = (sel, fn) => { const el = document.querySelector(sel); if (el) new MutationObserver(() => fn(el)).observe(el, { childList: true }); };
-  watch('#files', el => staggerList([...el.querySelectorAll('.file')].filter(x => !MOTION.lastKeys.has('f:' + x.dataset.i + ':' + (x.querySelector('.fname') || {}).textContent)).map(x => (MOTION.lastKeys.set('f:' + x.dataset.i + ':' + (x.querySelector('.fname') || {}).textContent, 1), x))));
+  watch('#files', el => staggerList([...el.querySelectorAll('.file')].filter(x => { const k = 'f:' + (x.querySelector('.fname') || {}).textContent; if (MOTION.lastKeys.has(k)) return false; MOTION.lastKeys.set(k, 1); return true; })));
   watch('#rv-list', el => { const key = el.dataset.v || ''; const prev = MOTION.lastKeys.get('rv'); if (prev === key) return; MOTION.lastKeys.set('rv', key);
-    // первый показ и новый разбор — лесенкой; смена фильтра (часто) — только быстрая проявка
     if (prev == null || prev.split('|')[2] !== key.split('|')[2]) staggerList([...el.children].slice(0, 10)); else fadeList(el); });
   watch('#cl-body', el => { const key = (S.cleanFile && S.cleanFile.name) || ''; if (MOTION.lastKeys.get('cl') === key || !el.querySelector('.mods')) return; MOTION.lastKeys.set('cl', key); staggerList([el.querySelector('.cl-head'), ...el.querySelectorAll('.mod')].filter(Boolean).slice(0, 10)); });
   watch('#sfx-body', el => { if (MOTION.lastKeys.get('sfx') || !el.querySelector('.srow, .arow')) return; MOTION.lastKeys.set('sfx', 1); staggerList([...el.querySelectorAll('.ambbox, .dbbox, .srow')].slice(0, 10)); });
   watch('#mix-out', el => { const tl = el.querySelector('.tl'); if (!tl || tl.dataset.m) return; tl.dataset.m = '1'; splice(tl); staggerList([el.querySelector('#mix-top'), el.querySelector('#mix-rest')].filter(Boolean), 60); });
   requestAnimationFrame(() => requestAnimationFrame(() => { MOTION.ready = true; }));
 }
+const atTop = el => el.getBoundingClientRect().top < innerHeight / 2;
 function appear(el) {
-  if (el.id === 'prog' || el.id === 'msg') { cancelGhost(el); mIn(el, { opacity: 0, transform: 'translate(-50%, 16px) scale(0.97)', filter: 'blur(2px)' }, 350, { rest: { transform: 'translate(-50%, 0px) scale(1)' } }); return; }
-  if (el.id === 'tl-menu') { if (performance.now() - MOTION.kbd < 150) return; mIn(el, { opacity: 0, transform: 'scale(0.97)' }, 250); return; }
-  if (el.classList.contains('picker')) { mIn(el, { opacity: 0, transform: 'translateY(-4px)', filter: 'blur(2px)' }, 250); return; }
-  if (el.matches('section.card')) { if (MOTION.ready) mIn(el, { opacity: 0, transform: 'translateY(12px)', filter: 'blur(3px)' }, 400); return; }
+  if (el.id === 'prog') { cancelGhost(el); islandIn(el); return; }
+  if (el.id === 'msg') { cancelGhost(el); toastReset(el); const dy = atTop(el) ? -22 : 22; mIn(el, { opacity: 0, transform: `translate(-50%, ${dy}px) scale(0.9)`, filter: 'blur(6px)' }, [0.7, 0.5], { rest: { transform: 'translate(-50%, 0px) scale(1)' } }); return; }
+  if (el.id === 'tl-menu') { if (performance.now() - MOTION.kbd < 150) return; mIn(el, { opacity: 0, transform: 'scale(0.9)' }, [0.78, 0.34]); return; }
+  if (el.classList.contains('picker')) { mIn(el, { opacity: 0, transform: 'translateY(-6px) scale(0.98)', filter: 'blur(2px)' }, [0.85, 0.36]); staggerList([...el.children].slice(0, 8), 30); return; }
+  if (el.matches('section.card')) { if (MOTION.ready) mIn(el, { opacity: 0, transform: 'translateY(18px) scale(0.985)', filter: 'blur(3px)' }, [0.86, 0.55]); return; }
   if (el.matches('[data-tabpane]')) { paneIn(el); return; }
 }
+// ------------------------------------------------------------------ остров: прогресс вырастает из пилюли
+function islandIn(el) {
+  if (!mOK()) return;
+  const R = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 20, w = el.offsetWidth, pill = Math.max(0, w / 2 - 22);
+  const sp = springEase(0.74, 0.55);
+  el.animate([{ clipPath: `inset(0 ${pill}px round ${R}px)`, opacity: 0.4 }, { clipPath: `inset(0 0px round ${R}px)`, opacity: 1 }], { duration: sp.duration, easing: sp.easing });
+  const inner = el.querySelector('.in'); if (inner) mIn(inner, { opacity: 0, transform: 'scale(0.96)', filter: 'blur(5px)' }, [1, 0.4], { delay: 90 });
+}
+function islandOut(el) {
+  if (!mOK() || el.hidden || !el.isConnected) return;
+  const R = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 20, pill = Math.max(0, el.offsetWidth / 2 - 22);
+  motionGhostOut(el, { clipPath: `inset(0 ${pill}px round ${R}px)`, filter: 'blur(3px)' }, 300, { clipPath: `inset(0 0px round ${R}px)` });
+}
+/** Надпись прогресса: меняется «этап» — старая уходит вверх, новая приходит снизу (transitions.dev: text swap). */
+function progText(el, t) {
+  const phase = t.replace(/[\d.,]+\s*%?/g, '#').replace(/\s+/g, ' ').trim();
+  if (MOTION.progPhase && phase !== MOTION.progPhase && t && mOK()) mIn(el, { opacity: 0, transform: 'translateY(5px)', filter: 'blur(2px)' }, [1, 0.3]);
+  MOTION.progPhase = t ? phase : null;
+}
 /** Уход без ожидания: копия уходит, настоящий элемент уже скрыт. Вызывать до того, как элемент спрятан. */
-function motionGhostOut(el, to, ms = 150) {
+function motionGhostOut(el, to, ms = 150, from = {}) {
   if (!mOK() || !el || el.hidden || !el.isConnected) return;
   const r = el.getBoundingClientRect(); if (!r.width) return;
   const g = el.cloneNode(true); g.removeAttribute('id'); g.querySelectorAll('[id]').forEach(x => x.removeAttribute('id'));
   g.inert = true; g.setAttribute('aria-hidden', 'true'); g.removeAttribute('role'); g.dataset.ghost = el.id || '1';
-  Object.assign(g.style, { position: 'fixed', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', margin: '0', pointerEvents: 'none', transform: 'none', bottom: 'auto', right: 'auto', zIndex: 90, maxHeight: 'none' });
+  Object.assign(g.style, { position: 'fixed', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', margin: '0', pointerEvents: 'none', transform: 'none', bottom: 'auto', right: 'auto', zIndex: 90, maxHeight: 'none', flex: 'none' });
   (el.parentNode || document.body).appendChild(g);
-  const a = g.animate([{ opacity: 1, transform: 'none', filter: 'blur(0px)' }, { opacity: 0, ...to }], { duration: ms, easing: EASE, fill: 'forwards' });
+  const a = g.animate([{ opacity: 1, transform: 'none', filter: 'blur(0px)', ...from }, { opacity: 0, ...to }], { duration: ms, easing: EASE, fill: 'forwards' });
   a.onfinish = a.oncancel = () => g.remove();
 }
 function cancelGhost(el) { document.querySelectorAll(`[data-ghost="${el.id}"]`).forEach(g => g.remove()); }
-/** Сообщение: уходит вниз за 250 мс, потом скрывается. */
+// ------------------------------------------------------------------ уведомление: смахнуть пальцем, наведение держит
+const TOAST = { drag: null, m: null };
+function toastReset(el) { TOAST.drag = null; if (TOAST.m) mvSet(TOAST.m, 0); el.style.transform = ''; el.style.opacity = ''; }
+/** Сообщение уходит туда, откуда пришло, и скрывается. */
 function motionHide(el, done) {
   if (!mOK() || el.hidden) { el.hidden = true; done && done(); return; }
-  const a = el.animate([{ opacity: 1, transform: 'translate(-50%, 0px) scale(1)', filter: 'blur(0px)' }, { opacity: 0, transform: 'translate(-50%, 16px) scale(0.97)', filter: 'blur(2px)' }], { duration: 250, easing: EASE, fill: 'forwards' });
+  const dy = atTop(el) ? -26 : 26;
+  const a = el.animate([{ opacity: 1, transform: 'translate(-50%, 0px) scale(1)', filter: 'blur(0px)' }, { opacity: 0, transform: `translate(-50%, ${dy}px) scale(0.94)`, filter: 'blur(4px)' }], { duration: 220, easing: EASE, fill: 'forwards' });
   a.onfinish = () => { el.hidden = true; a.cancel(); done && done(); };
 }
-/** Список: лесенка по 40 мс, не больше 10 строк, всего ≤ 400 мс. Во время лесенки всё уже кликабельно. */
+function initToast() {
+  const el = document.getElementById('msg'); if (!el) return;
+  const owner = { render() { el.style.transform = Math.abs(TOAST.m.v) < 0.05 && !SPRING.live.has(TOAST.m) ? '' : `translate(-50%, ${TOAST.m.v.toFixed(2)}px)`; el.style.opacity = TOAST.fade(TOAST.m.v); } };
+  TOAST.m = mv(0, 0.05, owner);
+  TOAST.fade = y => { const dir = atTop(el) ? -1 : 1, out = y * dir; return out > 0 ? String(Math.max(0.2, 1 - out / 120)) : ''; };
+  el.addEventListener('pointerdown', e => {
+    if (MOTION.reduce || e.button !== 0) return;
+    el.setPointerCapture(e.pointerId);
+    TOAST.drag = { y0: e.clientY - TOAST.m.v, dir: atTop(el) ? -1 : 1, hist: [{ t: performance.now(), x: e.clientX, y: e.clientY }] };
+  });
+  el.addEventListener('pointermove', e => {
+    const d = TOAST.drag; if (!d) return;
+    d.hist.push({ t: performance.now(), x: e.clientX, y: e.clientY }); if (d.hist.length > 8) d.hist.shift();
+    let y = e.clientY - d.y0; if (y * d.dir < 0) y = rubber(y, 80);           // против направления ухода — резина
+    mvSet(TOAST.m, y);
+  });
+  const end = () => {
+    const d = TOAST.drag; if (!d) return; TOAST.drag = null;
+    const v = velocityOf(d.hist).y, y = TOAST.m.v, proj = y + project(v, 0.99);
+    if (proj * d.dir > 60 || v * d.dir > 600) {                                   // бросили — улетает с той же скоростью
+      const h = el.offsetHeight + 40, dist = Math.abs(d.dir * h - y), ms = Math.max(120, Math.min(320, dist / Math.max(0.6, Math.abs(v) / 1000)));
+      const a = el.animate([{ transform: `translate(-50%, ${y}px)`, opacity: el.style.opacity || 1 }, { transform: `translate(-50%, ${d.dir * h}px)`, opacity: 0 }], { duration: ms, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)', fill: 'forwards' });
+      a.onfinish = () => { el.hidden = true; a.cancel(); toastReset(el); };
+    } else mvTo(TOAST.m, 0, { damping: 0.7, response: 0.4, velocity: v });        // не добросили — пружиной обратно
+  };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+}
+/** Список: лесенка по 40 мс на пружине, не больше 10 строк. Во время лесенки всё уже кликабельно. */
 function staggerList(els, each = 40) {
   if (!els.length || typeof els[0].animate !== 'function' || !MOTION.ready) return;
-  els.forEach((el, i) => mIn(el, { opacity: 0, transform: 'translateY(8px)' }, 300, { delay: Math.min(i, 9) * each }));
+  els.forEach((el, i) => mIn(el, { opacity: 0, transform: 'translateY(10px) scale(0.99)' }, [0.88, 0.42], { delay: Math.min(i, 9) * each }));
 }
 function fadeList(el) { if (typeof el.animate === 'function') el.animate([{ opacity: 0.4 }, { opacity: 1 }], { duration: 150, easing: 'ease-out' }); }
-/** Вкладка: новая приходит на 8 px со стороны, куда нажали, с размытием 3 px (transitions.dev: page side-by-side). */
+// ------------------------------------------------------------------ вкладки
 let paneDir = 1;
-function paneIn(pane) { if (MOTION.ready) mIn(pane, { opacity: 0, transform: `translateX(${8 * paneDir}px)`, filter: 'blur(3px)' }, 250); }
+function paneIn(pane) { if (MOTION.ready && !MOTION.vt) mIn(pane, { opacity: 0, transform: `translateX(${14 * paneDir}px)`, filter: 'blur(3px)' }, [0.9, 0.45]); }
 function motionTab(prev, next) {
   const order = ['build', 'clean', 'sfx'], a = order.indexOf(prev), b = order.indexOf(next); paneDir = b >= a ? 1 : -1;
   tabIndicator(false);
 }
-/** Подложка вкладок: JS пишет положение, CSS ведёт переход; первый раз и при смене размеров — без перехода. */
+/** Смена вкладки через View Transitions: старая уезжает в сторону, новая приезжает с другой. */
+function motionTabSwitch(next, apply) {
+  const order = ['build', 'clean', 'sfx'], dir = order.indexOf(next) >= order.indexOf(S.tab) ? 1 : -1;
+  if (!document.startViewTransition || MOTION.reduce || !MOTION.ready || next === S.tab) { apply(); return; }
+  const root = document.documentElement; root.classList.add('vt-tab'); root.style.setProperty('--vt-dir', dir);
+  const vt = document.startViewTransition(() => { MOTION.vt = true; try { apply(); } finally { MOTION.vt = false; } });
+  vt.finished.finally(() => root.classList.remove('vt-tab'));
+}
+/** Подложка вкладок на пружине: при движении тянется в сторону хода, как капля; её можно схватить и протащить. */
+const PILL = { drag: null, suppress: false };
+PILL.render = () => {
+  const ind = document.querySelector('.tab-ind'); if (!ind) return;
+  const v = PILL.x.vel, st = PILL.drag ? 0 : Math.min(22, Math.abs(v) * 0.02), left = PILL.x.v - (v < 0 ? st : 0);
+  ind.style.width = (PILL.w.v + st).toFixed(2) + 'px';
+  ind.style.transform = `translateX(${left.toFixed(2)}px) scale(${PILL.drag ? 1.04 : 1}, ${(1 - st / 140).toFixed(4)})`;
+  // подписи под подложкой — тёмные ровно по её краю (клон-маска), без смены цвета «рывком»
+  const clip = ind.parentElement.querySelector('.tabs-clip');
+  if (clip) { const x0 = left - clip.offsetLeft, w = PILL.w.v + st, W = clip.scrollWidth; clip.style.clipPath = `inset(0 ${(W - x0 - w).toFixed(2)}px 0 ${x0.toFixed(2)}px round 16px)`; }
+};
+function tabsClipSync() {
+  const tabs = document.querySelector('.tabs'); if (!tabs) return;
+  const list = [...tabs.querySelectorAll('button[data-tab]')]; if (!list.length) return;
+  let clip = tabs.querySelector('.tabs-clip');
+  if (!clip) { clip = document.createElement('div'); clip.className = 'tabs-clip'; clip.setAttribute('aria-hidden', 'true'); tabs.appendChild(clip); tabs.classList.add('clipped'); }
+  clip.innerHTML = list.map(b => `<span style="width:${b.offsetWidth}px">${b.textContent}</span>`).join('');
+  clip.style.left = list[0].offsetLeft + 'px'; clip.style.top = list[0].offsetTop + 'px';
+}
+PILL.x = mv(0, 0.05, PILL); PILL.w = mv(0, 0.05, PILL);
 function tabIndicator(instant) {
   const tabs = document.querySelector('.tabs'); if (!tabs) return;
-  const ind = tabs.querySelector('.tab-ind'), on = tabs.querySelector('button.on'); if (!ind || !on) return;
-  const set = () => { ind.style.transform = `translateX(${on.offsetLeft}px)`; ind.style.width = on.offsetWidth + 'px'; };
-  if (instant) { ind.style.transition = 'none'; set(); void ind.offsetWidth; ind.style.transition = ''; } else set();
+  const on = tabs.querySelector('button.on'); if (!on || PILL.drag) return;
+  if (instant || !MOTION.ready) { tabsClipSync(); mvSet(PILL.x, on.offsetLeft); mvSet(PILL.w, on.offsetWidth); PILL.render(); return; }
+  mvTo(PILL.x, on.offsetLeft, { damping: 0.74, response: 0.42 }); mvTo(PILL.w, on.offsetWidth, { damping: 0.9, response: 0.42 });
+}
+function initTabsDrag() {
+  const tabs = document.querySelector('.tabs'); if (!tabs) return;
+  const btns = () => [...tabs.querySelectorAll('button[data-tab]')];
+  tabs.addEventListener('click', e => { if (PILL.suppress) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+  tabs.addEventListener('pointerdown', e => {
+    const b = e.target.closest('button'); if (!b || !b.classList.contains('on') || e.button !== 0 || MOTION.reduce) return;
+    const r = tabs.getBoundingClientRect();
+    PILL.drag = { x0: e.clientX, grab: e.clientX - r.left - tabs.clientLeft - PILL.x.v, moved: false, hist: [{ t: performance.now(), x: e.clientX, y: 0 }], id: e.pointerId };
+  });
+  tabs.addEventListener('pointermove', e => {
+    const d = PILL.drag; if (!d) return;
+    if (!d.moved) { if (Math.abs(e.clientX - d.x0) < 6) return; d.moved = true; try { tabs.setPointerCapture(d.id); } catch {} }
+    d.hist.push({ t: performance.now(), x: e.clientX, y: 0 }); if (d.hist.length > 8) d.hist.shift();
+    const list = btns(), r = tabs.getBoundingClientRect(), lo = list[0].offsetLeft, hi = list[list.length - 1].offsetLeft + list[list.length - 1].offsetWidth - PILL.w.v;
+    let x = e.clientX - r.left - tabs.clientLeft - d.grab;
+    if (x < lo) x = lo - rubber(lo - x, 60); else if (x > hi) x = hi + rubber(x - hi, 60);
+    mvSet(PILL.x, x);
+    const c = x + PILL.w.v / 2, near = list.reduce((a, b) => Math.abs(b.offsetLeft + b.offsetWidth / 2 - c) < Math.abs(a.offsetLeft + a.offsetWidth / 2 - c) ? b : a);
+    mvTo(PILL.w, near.offsetWidth, { damping: 1, response: 0.25 });
+    list.forEach(b => b.classList.toggle('near', b === near));
+  });
+  const end = () => {
+    const d = PILL.drag; if (!d) return; PILL.drag = null;
+    btns().forEach(b => b.classList.remove('near'));
+    if (!d.moved) { PILL.render(); return; }
+    const v = velocityOf(d.hist).x, c = PILL.x.v + PILL.w.v / 2 + project(v, 0.99) * 0.35;
+    const list = btns(), near = list.reduce((a, b) => Math.abs(b.offsetLeft + b.offsetWidth / 2 - c) < Math.abs(a.offsetLeft + a.offsetWidth / 2 - c) ? b : a);
+    PILL.x.vel = v;                                                   // скорость пальца переходит в пружину
+    if (!near.classList.contains('on')) near.click(); else tabIndicator(false);
+    PILL.suppress = true; setTimeout(() => { PILL.suppress = false; }, 0);
+  };
+  tabs.addEventListener('pointerup', end); tabs.addEventListener('pointercancel', end);
+}
+// ------------------------------------------------------------------ файлы: перетащить за ручку, соседи расступаются
+function initFileDrag() {
+  const box = document.getElementById('files'); if (!box) return;
+  let d = null;
+  box.addEventListener('pointerdown', e => {
+    const g = e.target.closest('.grip'); if (!g || e.button !== 0) return;
+    e.preventDefault(); g.setPointerCapture(e.pointerId);
+    const cards = [...box.querySelectorAll('.file')], card = g.closest('.file'), idx = cards.indexOf(card);
+    d = { g, card, idx, cards, rects: cards.map(c => c.getBoundingClientRect()), y0: e.clientY, target: idx, hist: [{ t: performance.now(), x: 0, y: e.clientY }] };
+    card.classList.add('lift'); const T = tform(card); mvTo(T.s, 1.025, { damping: 0.8, response: 0.3 });
+  });
+  box.addEventListener('pointermove', e => {
+    if (!d) return;
+    d.hist.push({ t: performance.now(), x: 0, y: e.clientY }); if (d.hist.length > 8) d.hist.shift();
+    const r = d.rects, me = r[d.idx], lo = r[0].top - me.top, hi = r[r.length - 1].bottom - me.bottom;
+    let y = e.clientY - d.y0; if (y < lo) y = lo - rubber(lo - y, 80); else if (y > hi) y = hi + rubber(y - hi, 80);
+    mvSet(tform(d.card).y, y);
+    d.target = fileSlot(d, me.top + y + me.height / 2);
+    fileMakeRoom(d);
+  });
+  const end = () => {
+    if (!d) return; const s = d; d = null;
+    const v = velocityOf(s.hist).y, me = s.rects[s.idx], T = tform(s.card);
+    s.target = fileSlot(s, me.top + T.y.v + me.height / 2 + project(v, 0.99) * 0.25); fileMakeRoom(s);
+    const to = fileOffset(s);
+    mvTo(T.y, to, { damping: 0.82, response: 0.35, velocity: v }); mvTo(T.s, 1, { damping: 0.7, response: 0.35 });
+    const finish = () => { s.card.classList.remove('lift'); s.cards.forEach(c => { const t = tform(c); mvSet(t.y, 0); mvSet(t.s, 1); }); if (s.target !== s.idx && typeof moveFile === 'function') moveFile(s.idx, s.target); };
+    if (MOTION.reduce) finish(); else setTimeout(finish, 380);
+  };
+  box.addEventListener('pointerup', end); box.addEventListener('pointercancel', end);
+}
+function fileSlot(d, center) { let t = 0; d.rects.forEach((r, i) => { if (center > r.top + r.height / 2) t = i; }); return Math.max(0, Math.min(d.rects.length - 1, center < d.rects[0].top + d.rects[0].height / 2 ? 0 : t)); }
+function fileOffset(d) { const r = d.rects, i = d.idx, t = d.target; if (t === i) return 0; return t > i ? r[t].bottom - r[i].bottom : r[t].top - r[i].top; }
+function fileMakeRoom(d) {
+  const h = d.rects[d.idx].height;
+  d.cards.forEach((c, k) => { if (k === d.idx) return; const shift = d.target > d.idx && k > d.idx && k <= d.target ? -h : d.target < d.idx && k >= d.target && k < d.idx ? h : 0; const T = tform(c); if (T.y.to !== shift) mvTo(T.y, shift, { damping: 0.85, response: 0.32 }); });
 }
 // ------------------------------------------------------------------ монтажный лист: шаги слева
+const RAIL = {}; RAIL.render = () => { const ind = document.querySelector('.rail-ind'); if (!ind) return; ind.style.transform = `translateY(${RAIL.y.v.toFixed(2)}px)`; ind.style.height = RAIL.h.v.toFixed(2) + 'px'; };
+RAIL.y = mv(0, 0.05, RAIL); RAIL.h = mv(0, 0.05, RAIL);
 function initRail() {
   const rail = document.querySelector('.rail'); if (!rail) return;
   rail.addEventListener('click', e => {
@@ -4242,8 +4612,9 @@ function railCurrent(id, instant) {
 }
 function railIndicator(instant) {
   const rail = document.querySelector('.rail'), ind = rail && rail.querySelector('.rail-ind'), a = rail && rail.querySelector('a.cur'); if (!ind || !a) return;
-  const li = a.parentElement, set = () => { ind.style.transform = `translateY(${li.offsetTop}px)`; ind.style.height = a.offsetHeight + 'px'; ind.classList.add('on'); };
-  if (instant) { ind.style.transition = 'none'; set(); void ind.offsetWidth; ind.style.transition = ''; } else set();
+  const y = a.parentElement.offsetTop, h = a.offsetHeight; ind.classList.add('on');
+  if (instant || !MOTION.ready) { mvSet(RAIL.y, y); mvSet(RAIL.h, h); RAIL.render(); return; }
+  mvTo(RAIL.y, y, { damping: 0.8, response: 0.42 }); mvTo(RAIL.h, h, { damping: 1, response: 0.42 });
 }
 /** Шаги: номер превращается в галочку (transitions.dev: success check), в листе — короткая сводка. */
 function motionSteps() {
@@ -4263,7 +4634,7 @@ function motionSteps() {
     const a = document.querySelector(`.rail a[data-step="${id}"]`); if (!a) continue;
     a.classList.toggle('done', ok); if (just) replay(a, 'just');
     const sec = document.getElementById(id); a.setAttribute('aria-disabled', sec && sec.hidden ? 'true' : 'false');
-    const m = a.querySelector('.m'); if (m && m.textContent !== meta) m.textContent = meta;
+    const m = a.querySelector('.m'); if (m && m.textContent !== meta) { const swap = MOTION.ready && m.textContent && !MOTION.reduce; m.textContent = meta; if (swap) mIn(m, { opacity: 0, transform: 'translateY(4px)', filter: 'blur(2px)' }, [1, 0.3]); }
   }
   const intro = document.getElementById('intro'); if (intro) intro.hidden = !!(S.P || S.files.length);
 }
@@ -4277,7 +4648,7 @@ function motionCount(el, key) {
   out.classList.add('digits'); out.innerHTML = [...String(to)].map(ch => `<span class="digit">${ch}</span>`).join('');
   if (had && from !== to && !MOTION.reduce) replay(out, 'pop');
 }
-/** Раскрывашка (transitions.dev: accordion): высота через grid-rows 0fr → 1fr, шеврон переворачивается. */
+/** Раскрывашка (transitions.dev: accordion): высота через grid-rows 0fr → 1fr на пружине, шеврон переворачивается. */
 function initAccordions() {
   document.addEventListener('click', e => {
     const h = e.target.closest('.acc-head'); if (!h) return;
@@ -4285,12 +4656,12 @@ function initAccordions() {
     acc.dataset.open = String(open); h.setAttribute('aria-expanded', String(open));
   });
 }
-/** Плавный масштаб и прокрутка таймлайна — только для кнопок и мини-карты; клавиши и колёсико — мгновенно. */
-function motionView(st, zoom, scroll, draw) {
+/** Плавный масштаб и прокрутка таймлайна — для кнопок, мини-карты и перелистывания за плеером; клавиши — мгновенно. */
+function motionView(st, zoom, scroll, draw, ms = 250) {
   cancelAnimationFrame(MOTION.view);
   if (!mOK()) { st.zoom = zoom; st.scroll = scroll; draw(); return; }
-  const z0 = st.zoom, s0 = st.scroll, t0 = performance.now(), T = 250, ease = x => 1 - Math.pow(1 - x, 4);
-  const step = now => { const k = Math.min(1, (now - t0) / T), e = ease(k); st.zoom = z0 + (zoom - z0) * e; st.scroll = s0 + (scroll - s0) * e; draw(); if (k < 1) MOTION.view = requestAnimationFrame(step); };
+  const z0 = st.zoom, s0 = st.scroll, t0 = performance.now(), ease = x => 1 - Math.pow(1 - x, 4);
+  const step = now => { const k = Math.min(1, (now - t0) / ms), e = ease(k); st.zoom = z0 + (zoom - z0) * e; st.scroll = s0 + (scroll - s0) * e; draw(); if (k < 1) MOTION.view = requestAnimationFrame(step); else MOTION.view = 0; };
   MOTION.view = requestAnimationFrame(step);
 }
 /** Новое сведение: лента «заправляется» — таймлайн открывается слева направо за янтарной кромкой. */
@@ -4320,8 +4691,9 @@ function initTheme() {
     const swap = () => { themeApply(next); render(); if (typeof drawTimeline === 'function') drawTimeline(); };
     if (!document.startViewTransition || MOTION.reduce || e.detail === 0) { swap(); return; }   // с клавиатуры — сразу
     const r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, R = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+    const sp = springEase(1, 0.6);
     const vt = document.startViewTransition(swap);
-    vt.ready.then(() => document.documentElement.animate({ clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${R}px at ${x}px ${y}px)`] }, { duration: 500, easing: EASE, pseudoElement: '::view-transition-new(root)' })).catch(() => {});
+    vt.ready.then(() => document.documentElement.animate({ clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${R}px at ${x}px ${y}px)`] }, { duration: sp.duration, easing: sp.easing, pseudoElement: '::view-transition-new(root)' })).catch(() => {});
   });
 }
 
@@ -5190,6 +5562,12 @@ async function addFiles(list) {
     if (f.y48 && S.pendingClean && S.pendingClean.has(f.name)) restoreClean(f);
   }
 }
+/** Файл перетащили на другое место в списке: нижний считается свежее, поэтому порядок влияет на разбор. */
+function moveFile(from, to) {
+  const [f] = S.files.splice(from, 1); S.files.splice(to, 0, f);
+  if (S.matches.size) matchAll();
+  S.result = null; render();
+}
 async function uploadFor(id, file) {
   try {
     const y = C.trimSilence(await decodeFile(file));
@@ -5200,11 +5578,12 @@ async function uploadFor(id, file) {
 
 // ------------------------------------------------------------------ отрисовка
 let msgTimer = null;
-function notify(t) { const el = $('#msg'); el.textContent = t; el.hidden = !t; clearTimeout(msgTimer); if (t) msgTimer = setTimeout(() => { typeof motionHide === 'function' ? motionHide(el) : (el.hidden = true); }, 9000); }
+function notify(t) { const el = $('#msg'); el.textContent = t; el.hidden = !t; clearTimeout(msgTimer); if (t) msgTimer = setTimeout(function hide() { if (el.matches(':hover') || (typeof TOAST !== 'undefined' && TOAST.drag)) { msgTimer = setTimeout(hide, 1200); return; } typeof motionHide === 'function' ? motionHide(el) : (el.hidden = true); }, 9000); }
 function progress(t, p) {
   const el = $('#prog');
-  if (!t && !el.hidden && typeof motionGhostOut === 'function') motionGhostOut(el, { transform: 'translateY(12px) scale(0.98)', filter: 'blur(2px)' }, 250);
+  if (!t && !el.hidden && typeof islandOut === 'function') islandOut(el);
   el.hidden = !t;
+  if ($('#prog-t').textContent !== t && typeof progText === 'function') progText($('#prog-t'), t);
   $('#prog-t').textContent = t; $('#prog-t').dataset.text = t; $('#prog-b').style.setProperty('--p', Math.max(0, Math.min(1, p || 0)).toFixed(3));
 }
 let shownTab = null;
@@ -5230,7 +5609,7 @@ function renderFiles() {
   else el.innerHTML = S.files.map((f, i) => `
     <div class="file" data-i="${i}">
       <div class="fhead">
-        <span class="fname">${esc(f.name)}</span>
+        ${S.files.length > 1 ? `<span class="grip" title="Перетащить выше или ниже" aria-hidden="true">${ic('grip')}</span>` : ''}<span class="fname">${esc(f.name)}</span>
         <span class="fmeta">${f.error ? `<span class="bad">${esc(f.error)}</span>` : f.dur ? fmt(f.dur) : 'читаю…'}${f.segs ? ` · кусков ${f.segs.length}` : ''}${f.raw48 ? ' · <span class="okt">очищено</span>' : ''}</span>
         <span class="fbtn">
           <button class="icon" data-act="up" title="Выше" ${i ? '' : 'disabled'} aria-label="Выше">${ic('up')}</button>
@@ -5359,7 +5738,7 @@ function renderMix() {
 `;
   if (!$('#mix-tl .tl')) $('#mix-tl').innerHTML = `<div class="tl ${tlState().full ? 'full' : ''}" role="region" aria-label="Таймлайн сведения">
       <div class="tl-bar">${tlBarHtml()}</div>
-      <div class="tl-canvas"><canvas id="tl-cv" tabindex="0" aria-label="Таймлайн: стрелки двигают выбранное, клавиша меню — действия, F — на весь экран"></canvas></div>
+      <div class="tl-canvas"><canvas id="tl-cv" tabindex="0" aria-label="Таймлайн: стрелки двигают выбранное, клавиша меню — действия, F — на весь экран"></canvas><div class="tl-head" aria-hidden="true"></div></div>
       <canvas id="tl-ov" aria-label="Весь спектакль: щелчок — перейти"></canvas>
       <div class="tl-info" id="tl-info">${tlInfoHtml()}</div>
       <div id="tl-menu" class="tl-menu" role="menu" aria-label="Действия" hidden></div>
@@ -5388,7 +5767,9 @@ function renderMix() {
 
 // ------------------------------------------------------------------ события
 function bind() {
-  $('.tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.tab = b.dataset.tab; stop(); history.replaceState(null, '', S.tab === 'clean' ? '#clean' : location.pathname); render(); });
+  $('.tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
+    const go = () => { S.tab = b.dataset.tab; stop(); history.replaceState(null, '', S.tab === 'clean' ? '#clean' : location.pathname); render(); };
+    if (typeof motionTabSwitch === 'function' && e.detail !== 0) motionTabSwitch(b.dataset.tab, go); else go(); });
   bindCleanup(); bindSounds();
   const drop = (zone, fn) => {
     zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('over'); });
@@ -5420,11 +5801,13 @@ function bind() {
   $('#files').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     const i = +b.closest('.file').dataset.i, a = b.dataset.act;
+    const key = el => el.querySelector('.fname').textContent, before = typeof flipRecord === 'function' ? flipRecord('#files .file', key) : null;
     if (a === 'rm') S.files.splice(i, 1);
     if (a === 'up' && i) [S.files[i - 1], S.files[i]] = [S.files[i], S.files[i - 1]];
     if (a === 'down' && i < S.files.length - 1) [S.files[i + 1], S.files[i]] = [S.files[i], S.files[i + 1]];
     if (S.matches.size) matchAll();
     S.result = null; render();
+    if (before && a !== 'rm') flipPlay(before, '#files .file', key);
   });
   $('#files').addEventListener('change', e => {
     const x = e.target; if (x.dataset.act !== 'char') return;
@@ -5504,7 +5887,7 @@ function bind() {
 }
 
 // для проверки из консоли и автотестов
-window.montage = { S, C, PRESETS, play: (y, btn) => play(y, btn), stop: () => stop(), DECK: typeof DECK !== 'undefined' ? DECK : null, MOTION: typeof MOTION !== 'undefined' ? MOTION : null, audioLevel: () => audioLevel(), projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses };
+window.montage = { S, C, PRESETS, play: (y, btn) => play(y, btn), stop: () => stop(), progress: (t, p) => progress(t, p), notify: t => notify(t), DECK: typeof DECK !== 'undefined' ? DECK : null, MOTION: typeof MOTION !== 'undefined' ? MOTION : null, audioLevel: () => audioLevel(), projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses };
 bind(); render();
 if (typeof motionInit === 'function') motionInit();
 if (typeof initDeck === 'function') initDeck();
