@@ -74,6 +74,8 @@ function dspCall(msg, transfer, onProgress) {
   const w = dsp();
   if (!w) return Promise.resolve().then(() => {
     if (msg.type === 'analyze') return { A: C.analyze(msg.y), noise: C.noiseProfile(msg.y), ltas: msg.wantLtas ? C.ltas(msg.y, 2) : null };
+    if (msg.type === 'preview') { const specBefore = C.avgSpectrum(msg.y, msg.freqs), lufsBefore = C.integratedLufs(msg.y), r = C.runChain(msg.y, msg.chain, msg.aux); return { y: r.y, log: r.log, specBefore, specAfter: C.avgSpectrum(r.y, msg.freqs), lufsBefore, lufsAfter: C.integratedLufs(r.y), sgAfter: msg.sg ? { ...C.spectrogram(r.y, msg.sg), w: msg.sg.cols } : null, sgBefore: msg.sg && msg.sgBefore ? { ...C.spectrogram(msg.y, msg.sg), w: msg.sg.cols } : null }; }
+    if (msg.type === 'synth') return { y: C.synthSound(msg.key) };
     const r = C.runChain(msg.y, msg.chain, msg.aux, onProgress); return { y: r.y, log: r.log };
   });
   return new Promise((res, rej) => { const id = ++dspSeq; dspWaiting.set(id, { res, rej, onProgress }); w.postMessage({ ...msg, id }, transfer || []); });
@@ -139,14 +141,15 @@ function previewSoon(f) { clearTimeout(previewTimer); previewTimer = setTimeout(
 async function preview(f) {
   const c = cl(f); if (!c.chain || !srcOf(f)) return;
   const run = ++previewRun, y = srcOf(f), a = Math.round(c.at * C.SR), b = Math.min(y.length, a + EXCERPT * C.SR);
-  c.before = y.slice(a, b); c.specBefore = C.avgSpectrum(c.before, EQ_FREQS);
+  if (!(c.before && c.beforeKey === y && c.beforeAt === a)) { c.before = y.slice(a, b); c.beforeKey = y; c.beforeAt = a; c.sgBefore = null; }   // тот же отрывок — тот же массив: спектрограмма берётся из запомненной
   const seg = c.before.slice(), aux = await auxFor(f);
   try {
-    const r = await dspCall({ type: 'run', y: seg, chain: c.chain, aux }, [seg.buffer]);
+    // спектры и громкость «было/стало» считает фоновый поток вместе с обработкой: главный свободен для движения
+    const sw = $('#cl-spec-b'), cols = Math.max(300, Math.floor((sw && sw.clientWidth) || 600));
+    const r = await dspCall({ type: 'preview', y: seg, chain: c.chain, aux, freqs: EQ_FREQS, sg: { cols, rows: 150 }, sgBefore: !c.sgBefore }, [seg.buffer]);
     if (run !== previewRun) return;
     c.after = r.y; c.previewLog = r.log; c.dirty = false;
-    c.specAfter = C.avgSpectrum(c.after, EQ_FREQS);
-    c.lufsBefore = C.integratedLufs(c.before); c.lufsAfter = C.integratedLufs(c.after);
+    c.specBefore = r.specBefore; c.specAfter = r.specAfter; c.lufsBefore = r.lufsBefore; c.lufsAfter = r.lufsAfter; c.sgAfter = r.sgAfter || null; if (r.sgBefore) c.sgBefore = r.sgBefore;
     if (ab && ab.f === f) abSwapAfter(c.after);
   } catch (err) { notify('Не получилось обработать отрывок: ' + err.message); }
   refreshPreviewUI(f);
@@ -235,24 +238,36 @@ function abButtons() {
 
 // ------------------------------------------------------------------ картинки
 const CMAP = [[0, [14, 11, 9]], [0.22, [58, 26, 22]], [0.48, [150, 58, 30]], [0.74, [232, 150, 38]], [1, [252, 238, 196]]];   // тёплая: окись → янтарь → белый
-function color(v) {
+function colorOfMap(v) {
   for (let i = 1; i < CMAP.length; i++) if (v <= CMAP[i][0]) { const [p0, c0] = CMAP[i - 1], [p1, c1] = CMAP[i], t = (v - p0) / (p1 - p0); return c0.map((a, k) => a + (c1[k] - a) * t); }
   return CMAP[CMAP.length - 1][1];
 }
-function drawSpec(canvas, y) {
+const CMAP_LUT = Array.from({ length: 256 }, (_, i) => colorOfMap(i / 255));   // готовые 256 цветов: без интерполяции на каждый пиксель
+function color(v) {
+  return CMAP_LUT[Math.round(v * 255)];
+}
+function drawSpec(canvas, y, ready) {
   if (!canvas) return;
   const W = Math.max(300, Math.floor(canvas.clientWidth || 600)), H = 150;
   canvas.width = W; canvas.height = H;
   const g = canvas.getContext('2d');
   if (!y) { g.fillStyle = '#0e1220'; g.fillRect(0, 0, W, H); return; }
-  const sp = C.spectrogram(y, { cols: W, rows: H }), img = g.createImageData(W, H), d = img.data;
+  const hit = SPEC_IMG.get(y); if (hit && hit.W === W) { g.putImageData(hit.img, 0, 0); return; }   // тот же отрывок — без нового БПФ
+  const sp = ready && ready.w === W && ready.rows === H ? ready : C.spectrogram(y, { cols: W, rows: H }), img = g.createImageData(W, H), d = img.data;
   for (let r = 0; r < H; r++) for (let x = 0; x < W; x++) {
     const col = Math.min(sp.cols - 1, Math.floor(x * sp.cols / W)), v = (sp.data[r * sp.cols + col] - sp.min) / (sp.max - sp.min), c = color(Math.max(0, Math.min(1, v)));
     const o = (r * W + x) * 4; d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
   }
-  g.putImageData(img, 0, 0);
+  g.putImageData(img, 0, 0); SPEC_IMG.set(y, { W, img });
 }
-const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const SPEC_IMG = new WeakMap();
+// Цвета и шрифты из CSS — с запоминанием: таймлайн и графики спрашивают их сотни раз за перерисовку, а каждый
+// getComputedStyle может заставить браузер пересчитать стили. Сбрасывается при смене темы.
+const CSSV = { map: new Map(), key: '', mq: window.matchMedia('(prefers-color-scheme: dark)') };
+const cssVar = n => {
+  const k = (document.documentElement.dataset.theme || '') + (CSSV.mq.matches ? 'd' : 'l'); if (k !== CSSV.key) { CSSV.map.clear(); CSSV.key = k; }
+  let v = CSSV.map.get(n); if (v == null) { v = getComputedStyle(document.documentElement).getPropertyValue(n).trim(); CSSV.map.set(n, v); } return v;
+};
 function drawWave(canvas, f) {
   if (!canvas) return;
   const c = cl(f), w = waveOf(f), W = Math.max(300, Math.floor(canvas.clientWidth || 600)), H = 56, dpr = window.devicePixelRatio || 1;
@@ -473,7 +488,7 @@ function renderCleanup() {
       ${f.raw48 ? '<button class="ghost-b" data-act="revert">Вернуть оригинал</button><button class="ghost-b" data-act="wav">Скачать WAV</button>' : ''}
       <span class="muted small" id="cl-applied">${f.raw48 ? 'В сведение идёт обработанная версия. ' + (c.log ? c.log.join(' · ') : '') : 'Пока в сведение идёт оригинал.'}</span>
     </div>`;
-  requestAnimationFrame(() => { drawWave($('#cl-wave'), f); drawSpec($('#cl-spec-a'), c.before); refreshPreviewUI(f); abButtons(); if (c.specOpen) drawSpecView(f); });
+  requestAnimationFrame(() => { drawWave($('#cl-wave'), f); if (c.before && (c.sgBefore || SPEC_IMG.has(c.before))) drawSpec($('#cl-spec-a'), c.before, c.sgBefore); refreshPreviewUI(f); abButtons(); if (c.specOpen) drawSpecView(f); });
 }
 // ------------------------------------------------------------------ спектр всего файла с зумом
 function drawSpecView(f) {
@@ -533,7 +548,7 @@ const a2 = t => Math.max(0, t);
 function refreshPreviewUI(f) {
   const c = cl(f); if (S.cleanFile !== f) return;
   drawEq($('#eq-canvas'), f);
-  drawSpec($('#cl-spec-b'), c.dirty ? null : c.after);
+  drawSpec($('#cl-spec-b'), c.dirty ? null : c.after, c.sgAfter); if (c.before && c.sgBefore) drawSpec($('#cl-spec-a'), c.before, c.sgBefore);
   const lbl = $('#cl-lbl-b'); if (lbl) lbl.textContent = c.dirty ? 'стало — считаю…' : 'стало';
   const bA = $('#cl-body .play.ab[data-act=after]'); if (bA) bA.disabled = !(c.after && !c.dirty);
   const bB = $('#cl-body .play.ab[data-act=before]'); if (bB) bB.disabled = !c.before;
@@ -632,12 +647,12 @@ function bindCleanup() {
     c.at = Math.round(Math.max(0, Math.min(dur - EXCERPT, (e.clientX - r.left) / r.width * dur - EXCERPT / 2))); $('#cl-at').value = c.at; $('#cl-at-t').textContent = fmt(c.at); drawWave(cv, f); };
   let waveDrag = false;
   pane.addEventListener('pointerdown', e => { const sc = e.target.closest('.scrub'); if (sc) { scrubDown(e, sc); return; } if (e.target.id === 'cl-wave') { waveDrag = true; waveAt(e); } if (e.target.id === 'eq-canvas') eqDown(e); });
-  pane.addEventListener('pointermove', e => { if (scrubD) { scrubMove(e); return; } if (waveDrag && e.target.id === 'cl-wave') waveAt(e); if (eqDrag) eqMove(e); else if (e.target.id === 'eq-canvas' && e.pointerType === 'mouse') eqHover(e); });
+  pane.addEventListener('pointermove', e => { if (scrubD) { scrubMove(e); return; } if (waveDrag && e.target.id === 'cl-wave') waveAt(e); if (eqDrag) eqMove(e); else if (e.target.id === 'eq-canvas' && e.pointerType === 'mouse' && !scrolling()) eqHover(e); });
   const up = e => { if (scrubD) { scrubUp(e); return; } if (waveDrag) { waveDrag = false; markDirty(S.cleanFile); } if (eqDrag) { eqDrag = null; EQV.drag = -1; const cv = $('#eq-canvas'); if (cv) cv.style.cursor = EQV.hoverI >= 0 ? 'grab' : 'crosshair'; drawEq(cv, S.cleanFile); markDirty(S.cleanFile); } };
   pane.addEventListener('pointerup', up); pane.addEventListener('pointercancel', up); pane.addEventListener('pointerleave', e => { if (e.target === pane) up(e); });
   // наведение: курсор на экране — частота под ним; на карточке — её ручка подсвечена
   pane.addEventListener('pointerout', e => { if (e.target.id === 'eq-canvas' && !eqDrag) { EQV.hover = null; EQV.hoverI = -1; drawEq(e.target, S.cleanFile); } const card = e.target.closest && e.target.closest('.bcard'); if (card && !card.contains(e.relatedTarget) && e.pointerType === 'mouse') { EQV.hoverI = -1; drawEq($('#eq-canvas'), S.cleanFile); } });
-  pane.addEventListener('pointerover', e => { const card = e.target.closest && e.target.closest('.bcard'); if (card && e.pointerType === 'mouse' && !eqDrag) { EQV.hoverI = +card.dataset.b; EQV.hover = null; drawEq($('#eq-canvas'), S.cleanFile); } });
+  pane.addEventListener('pointerover', e => { const card = e.target.closest && e.target.closest('.bcard'); if (card && e.pointerType === 'mouse' && !eqDrag && !scrolling()) { EQV.hoverI = +card.dataset.b; EQV.hover = null; drawEq($('#eq-canvas'), S.cleanFile); } });
   pane.addEventListener('dblclick', e => { if (e.target.id === 'eq-canvas') eqDouble(e); });
   pane.addEventListener('wheel', e => { const sc = e.target.closest('.scrub'); if (sc && !sc.classList.contains('dis') && !sc.classList.contains('edit')) { e.preventDefault(); scrubStep(sc, e.deltaY < 0 ? 1 : -1, e.shiftKey); return; } if (e.target.id === 'eq-canvas') eqWheel(e); }, { passive: false });
   pane.addEventListener('keydown', e => { const sc = e.target.classList && e.target.classList.contains('scrub') ? e.target : null; if (sc) { scrubKey(e, sc); return; } if (e.target.id === 'eq-canvas') eqKey(e); });

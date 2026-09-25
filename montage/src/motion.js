@@ -51,7 +51,7 @@ function appear(el) {
   if (el.classList.contains('sheetbox')) { sheetIn(el); return; }
   if (el.id === 'tl-menu') { if (performance.now() - MOTION.kbd < 150) return; mIn(el, { opacity: 0, transform: 'scale(0.9)' }, [0.78, 0.34]); return; }
   if (el.classList.contains('picker')) { mIn(el, { opacity: 0, transform: 'translateY(-6px) scale(0.98)', filter: 'blur(2px)' }, [0.85, 0.36]); staggerList([...el.children].slice(0, 8), 30); return; }
-  if (el.matches('section.card')) { if (MOTION.ready) mIn(el, { opacity: 0, transform: 'translateY(18px) scale(0.985)', filter: 'blur(3px)' }, [0.86, 0.55]); return; }
+  if (el.matches('section.card')) { if (MOTION.ready) mIn(el, { opacity: 0, transform: 'translateY(14px) scale(0.99)' }, [0.88, 0.5]); return; }   // большие поверхности — без размытия
   if (el.matches('[data-tabpane]')) { paneIn(el); return; }
 }
 // ------------------------------------------------------------------ шторки снизу: дозапись и «другой кусок» на телефоне
@@ -210,19 +210,15 @@ function staggerList(els, each = 40) {
 function fadeList(el) { if (typeof el.animate === 'function') el.animate([{ opacity: 0.4 }, { opacity: 1 }], { duration: 150, easing: 'ease-out' }); }
 // ------------------------------------------------------------------ вкладки
 let paneDir = 1;
-function paneIn(pane) { if (MOTION.ready && !MOTION.vt) mIn(pane, { opacity: 0, transform: `translateX(${14 * paneDir}px)`, filter: 'blur(3px)' }, [0.9, 0.45]); }
+function paneIn(pane) { if (MOTION.ready) mIn(pane, { opacity: 0, transform: `translateX(${12 * paneDir}px)` }, [0.92, 0.36]); }
 function motionTab(prev, next) {
   const order = ['build', 'clean', 'sfx'], a = order.indexOf(prev), b = order.indexOf(next); paneDir = b >= a ? 1 : -1;
   tabIndicator(false);
 }
 /** Смена вкладки через View Transitions: старая уезжает в сторону, новая приезжает с другой. */
-function motionTabSwitch(next, apply) {
-  const order = ['build', 'clean', 'sfx'], dir = order.indexOf(next) >= order.indexOf(S.tab) ? 1 : -1;
-  if (!document.startViewTransition || MOTION.reduce || !MOTION.ready || next === S.tab) { apply(); return; }
-  const root = document.documentElement; root.classList.add('vt-tab'); root.style.setProperty('--vt-dir', dir);
-  const vt = document.startViewTransition(() => { MOTION.vt = true; try { apply(); } finally { MOTION.vt = false; } });
-  vt.finished.finally(() => root.classList.remove('vt-tab'));
-}
+// Смена вкладки — без View Transitions: снимок всей длинной страницы стоил сотни миллисекунд на слабых машинах.
+// Новая вкладка просто приезжает с той стороны, куда нажали (paneIn: сдвиг и прозрачность — только композитор).
+function motionTabSwitch(next, apply) { apply(); }
 /** Подложка вкладок на пружине: при движении тянется в сторону хода, как капля; её можно схватить и протащить. */
 const PILL = { drag: null, suppress: false };
 PILL.render = () => {
@@ -232,7 +228,9 @@ PILL.render = () => {
   ind.style.transform = `translateX(${left.toFixed(2)}px) scale(${PILL.drag ? 1.04 : 1}, ${(1 - st / 140).toFixed(4)})`;
   // подписи под подложкой — тёмные ровно по её краю (клон-маска), без смены цвета «рывком»
   const clip = ind.parentElement.querySelector('.tabs-clip');
-  if (clip) { const x0 = left - clip.offsetLeft, w = PILL.w.v + st, W = clip.scrollWidth; clip.style.clipPath = `inset(0 ${(W - x0 - w).toFixed(2)}px 0 ${x0.toFixed(2)}px round 16px)`; }
+  // размеры маски — из запомненных в tabsClipSync: чтение offsetLeft/scrollWidth здесь заставляло браузер
+  // пересчитывать раскладку в каждом кадре пружины
+  if (clip) { const x0 = left - (PILL.cx || 0), w = PILL.w.v + st, W = PILL.cw || clip.scrollWidth; clip.style.clipPath = `inset(0 ${(W - x0 - w).toFixed(2)}px 0 ${x0.toFixed(2)}px round 16px)`; }
 };
 function tabsClipSync() {
   const tabs = document.querySelector('.tabs'); if (!tabs) return;
@@ -241,6 +239,7 @@ function tabsClipSync() {
   if (!clip) { clip = document.createElement('div'); clip.className = 'tabs-clip'; clip.setAttribute('aria-hidden', 'true'); tabs.appendChild(clip); tabs.classList.add('clipped'); }
   clip.innerHTML = list.map(b => `<span style="width:${b.offsetWidth}px">${b.textContent}</span>`).join('');
   clip.style.left = list[0].offsetLeft + 'px'; clip.style.top = list[0].offsetTop + 'px';
+  PILL.cx = list[0].offsetLeft; PILL.cw = clip.scrollWidth;
 }
 PILL.x = mv(0, 0.05, PILL); PILL.w = mv(0, 0.05, PILL);
 function tabIndicator(instant) {

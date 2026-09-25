@@ -6,7 +6,11 @@
 // Поверх — отклик на касание (кнопки сжимаются в момент нажатия и отпружинивают), лёгкая тяга
 // к курсору у значков, наклон карточек к курсору с бликом (transitions.dev: card tilt), FLIP.
 // prefers-reduced-motion: всё встаёт на место сразу. Использует MOTION из motion.js.
-const SPRING = { live: new Set(), dirty: new Set(), raf: 0, t: 0 };
+const SPRING = { live: new Set(), dirty: new Set(), raf: 0, t: 0, scrollAt: 0 };
+// пока страница прокручивается, элементы сами «подъезжают» под неподвижную мышь — отклики на наведение в это
+// время только тратят кадры (как в iOS и хороших сайтах: во время прокрутки наведение молчит)
+addEventListener('scroll', () => { SPRING.scrollAt = performance.now(); }, { passive: true, capture: true });
+const scrolling = () => performance.now() - SPRING.scrollAt < 180;
 const sprReduced = () => typeof MOTION !== 'undefined' && MOTION.reduce;
 /** Значение на пружине. eps — точность, при которой пружина считается улёгшейся. */
 function mv(v = 0, eps = 0.01, owner = null) { return { v, vel: 0, to: v, k: 0, c: 0, eps, owner }; }
@@ -90,7 +94,7 @@ function initTouch() {
   if (!matchMedia('(hover: hover) and (pointer: fine)').matches) return;
   let lean = null, raf = 0, last = null;
   document.addEventListener('pointermove', e => {
-    if (e.pointerType !== 'mouse') return; last = e;
+    if (e.pointerType !== 'mouse' || scrolling()) return; last = e;
     if (!raf) raf = requestAnimationFrame(() => {
       raf = 0; if (sprReduced()) return;
       const el = last.target.closest && last.target.closest(LEAN_SEL);
@@ -110,7 +114,7 @@ function initTilt(sel, max = 7) {
   let cur = null;
   const flat = el => { if (!el) return; const T = tform(el); mvTo(T.rx, 0, { damping: 0.6, response: 0.55 }); mvTo(T.ry, 0, { damping: 0.6, response: 0.55 }); el.classList.remove('tilting'); };
   host.addEventListener('pointermove', e => {
-    if (sprReduced()) return;
+    if (sprReduced() || scrolling()) return;
     // считаем по раскладке (offset*), а не по наклонённому прямоугольнику — край не «уезжает» из-под курсора
     const hr = host.getBoundingClientRect(), px = e.clientX - hr.left, py = e.clientY - hr.top;
     const el = [...host.children].find(c => px >= c.offsetLeft && px <= c.offsetLeft + c.offsetWidth && py >= c.offsetTop && py <= c.offsetTop + c.offsetHeight);

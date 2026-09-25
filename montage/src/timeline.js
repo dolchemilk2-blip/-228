@@ -237,7 +237,7 @@ function tlFollow() {                                  // курсор плее�
     tlRaf = 0; const st = tlState(), total = S.result && S.result.out ? S.result.out.length / C.SR : 0;
     tlHeadUpdate(); tlFrame++; if (typeof readTick === 'function') readTick();
     const txt = `${fmt(tpTime())} / ${fmt(total)}`;
-    document.querySelectorAll('#tp-time, .tp-time-txt').forEach(el => { if (el.textContent !== txt) el.textContent = txt; });
+    tpEls('tp-time', 'tp-time-txt').forEach(el => { if (el.textContent !== txt) el.textContent = txt; });
     const sk = $('#tp-seek'); if (sk && !sk.matches(':active') && tlFrame % 3 === 0) sk.value = tpTime();
     if (tlFrame % 8 === 0) drawOverview();
     if (!TP.playing) { drawTimeline(); return; }

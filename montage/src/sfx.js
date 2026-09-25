@@ -52,6 +52,10 @@ export const SFX_KEYS = Object.keys(SYNTH);
 export const sfxName = k => SYNTH[k] ? SYNTH[k].name : k;
 const cache = new Map();
 /** Встроенный звук по ключу, 48 кГц, всегда одинаковый (сид фиксирован). */
+/** Звук уже синтезирован (есть в кэше)? — чтобы не синтезировать ради одной длительности в подписи. */
+export function synthReady(key) { return cache.has(key); }
+/** Положить в кэш заглушку, синтезированную в фоновом потоке. */
+export function synthPut(key, y) { if (y && y.length) cache.set(key, y); }
 export function synthSound(key) {
   if (!SYNTH[key]) return null;
   if (!cache.has(key)) cache.set(key, SYNTH[key].make(rng(key.split('').reduce((a, c) => a * 31 + c.charCodeAt(0), 7))));

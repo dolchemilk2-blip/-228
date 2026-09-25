@@ -100,6 +100,6 @@ function fdrInit() {
     fdrSet(inp, 0); fdrSync(inp, 'jump');
     inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true }));
   });
-  document.addEventListener('pointerover', e => { if (e.pointerType !== 'mouse' || FDR.drag) return; const F = e.target._fdr; if (F) mvTo(F.s, 1.07, { damping: 1, response: 0.2 }); });
+  document.addEventListener('pointerover', e => { if (e.pointerType !== 'mouse' || FDR.drag || (typeof scrolling === 'function' && scrolling())) return; const F = e.target._fdr; if (F) mvTo(F.s, 1.07, { damping: 1, response: 0.2 }); });
   document.addEventListener('pointerout', e => { if (e.pointerType !== 'mouse') return; const F = e.target._fdr; if (F && !(FDR.drag && FDR.drag.F === F)) mvTo(F.s, 1, { damping: 0.7, response: 0.3 }); });
 }

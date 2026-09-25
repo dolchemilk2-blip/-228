@@ -15,6 +15,12 @@ self.onmessage = e => {
   try {
     if (m.type === 'analyze') { self.postMessage({ id: m.id, type: 'analyzed', A: analyze(m.y), noise: noiseProfile(m.y), ltas: m.wantLtas ? ltas(m.y, 2) : null }); }
     else if (m.type === 'fx') { const y = fxProcess(m.y, m.key); self.postMessage({ id: m.id, type: 'done', y }, [y.buffer]); }
+    else if (m.type === 'preview') {                 // отрывок чистки: спектры и громкость «было/стало» — тоже здесь, не в главном потоке
+      const specBefore = avgSpectrum(m.y, m.freqs), lufsBefore = integratedLufs(m.y), sgBefore = m.sg && m.sgBefore ? { ...spectrogram(m.y, m.sg), w: m.sg.cols } : null, r = runChain(m.y, m.chain, m.aux || {});
+      const sgAfter = m.sg ? { ...spectrogram(r.y, m.sg), w: m.sg.cols } : null;       // и спектрограмма «стало»
+      self.postMessage({ id: m.id, type: 'done', y: r.y, log: r.log, specBefore, specAfter: avgSpectrum(r.y, m.freqs), lufsBefore, lufsAfter: integratedLufs(r.y), sgAfter, sgBefore }, [r.y.buffer]);
+    }
+    else if (m.type === 'synth') { const y = synthSound(m.key).slice(); self.postMessage({ id: m.id, type: 'done', y }, [y.buffer]); }   // заглушки звуков — тоже в фоне
     else if (m.type === 'run') { const r = runChain(m.y, m.chain, m.aux || {}, p => self.postMessage({ id: m.id, type: 'progress', p })); self.postMessage({ id: m.id, type: 'done', y: r.y, log: r.log }, [r.y.buffer]); }
   } catch (err) { self.postMessage({ id: m.id, type: 'error', message: String(err && err.message || err) }); }
 };`;

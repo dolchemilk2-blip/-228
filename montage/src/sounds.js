@@ -47,6 +47,19 @@ async function sfxAddFiles(list) {
   }
   sfxAuto(); S.result = null; renderSounds();
 }
+const sfxDurNote = (d, cue) => ` <span class="muted">· ${fmt(d)}${cue.mode !== 'bed' && d > SFX_SEQ_MAX ? `, между репликами — первые ${SFX_SEQ_MAX} с` : ''}</span>`;
+/** Встроенные звуки-заглушки синтезируются в простое по одному, а не все разом при открытии вкладки. */
+const sfxLater = new Set();
+function sfxSynthIdle() {
+  const idle = window.requestIdleCallback || (fn => setTimeout(fn, 60));
+  // синтез — в фоновом потоке обработки; главный поток только кладёт готовое в кэш и дописывает длительность
+  const next = () => { const k = sfxLater.values().next().value; if (k == null) return; sfxLater.delete(k);
+    const done = y => { if (y) C.synthPut(k, y); if (!C.synthReady(k)) C.synthSound(k); const d = C.synthSound(k).length / C.SR;
+      document.querySelectorAll(`.sdur[data-synth="${CSS.escape(k)}"]`).forEach(el => { el.outerHTML = sfxDurNote(d, { mode: el.dataset.mode }); });
+      if (sfxLater.size) idle(next); };
+    (typeof dspCall === 'function' ? dspCall({ type: 'synth', key: k }) : Promise.reject()).then(r => done(r.y), () => done(null)); };
+  if (sfxLater.size) idle(next);
+}
 function renderSounds() {
   const el = $('#sfx-body'); if (!el) return;
   if (!S.P) { el.innerHTML = '<p class="muted">Сначала вставьте сценарий на вкладке «Сборка»: звуки берутся из его ремарок.</p>'; return; }
@@ -66,8 +79,10 @@ function renderSounds() {
     if (!rows.includes(c)) continue;
     if (scene) { list.push(`<div class="scene">${esc(scene.text)}</div>`); scene = null; }
     const cue = sfxCue(c.id), a = auto.get(c.id);
-    const srcDur = cue.src ? (cue.src.startsWith('synth:') ? C.synthSound(cue.src.slice(6)).length / C.SR : (st.lib.find(x => x.name === cue.src.slice(4)) || {}).dur) : null;
-    const durNote = srcDur ? ` <span class="muted">· ${fmt(srcDur)}${cue.mode !== 'bed' && srcDur > SFX_SEQ_MAX ? `, между репликами — первые ${SFX_SEQ_MAX} с` : ''}</span>` : '';
+    const sk = cue.src && cue.src.startsWith('synth:') ? cue.src.slice(6) : null, wait = sk && !C.synthReady(sk);
+    if (wait) sfxLater.add(sk);                            // заглушку синтезируем в простое, длительность допишется
+    const srcDur = !cue.src || wait ? null : sk ? C.synthSound(sk).length / C.SR : (st.lib.find(x => x.name === cue.src.slice(4)) || {}).dur;
+    const durNote = srcDur ? sfxDurNote(srcDur, cue) : wait ? `<span class="sdur" data-synth="${esc(sk)}" data-mode="${cue.mode}"></span>` : '';
     list.push(`<div class="srow ${cue.on && cue.src ? 'on' : ''}" data-id="${c.id}">
       <label class="mini"><input type="checkbox" data-p="on" ${cue.on ? 'checked' : ''} aria-label="в дорожку"></label>
       <div class="stext"><span class="num">${esc(c.id)}</span> ${esc(c.text)}${a && !cue.manual ? `<span class="muted"> · ${a.strong ? 'похоже на звук' : 'может быть звуком'}</span>` : ''}${durNote}</div>
@@ -89,6 +104,7 @@ function renderSounds() {
     ${dbBoxHtml(db)}
     ${st.lib.length ? `<div class="chips">${st.lib.map(f => `<span class="chip ghost">${esc(f.name)} <i>${fmt(f.dur)}</i> <button class="icon xs" data-act="lib-play" data-name="${esc(f.name)}" aria-label="Слушать">${ic('play')}</button><button class="icon xs" data-act="lib-rm" data-name="${esc(f.name)}" aria-label="Убрать">${ic('close')}</button></span>`).join('')}</div>` : ''}
     <div class="srows">${list.join('') || '<p class="muted pad">Звучащих ремарок не нашлось. Включите «показывать все ремарки» и назначьте звук вручную.</p>'}</div>`;
+  sfxSynthIdle();
 }
 function dbBoxHtml(db) {
   const tcue = db.target && S.P ? S.P.cues.find(c => c.id === db.target) : null;

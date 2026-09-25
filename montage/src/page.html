@@ -142,12 +142,7 @@ b, strong { font-weight: 600; }
 .theme-b .t-sun, .theme-b .t-moon, .theme-b .t-auto { opacity: 0; transform: scale(.25); filter: blur(var(--blur-small)); }
 .theme-b[data-mode="light"] .t-sun, .theme-b[data-mode="dark"] .t-moon, .theme-b[data-mode="auto"] .t-auto { opacity: 1; transform: none; filter: none; }
 ::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
-html.vt-tab main.wrap { view-transition-name: pane; }
-::view-transition-group(pane) { animation-duration: var(--spring-pane-dur, 400ms); animation-timing-function: var(--spring-pane, ease-out); }
-::view-transition-old(pane) { animation: t-vt-out 200ms cubic-bezier(0.4, 0, 1, 1) both; }
-::view-transition-new(pane) { animation: t-vt-in var(--spring-pane-dur, 400ms) var(--spring-pane, ease-out) both; }
-@keyframes t-vt-out { to { opacity: 0; transform: translateX(calc(var(--vt-dir, 1) * -32px)) scale(0.985); filter: blur(4px); } }
-@keyframes t-vt-in { from { opacity: 0; transform: translateX(calc(var(--vt-dir, 1) * 32px)) scale(0.985); filter: blur(4px); } }
+/* смена вкладки — paneIn в motion.js (сдвиг и прозрачность), без снимка всей страницы */
 @media (max-width: 860px) {
   .deck-in { flex-wrap: wrap; gap: 8px 12px; padding: 8px 16px 10px; }
   .tabs { order: 3; width: 100%; }
@@ -231,7 +226,7 @@ input[type=range]:disabled { cursor: default; }
 .fdr-track { position: absolute; left: calc(var(--cap) / 2); right: calc(var(--cap) / 2); top: 50%; height: 6px; margin-top: -3px; border-radius: 3px; background: var(--groove); box-shadow: inset 0 1px 2px rgb(0 0 0 / 22%); }
 .fdr-fill { position: absolute; top: 0; bottom: 0; left: calc(var(--a) * 100% + var(--ol, 0px)); width: calc((var(--b) - var(--a)) * 100% + var(--or, 0px) - var(--ol, 0px)); border-radius: inherit; background: linear-gradient(color-mix(in srgb, var(--accent) 80%, #fff), var(--accent)); transition: box-shadow var(--duration-quick) ease; }
 .fdr-bi .fdr-track::before { content: ""; position: absolute; left: calc(var(--z) * 100% - 1px); top: -5px; bottom: -5px; width: 2px; border-radius: 1px; background: var(--muted); opacity: .55; }
-.fdr-cap { position: absolute; z-index: 1; top: 50%; left: calc(var(--p) * (100% - var(--cap))); width: var(--cap); height: 26px; margin-top: -13px; border-radius: 4px; transform: translateX(var(--o)) scale(var(--s)); background: linear-gradient(var(--cap-top), var(--cap-bot)); border: 1px solid var(--cap-edge); box-shadow: 0 1px 2px rgb(0 0 0 / 25%), 0 4px 8px -4px rgb(0 0 0 / 35%); pointer-events: none; will-change: transform; transition: box-shadow var(--duration-quick) ease; }
+.fdr-cap { position: absolute; z-index: 1; top: 50%; left: calc(var(--p) * (100% - var(--cap))); width: var(--cap); height: 26px; margin-top: -13px; border-radius: 4px; transform: translateX(var(--o)) scale(var(--s)); background: linear-gradient(var(--cap-top), var(--cap-bot)); border: 1px solid var(--cap-edge); box-shadow: 0 1px 2px rgb(0 0 0 / 25%), 0 4px 8px -4px rgb(0 0 0 / 35%); pointer-events: none; transition: box-shadow var(--duration-quick) ease; }
 .fdr-cap::after { content: ""; position: absolute; top: 3px; bottom: 3px; left: 50%; width: 2px; margin-left: -1px; border-radius: 1px; background: #15171A; }   /* риска — поперёк хода */
 .fdr.is-drag .fdr-fill { box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 55%, transparent); }
 .fdr.is-drag .fdr-cap { box-shadow: 0 2px 3px rgb(0 0 0 / 22%), 0 10px 18px -6px rgb(0 0 0 / 45%); }
@@ -341,13 +336,13 @@ input[type=radio] { accent-color: var(--accent); }
 }
 @keyframes t-digit-tick { 0% { transform: translateY(calc(var(--digit-distance) * .4 * var(--digit-dir-y))); opacity: .5; } }
 .t-digit-group:not(.t-flow) { display: inline-flex; align-items: baseline; }
-.t-digit { display: inline-block; white-space: pre; will-change: transform, opacity, filter; }
+.t-digit { display: inline-block; white-space: pre; }   /* без will-change: браузер сам поднимает цифру в слой на время въезда, а не держит сотни слоёв */
 .t-digit-group.is-animating .t-digit { animation: t-digit-pop-in var(--digit-dur) var(--digit-ease) both; }
 .t-digit-group.is-animating .t-digit[data-stagger="1"] { animation-delay: var(--digit-stagger); }
 .t-digit-group.is-animating .t-digit[data-stagger="2"] { animation-delay: calc(var(--digit-stagger) * 2); }
 .t-digit-group.is-animating .t-digit[data-stagger="3"] { animation-delay: calc(var(--digit-stagger) * 3); }
 .t-digit-group.is-tick .t-digit { animation: t-digit-tick 160ms var(--ease-smooth-out) both; }
-.t-digit-group .t-digit.t-still, .t-digit-group .t-digit.t-txt { animation: none; will-change: auto; }
+.t-digit-group .t-digit.t-still, .t-digit-group .t-digit.t-txt { animation: none; }
 .hints { display: flex; flex-wrap: wrap; gap: 6px; }
 .hint { font-size: 12.5px; padding: 3px 10px; border-radius: 999px; background: var(--none-soft); color: var(--muted); font-variant-numeric: tabular-nums; }
 .hint.ok { background: var(--ok-soft); color: var(--ok); } .hint.mid { background: var(--warn-soft); color: var(--warn); } .hint.bad { background: var(--bad-soft); color: var(--bad); }
@@ -428,6 +423,11 @@ input[type=radio] { accent-color: var(--accent); }
 .row:first-child, .scene + .row { border-top: 1px solid var(--line2); }
 .row.st-check { background: color-mix(in srgb, var(--warn-soft) 55%, transparent); }
 .row.off { opacity: .55; }
+/* длинные списки (разбор — 337 строк, читка, звуки): строки за краем экрана браузер не раскладывает и не рисует */
+#rv-list > .row { content-visibility: auto; contain-intrinsic-size: auto 92px; }
+#rv-list > .dir { content-visibility: auto; contain-intrinsic-size: auto 26px; }
+.read-row { content-visibility: auto; contain-intrinsic-size: auto 34px; }
+.srow, .arow { content-visibility: auto; contain-intrinsic-size: auto 56px; }
 .row .num { padding: 3px 0 0 4px; }
 .body { display: grid; gap: 4px; min-width: 0; }
 .line1 { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }

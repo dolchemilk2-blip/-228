@@ -466,9 +466,18 @@ function tpPlay(t = tpTime()) {
 }
 function tpPause() { if (!TP.playing) return; TP.offset = tpTime(); TP.playing = false; if (TP.src) { TP.src.onended = null; try { TP.src.stop(); } catch {} TP.src = null; } tpUi(); }
 function tpSeek(t, play = null) { if (play === true || (play == null && TP.playing)) tpPlay(t); else { TP.offset = Math.max(0, Math.min(t, TP.len / C.SR)); tpUi(); } }
+/** Кнопка и время плеера: по id и живой коллекции по классу — без обхода всего документа (23 тыс. элементов) каждый кадр. */
+const TPC = new Map();
+function tpEls(id, cls) {
+  // ссылки запоминаются: живая коллекция по классу после каждой правки DOM (цифры времени меняются 10 раз в секунду)
+  // заново обходила весь документ; обновляем, только если что-то из запомненного пропало со страницы
+  const k = id + ' ' + cls, c = TPC.get(k);
+  if (c && c.length && c.every(el => el.isConnected) && (c.n++ % 30 || c.length === document.getElementsByClassName(cls).length + (document.getElementById(id) ? 1 : 0))) return c;
+  const a = [], el = document.getElementById(id); if (el) a.push(el); for (const x of document.getElementsByClassName(cls)) a.push(x); a.n = 1; TPC.set(k, a); return a;
+}
 function tpUi() {
-  document.querySelectorAll('#tp-play, .tp-play-btn').forEach(b => { const sw = b.querySelector('.swap'); if (sw) sw.dataset.state = TP.playing ? 'b' : 'a'; else b.innerHTML = tpIcon(TP.playing); b.classList.toggle('on', TP.playing); b.setAttribute('aria-label', TP.playing ? 'Пауза' : 'Играть'); b.title = (TP.playing ? 'Пауза' : 'Играть') + ' (пробел)'; });
-  if (S.result && S.result.out) document.querySelectorAll('#tp-time, .tp-time-txt').forEach(tt => { tt.textContent = `${fmt(tpTime())} / ${fmt(S.result.out.length / C.SR)}`; });
+  tpEls('tp-play', 'tp-play-btn').forEach(b => { const sw = b.querySelector('.swap'); if (sw) sw.dataset.state = TP.playing ? 'b' : 'a'; else b.innerHTML = tpIcon(TP.playing); b.classList.toggle('on', TP.playing); b.setAttribute('aria-label', TP.playing ? 'Пауза' : 'Играть'); b.title = (TP.playing ? 'Пауза' : 'Играть') + ' (пробел)'; });
+  if (S.result && S.result.out) tpEls('tp-time', 'tp-time-txt').forEach(tt => { tt.textContent = `${fmt(tpTime())} / ${fmt(S.result.out.length / C.SR)}`; });
   const sk = $('#tp-seek'); if (sk && !sk.matches(':active')) sk.value = tpTime();
   if (typeof drawTimeline === 'function') drawTimeline();
   if (typeof readTick === 'function') readTick();
@@ -640,13 +649,18 @@ function progress(t, p) {
   $('#prog-t').textContent = t; $('#prog-t').dataset.text = t; $('#prog-b').style.setProperty('--p', Math.max(0, Math.min(1, p || 0)).toFixed(3));
 }
 let shownTab = null;
-function render() {
+// Перестраивается только открытая вкладка; остальные помечаются и перестраиваются, когда их откроют.
+// Раньше любая перестройка задевала все три сразу: разбор на 337 строк, таймлайн, спектрограммы чистки, звуки.
+const DIRTY = { build: true, clean: true, sfx: true };
+function render(opt = {}) {
+  if (!opt.tab) DIRTY.build = DIRTY.clean = DIRTY.sfx = true;
   if (shownTab && shownTab !== S.tab && typeof motionTab === 'function') motionTab(shownTab, S.tab);
   document.querySelectorAll('.tabs button').forEach(b => { b.classList.toggle('on', b.dataset.tab === S.tab); b.setAttribute('aria-selected', b.dataset.tab === S.tab); });
   if (shownTab !== S.tab && typeof tabIndicator === 'function') tabIndicator(!shownTab);
   document.querySelectorAll('[data-tabpane]').forEach(el => { el.hidden = el.dataset.tabpane !== S.tab; });
   shownTab = S.tab;
-  renderScript(); renderFiles(); renderRun(); renderReview(); renderMix(); renderCleanup(); renderSounds();
+  if (!opt.tab && typeof sfxAuto === 'function') sfxAuto();   // автоподбор звуков к ремаркам — всегда, а не только когда открыта вкладка «Звуки»
+  if (DIRTY[S.tab] !== false) { DIRTY[S.tab] = false; if (S.tab === 'clean') renderCleanup(); else if (S.tab === 'sfx') renderSounds(); else { renderScript(); renderFiles(); renderRun(); renderReview(); renderMix(); } }
   if (typeof motionSteps === 'function') motionSteps();
 }
 function renderScript() {
@@ -658,8 +672,8 @@ function renderScript() {
 }
 function renderFiles() {
   const el = $('#files');
-  if (!S.files.length) { el.innerHTML = '<p class="muted">Файлов пока нет. Можно сразу все: wav, mp3, m4a, flac, ogg.</p>'; }
-  else el.innerHTML = S.files.map((f, i) => `
+  if (!S.files.length) { setHtml(el, '<p class="muted">Файлов пока нет. Можно сразу все: wav, mp3, m4a, flac, ogg.</p>'); }
+  else setHtml(el, S.files.map((f, i) => `
     <div class="file" data-i="${i}">
       <div class="fhead">
         ${S.files.length > 1 ? `<span class="grip" title="Перетащить выше или ниже" aria-hidden="true">${ic('grip')}</span>` : ''}<span class="fname">${esc(f.name)}</span>
@@ -671,7 +685,7 @@ function renderFiles() {
         </span>
       </div>
       <div class="who">${S.P ? S.P.chars.map(c => `<label class="tog ${colorOf(c.key)} ${f.chars.has(c.key) ? 'on' : ''}"><input type="checkbox" data-act="char" data-k="${esc(c.key)}" ${f.chars.has(c.key) ? 'checked' : ''}>${esc(c.name)}</label>`).join('') : '<span class="muted">кто говорит — после сценария</span>'}</div>
-    </div>`).join('');
+    </div>`).join(''));
   const lonely = S.P ? S.P.chars.filter(c => !S.files.some(f => f.chars.has(c.key))) : [];
   $('#lonely').innerHTML = lonely.length ? `Без записей, будут паузы: ${lonely.map(c => esc(c.name)).join(', ')}.` : '';
 }
@@ -724,8 +738,11 @@ function renderReview() {
     rows.push(rowHtml(cue, st, hasFile));
   }
   $('#rv-list').dataset.v = `${S.filter}|${S.showDirs}|${S.matches.size}`;
-  $('#rv-list').innerHTML = rows.join('') || '<p class="muted pad">Здесь пусто — под этот фильтр ничего не подходит.</p>';
+  setHtml($('#rv-list'), rows.join('') || '<p class="muted pad">Здесь пусто — под этот фильтр ничего не подходит.</p>');
 }
+/** Заменить содержимое, только если оно правда другое: пересборка списка на 337 строк стоит сотни миллисекунд
+ *  раскладки, а после многих действий (темп, громкость, сведение) сам список не меняется. */
+function setHtml(el, html) { if (el._html === html && el.firstChild) return false; el._html = html; el.innerHTML = html; return true; }
 function rowHtml(cue, st, hasFile) {
   const src = sourceOf(cue), isDir = cue.type === 'dir';
   const who = isDir ? `<span class="chip ghost">ремарка</span>` : `<span class="chip ${colorOf(cue.spk)}">${esc(charName(cue.spk))}</span>`;
@@ -858,7 +875,7 @@ function renderMix() {
 // ------------------------------------------------------------------ события
 function bind() {
   $('.tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
-    const go = () => { S.tab = b.dataset.tab; stop(); history.replaceState(null, '', S.tab === 'clean' ? '#clean' : location.pathname); render(); };
+    const go = () => { S.tab = b.dataset.tab; stop(); history.replaceState(null, '', S.tab === 'clean' ? '#clean' : location.pathname); render({ tab: true }); };
     if (typeof motionTabSwitch === 'function' && e.detail !== 0) motionTabSwitch(b.dataset.tab, go); else go(); });
   bindCleanup(); bindSounds(); if (typeof bindVideo === 'function') bindVideo();
   const drop = (zone, fn) => {
