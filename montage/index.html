@@ -128,6 +128,7 @@ footer .g-acct-out:focus-visible { outline: 2px solid var(--focus); outline-offs
 .g-lock-card .g-msg { margin: -8px 0 12px; min-height: 1.2em; font-size: 13px; color: var(--bad, #B3261E); }
 .g-lock-card .g-msg.ok { color: var(--ok, #1E6C42); }
 .g-lock-card .g-msg:empty { display: none; }
+.g-lock-card .g-paynote { margin: 0 0 14px; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--accent, #EBA51C) 14%, transparent); font-size: 13.5px; color: inherit; }
 .g-trial { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--accent, #EBA51C) 16%, transparent); border: 1px solid color-mix(in srgb, var(--accent, #EBA51C) 55%, transparent); color: var(--deck-ink, #F0EAE2); font: 600 12.5px var(--sans, system-ui); white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .g-trial i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent, #EBA51C); }
 .g-trial:focus-visible { outline: 2px solid var(--accent, #EBA51C); outline-offset: 2px; }
@@ -169,6 +170,15 @@ const $ = s => document.querySelector(s), E = F.esc;
 const TRIAL_MS = 5 * 86400000, PER_INVITE = 3, MAX_INVITES = 10;
 const REF = (() => { try { const r = new URLSearchParams(location.search).get('ref'); if (r && /^[A-Za-z0-9_-]{6,128}$/.test(r)) localStorage.setItem('montage-access:ref', r); return localStorage.getItem('montage-access:ref') || ''; } catch { return ''; } })();
 const ACC = { user: null, me: {}, plan: 'paid' };
+// ссылка из магазина: …/montage/?code=XXXX-XXXX-XXXX-XXXX — код запоминается до входа и активируется сам
+const PAY = {
+  get() { try { return localStorage.getItem('montage-access:code') || ''; } catch { return PAY.mem || ''; } },
+  set(k) { PAY.mem = k; try { localStorage.setItem('montage-access:code', k); } catch {} },
+  drop() { PAY.mem = ''; try { localStorage.removeItem('montage-access:code'); } catch {} },
+};
+(() => { try { const u = new URL(location.href), c = u.searchParams.get('code'); if (c == null) return; const k = F.normCode(c); if (F.okCode(k)) PAY.set(k); u.searchParams.delete('code'); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch {} })();
+// другая вкладка активировала покупку — эта узнаёт сразу, не дожидаясь опроса
+const BC = 'BroadcastChannel' in window ? new BroadcastChannel('montage-access') : null;
 const trialLeft = m => m && m.trial && typeof m.trial.start === 'number' ? m.trial.start + TRIAL_MS - Date.now() : -1;
 const exportsLeft = m => Math.max(0, Math.min(MAX_INVITES, (m && m.bonus) || 0) * PER_INVITE - ((m && m.exports) || 0));
 const plural = (n, a, b, c) => { const k = n % 100, j = n % 10; return k > 10 && k < 20 ? c : j === 1 ? a : j > 1 && j < 5 ? b : c; };
@@ -179,7 +189,18 @@ const view = $('#g-view'), card = $('#g-card');
 const reduced = () => document.documentElement.dataset.motion === 'reduce' || matchMedia('(prefers-reduced-motion: reduce)').matches;
 const contact = CFG.contact ? `Вопросы и помощь: ${/^@|^https?:/.test(CFG.contact) ? `<a href="${E(/^@/.test(CFG.contact) ? 'https://t.me/' + CFG.contact.slice(1) : CFG.contact)}" target="_blank" rel="noopener">${E(CFG.contact)}</a>` : /@/.test(CFG.contact) ? `<a href="mailto:${E(CFG.contact)}">${E(CFG.contact)}</a>` : E(CFG.contact)}` : '';
 $('#g-foot').innerHTML = contact;
-const buy = CFG.buyUrl ? `<a href="${E(CFG.buyUrl)}" target="_blank" rel="noopener">Купить Монтажку</a>` : '';
+const buy = CFG.buyUrl ? `<a class="g-buy" href="${E(CFG.buyUrl)}" target="_blank" rel="noopener">Купить Монтажку</a>` : '';
+/** «Купить»: оплата в окне поверх сайта; магазин сразу после оплаты показывает ссылку с кодом. */
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('a.g-buy'); if (!a) return;
+  const w = Math.min(560, screen.availWidth - 20), h = Math.min(820, screen.availHeight - 40);
+  const win = window.open(a.href, 'montage-buy', `popup,width=${w},height=${h},left=${Math.max(0, (screen.availWidth - w) / 2)},top=${Math.max(0, (screen.availHeight - h) / 2)}`);
+  if (!win) return;                                                   // окна запрещены — откроется обычной вкладкой
+  e.preventDefault(); try { win.opener = null; } catch {}
+  const note = a.closest('.g-lock-card, .g-body')?.querySelector('.g-paynote');
+  if (note) note.hidden = false;
+});
+const payNote = `<p class="g-note g-paynote" hidden>Оплатите в открывшемся окне — магазин сразу покажет ссылку и пришлёт её на почту. Откройте ссылку, и Монтажка откроется сама.</p>`;
 // встроенные браузеры приложений (Instagram, TikTok…) часто не пускают во вход Google
 const inApp = /Instagram|FBAN|FBAV|TikTok|musical_ly|Line\/|; wv\)/i.test(navigator.userAgent);
 
@@ -187,23 +208,23 @@ const T = {
   wait: t => `<p class="g-state"><span class="g-dot"></span>${t}</p>`,
   setup: () => `<p class="g-lead">Сайт ещё не подключён к Firebase.</p><p class="g-note">Владельцу: заполните <code>access/config.js</code> по инструкции <code>montage/ACCESS.md</code>.</p>`,
   out: () => `<p class="g-lead">Монтажка находит реплики в записях актёров, выравнивает громкость и сводит радиоспектакль — прямо в браузере.</p>
-    ${REF ? '<p class="g-gift">Вас пригласили в Монтажку — 5 дней бесплатно. Войдите через Google, чтобы начать.</p>' : ''}
+    ${PAY.get() ? '<p class="g-gift">Покупка прошла — осталось войти. Войдите через Google тем аккаунтом, на котором будете работать: код из ссылки активируется сам.</p>' : REF ? '<p class="g-gift">Вас пригласили в Монтажку — 5 дней бесплатно. Войдите через Google, чтобы начать.</p>' : ''}
     <button class="g-btn g-google" type="button" data-act="in"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>Войти через Google</button>
     <p class="g-err" role="alert"></p>
     ${inApp ? `<p class="g-note g-warn">Похоже, ссылка открыта внутри приложения. Вход через Google там может не сработать — откройте её в обычном браузере: меню ⋯ → «Открыть в браузере».</p>` : ''}
-    <p class="g-note">${REF ? '' : 'Новым — 5 дней бесплатно: всё работает и слушается прямо здесь. '}Уже купили — войдите тем же аккаунтом Google, на который активировали код.${buy ? ` ${buy}.` : ''}</p>`,
+    <p class="g-note">${REF || PAY.get() ? '' : 'Новым — 5 дней бесплатно: всё работает и слушается прямо здесь. '}Уже купили — войдите тем же аккаунтом Google, на который активировали код.${buy && !PAY.get() ? ` ${buy}.` : ''}</p>${payNote}`,
   nopay: u => `<p>Вы вошли как <b>${E(u.email)}</b>.</p>
     <button class="g-btn g-wide" type="button" data-act="trial">Попробовать бесплатно — 5 дней</button>
     <p class="g-note">Всё работает и слушается прямо в браузере. Скачивать файлы — после покупки или за приглашения: каждый друг, начавший пробный период по вашей ссылке, даёт 3 скачивания.</p>
     <p class="g-err" role="alert"></p>
     <p class="g-or">или</p>
     ${T.code()}
-    ${buy ? `<p class="g-note">Кода ещё нет? ${buy}.</p>` : ''}
+    ${buy ? `<p class="g-note">Кода ещё нет? ${buy}.</p>${payNote}` : ''}
     <button class="g-link" type="button" data-act="switch">Войти в другой аккаунт</button>`,
   trialOver: (u, m) => `<p>Пробный период для <b>${E(u.email)}</b> закончился ${E(dateTxt(m.trial.start + TRIAL_MS))}.</p>
     <p class="g-note">Чтобы продолжить — купите Монтажку и введите код. Всё, что вы успели сделать, осталось в этом браузере.</p>
     ${T.code()}
-    ${buy ? `<p class="g-note">Кода ещё нет? ${buy}.</p>` : ''}
+    ${buy ? `<p class="g-note">Кода ещё нет? ${buy}.</p>${payNote}` : ''}
     <button class="g-link" type="button" data-act="switch">Войти в другой аккаунт</button>`,
   code: () => `<form class="g-field" data-form="code" novalidate>
       <label for="g-code">Код активации</label>
@@ -266,12 +287,24 @@ async function enter(user) {
   show(T.wait('Проверяю доступ…'));
   const [me, meta] = await Promise.allSettled([F.db('users/' + user.uid, { user }), F.db('app/meta', { user })]);
   if (me.status === 'rejected') return show(me.reason.code === 'denied' ? T.closed() : T.err('Нет связи с сервером. Проверьте интернет.'));
-  const m = me.value || {};
+  let m = me.value || {};
+  const pend = PAY.get();
+  if (pend && m.paid) PAY.drop();                                   // доступ уже есть — код остаётся неиспользованным
+  else if (pend && !m.blocked) {
+    show(T.wait('Активирую покупку…'));
+    let okPay;
+    try { okPay = await redeem(user, pend); } catch { return show(T.err('Нет связи — покупка не активировалась. Проверьте интернет и нажмите «Повторить»: ссылка не пропадёт.')); }
+    PAY.drop();
+    if (okPay) { if (BC) BC.postMessage('paid'); return enter(user); }
+    ACC.payErr = 'Эта ссылка уже использована на другом аккаунте. Если покупали вы — войдите тем аккаунтом, на котором активировали, или напишите нам.';
+  }
   // почта, имя и время захода — чтобы владелец видел покупателя в admin.html
   F.db('users/' + user.uid, { method: 'PATCH', body: { email: user.email, name: (user.displayName || '').slice(0, 100), seen: F.TS, ...(m.first ? {} : { first: F.TS }) }, user }).catch(() => {});
   if (meta.status === 'rejected') {
     if (meta.reason.code !== 'denied') return show(T.err('Нет связи с сервером. Проверьте интернет.'));
-    return show(m.blocked ? T.blocked(user) : m.trial && m.trial.start ? T.trialOver(user, m) : T.nopay(user));
+    show(m.blocked ? T.blocked(user) : m.trial && m.trial.start ? T.trialOver(user, m) : T.nopay(user));
+    if (ACC.payErr) { setErr(ACC.payErr, '#g-code-err'); ACC.payErr = ''; }
+    return;
   }
   if (!meta.value) return show(T.nobuild());
   ACC.user = user; ACC.me = m; ACC.plan = m.paid ? 'paid' : trialLeft(m) > 0 ? 'trial' : 'admin';
@@ -329,6 +362,7 @@ async function load(user, meta, sid) {
   window.montageAccess = { get plan() { return ACC.plan; }, locked: () => ACC.plan === 'trial' && exportsLeft(ACC.me) <= 0, exportBegin, open: () => trialPanel() };
   inject(html, user);
   trialChip();
+  if (ACC.payErr) { const t = ACC.payErr; ACC.payErr = ''; setTimeout(() => confirmPop('Ссылка из магазина не сработала', E(t), 'Понятно'), 400); }
   watch(user, sid);
 }
 
@@ -411,7 +445,8 @@ function trialPanel(why) {
     <div class="g-in"><input id="g-inv" readonly value="${E(url)}"><button type="button" data-a="copy">Скопировать</button>${navigator.share ? '<button type="button" data-a="share">Поделиться</button>' : ''}</div>
     <div class="g-sep"></div>
     <form data-a="code" novalidate><label class="g-lbl" for="g-pcode">Есть код активации?</label><div class="g-in"><input id="g-pcode" name="code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX"><button type="submit">Активировать</button></div><p class="g-msg" role="alert"></p></form>
-    <div class="g-lock-row">${CFG.buyUrl ? `<a class="g-lock-go" href="${E(CFG.buyUrl)}" target="_blank" rel="noopener">Купить Монтажку</a>` : ''}<button type="button" class="g-lock-alt" data-a="close">Закрыть</button></div>`);
+    ${CFG.buyUrl ? payNote : ''}
+    <div class="g-lock-row">${CFG.buyUrl ? `<a class="g-lock-go g-buy" href="${E(CFG.buyUrl)}" target="_blank" rel="noopener">Купить Монтажку</a>` : ''}<button type="button" class="g-lock-alt" data-a="close">Закрыть</button></div>`);
   const msg = el.querySelector('.g-msg'), inp = el.querySelector('#g-pcode');
   el.querySelector('#g-inv').addEventListener('focus', e => e.target.select());
   el.addEventListener('click', async e => {
@@ -426,7 +461,7 @@ function trialPanel(why) {
     btn.disabled = true; btn.textContent = 'Проверяю…';
     try {
       if (!(await redeem(ACC.user, k))) { msg.textContent = BAD_CODE; btn.disabled = false; btn.textContent = 'Активировать'; inp.focus(); return; }
-      ACC.plan = 'paid'; ACC.me.paid = true; trialChip(); fire();
+      ACC.plan = 'paid'; ACC.me.paid = true; trialChip(); fire(); if (BC) BC.postMessage('paid');
       msg.className = 'g-msg ok'; msg.textContent = 'Готово — Монтажка ваша, скачивать можно без ограничений.'; btn.textContent = 'Готово';
       setTimeout(() => el.close(), 1400);
     } catch (err) { msg.textContent = F.authError(err); btn.disabled = false; btn.textContent = 'Активировать'; }
@@ -481,7 +516,7 @@ function watch(user, sid) {
     lockEl.className = 'g-lock';
     lockEl.setAttribute('role', 'alertdialog'); lockEl.setAttribute('aria-modal', 'true'); lockEl.setAttribute('aria-labelledby', 'g-lock-h');
     lockEl.innerHTML = kind === 'trial'
-      ? `<div class="g-lock-card"><h2 id="g-lock-h">Пробный период закончился</h2><p>Чтобы продолжить — купите Монтажку и введите код. Всё, что вы сделали, на месте.</p><form data-a="code" novalidate><label class="g-lbl" for="g-lcode">Код активации</label><div class="g-in"><input id="g-lcode" name="code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX"><button type="submit">Активировать</button></div><p class="g-msg" role="alert"></p></form><div class="g-lock-row">${CFG.buyUrl ? `<a class="g-lock-go" href="${E(CFG.buyUrl)}" target="_blank" rel="noopener">Купить Монтажку</a>` : ''}<button type="button" class="g-lock-alt" data-a="out">Выйти</button></div></div>`
+      ? `<div class="g-lock-card"><h2 id="g-lock-h">Пробный период закончился</h2><p>Чтобы продолжить — купите Монтажку и введите код. Всё, что вы сделали, на месте.</p><form data-a="code" novalidate><label class="g-lbl" for="g-lcode">Код активации</label><div class="g-in"><input id="g-lcode" name="code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX"><button type="submit">Активировать</button></div><p class="g-msg" role="alert"></p></form>${CFG.buyUrl ? payNote : ''}<div class="g-lock-row">${CFG.buyUrl ? `<a class="g-lock-go g-buy" href="${E(CFG.buyUrl)}" target="_blank" rel="noopener">Купить Монтажку</a>` : ''}<button type="button" class="g-lock-alt" data-a="out">Выйти</button></div></div>`
       : kind === 'other'
       ? `<div class="g-lock-card"><h2 id="g-lock-h">Монтажка открыта на другом устройстве</h2><p>Работать можно на одном устройстве за раз. Всё, что вы сделали здесь, на месте: продолжите — и на том устройстве Монтажка встанет на паузу.</p><div class="g-lock-row"><button type="button" class="g-lock-go" data-a="here">Продолжить здесь</button><button type="button" class="g-lock-alt" data-a="out">Выйти</button></div></div>`
       : `<div class="g-lock-card"><h2 id="g-lock-h">Доступ к Монтажке отключён</h2><p>${contact ? 'Если это ошибка — напишите нам. ' + contact : 'Если это ошибка — напишите владельцу Монтажки.'}</p><div class="g-lock-row"><button type="button" class="g-lock-alt" data-a="out">Выйти</button></div></div>`;
@@ -514,6 +549,7 @@ function watch(user, sid) {
     };
   }
   setInterval(() => check(), 60000);
+  if (BC) BC.onmessage = () => { last = 0; check(true); };
   document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
   addEventListener('focus', () => check());
   if (F.EMU) window.__montageAccessCheck = () => check(true);
