@@ -36,8 +36,8 @@ const charName = key => (S.P && S.P.chars.find(c => c.key === key) || { name: ke
 
 // ------------------------------------------------------------------ состояние правок
 const editsKey = () => 'montage:' + hash(S.scriptText);
-function saveEdits() { store.set(editsKey(), { room: S.room, edits: S.edits, gains: S.gains, voiced: S.voiced, voiceGains: S.voiceGains, timing: S.timing, tempo: S.tempo, fxVoice: S.fxVoice, fxLine: S.fxLine, amb: ambSaved(), takes: S.takePick, sfx: S.sfxSaved || {} }); }
-function loadEdits() { const v = store.get(editsKey()); S.room = v?.room !== false; S.edits = v?.edits || {}; S.gains = v?.gains || {}; S.voiced = v?.voiced || {}; S.voiceGains = v?.voiceGains || {}; S.timing = v?.timing || {}; S.tempo = v?.tempo || 1; S.fxVoice = v?.fxVoice || {}; S.fxLine = v?.fxLine || {}; S.amb = v?.amb ? { duck: 8, scenes: {}, cands: {}, ...v.amb } : null; S.takePick = v?.takes || {}; S.sfxSaved = v?.sfx || {}; sfxState().cues = JSON.parse(JSON.stringify(S.sfxSaved)); }
+function saveEdits() { store.set(editsKey(), { room: S.room, edits: S.edits, gains: S.gains, voiced: S.voiced, voiceGains: S.voiceGains, timing: S.timing, tempo: S.tempo, fxVoice: S.fxVoice, fxLine: S.fxLine, amb: ambSaved(), takes: S.takePick, sfx: S.sfxSaved || {}, stage: S.stage ? stageSaved() : null, music: S.music ? musicSaved() : null }); }
+function loadEdits() { const v = store.get(editsKey()); S.room = v?.room !== false; S.edits = v?.edits || {}; S.gains = v?.gains || {}; S.voiced = v?.voiced || {}; S.voiceGains = v?.voiceGains || {}; S.timing = v?.timing || {}; S.tempo = v?.tempo || 1; S.fxVoice = v?.fxVoice || {}; S.fxLine = v?.fxLine || {}; S.amb = v?.amb ? { duck: 8, scenes: {}, cands: {}, ...v.amb } : null; S.takePick = v?.takes || {}; S.sfxSaved = v?.sfx || {}; sfxState().cues = JSON.parse(JSON.stringify(S.sfxSaved)); stageLoad(v?.stage); musicLoad(v?.music); }
 
 // ------------------------------------------------------------------ звук
 let actx = null, playing = null;
@@ -419,29 +419,42 @@ async function remixInner(mode, ids) {
   const items = mode === 'lines' && ids ? r.items.filter(it => ids.has(it.id)) : r.items;
   const fxN = typeof ensureFx === 'function' ? await ensureFx(items) : 0;
   lap(`эффекты (${fxN} реплик)`);
-  const before = new Map(); if (mode === 'lines') for (const p of r.lay.placed) if (p.item && ids.has(p.item.id)) before.set(p.item.id, p.audio.length);
+  const before = new Map(); if (mode === 'lines') for (const p of r.lay.placed) if (p.item && ids.has(p.item.id)) before.set(p.item.id, spaceLen(p));
+  if (mode === 'lines' && !!r.st !== stereoMix()) mode = 'layout';                   // моно ↔ стерео — дорожка целиком
   for (const it of items) { itemAudio(it); if (mode !== 'lines') await tick(); }
   lap('громкость');
   if (mode === 'lines') { if (await remixLines(r, ids, before, tick)) { lap('куски дорожки'); r.approx = true; S.tlTracks = null; return; } mode = 'layout'; }
+  const mus = typeof musicLayout === 'function' ? musicLayout() : {};
   const lay = C.layout(S.P.cues, cue => { const it = r.byId.get(cue.id); if (it) return it.core != null ? { audio: it.audio, core: it.core } : it.audio; return cue.type === 'dir' && sfxIsSeq(cue) ? sfxAudio(cue.id) : null; },
-    cue => isVoicedDir(cue) || sfxIsSeq(cue), sfxBed, { tempo: S.tempo || 1, timing: S.timing });
+    cue => isVoicedDir(cue) || sfxIsSeq(cue), sfxBed, { tempo: S.tempo || 1, timing: S.timing, ...mus });
   lay.placed.forEach(p => { p.item = r.byId.get(p.cue.id); });
   r.lay = lay; S.tlTracks = null;
   lap('раскладка'); await tick();
+  // стерео — когда есть мизансцена или музыка: у каждой реплики p.sp — как она легла в левый и правый каналы
+  const st = stereoMix(); r.st = st;
+  if (st) { const k = await spaceEnsure(lay.placed, lay, tick); lap(`мизансцена (${k} реплик)`); }
   const N = Math.ceil(lay.total * C.SR);                // буфер дорожки переиспользуется, с запасом в минуту: выделять 200 МБ на каждую правку — долго
   // прежний r.out живёт до конца пересчёта: пока сведение режется на куски, интерфейс читает его длину
-  if (!r.mixBuf || r.mixBuf.length < N || r.mixBuf.length > N + 120 * C.SR) { r.mixBuf = null; r.mixBuf = new Float32Array(N + 60 * C.SR); }
-  const mix = r.mixBuf.subarray(0, N), CH = 1 << 20;
-  for (let a = 0; a < N; a += CH) { mix.fill(0, a, Math.min(N, a + CH)); await tick(); }
-  for (const p of lay.placed) { const i0 = Math.round(p.at * C.SR), n = Math.min(p.audio.length, Math.max(0, mix.length - i0)), au = p.audio; for (let i = 0; i < n; i++) mix[i0 + i] += au[i]; await tick(); }   // всё суммой: реплики могут наезжать друг на друга
+  if (!r.mixBuf || r.mixBuf.length < N || r.mixBuf.length > N + 120 * C.SR) { r.mixBuf = null; r.mixBufR = null; r.mixBuf = new Float32Array(N + 60 * C.SR); }
+  if (st && (!r.mixBufR || r.mixBufR.length !== r.mixBuf.length)) r.mixBufR = new Float32Array(r.mixBuf.length);
+  if (!st) r.mixBufR = null;
+  const mix = r.mixBuf.subarray(0, N), mixR = st ? r.mixBufR.subarray(0, N) : null, CH = 1 << 20;
+  for (let a = 0; a < N; a += CH) { mix.fill(0, a, Math.min(N, a + CH)); if (mixR) mixR.fill(0, a, Math.min(N, a + CH)); await tick(); }
+  for (const p of lay.placed) {                          // всё суммой: реплики могут наезжать друг на друга
+    const i0 = Math.round(p.at * C.SR);
+    if (st) C.spAdd(p.sp, mix, mixR, i0, 0, Math.max(0, Math.min(C.spLen(p.sp), N - i0)));
+    else { const n = Math.min(p.audio.length, Math.max(0, mix.length - i0)), au = p.audio; for (let i = 0; i < n; i++) mix[i0 + i] += au[i]; }
+    await tick();
+  }
   lap('сумма');
-  r.room = typeof roomToneMix === 'function' ? roomToneMix(mix, lay) : [];
-  r.amb = typeof ambMixSteps === 'function' ? await runSteps(ambMixSteps(mix, lay), tick) : [];
-  lap('фон');
-  if (mode === 'full') { const m = await runSteps(C.masterSteps(mix, lay.placed, { targetLufs: r.target }), tick); r.out = m.out; r.master = m; r.gain = Math.pow(10, m.gainDb / 20); r.approx = false; }
-  else { const L = C.limiterStream(mix, 0.84, r.gain); for (let a = 0; a < N; a += CH) { L.step(a, Math.min(N, a + CH)); await tick(); } L.finish(); r.out = mix; r.approx = true; }
+  r.room = typeof roomToneMix === 'function' ? roomToneMix(mix, lay, mixR) : [];
+  r.amb = typeof ambMixSteps === 'function' ? await runSteps(ambMixSteps(mix, lay, mixR), tick) : [];
+  r.mus = st && typeof musicMixSteps === 'function' ? await runSteps(musicMixSteps(mix, mixR, lay), tick) : [];
+  lap('фон и музыка');
+  if (mode === 'full') { const m = await runSteps(C.masterSteps(mix, lay.placed, { targetLufs: r.target, R: mixR }), tick); r.out = m.out; r.outR = m.outR; r.master = m; r.gain = Math.pow(10, m.gainDb / 20); r.approx = false; }
+  else { const L = st ? C.limiterStream2(mix, mixR, 0.84, r.gain) : C.limiterStream(mix, 0.84, r.gain); for (let a = 0; a < N; a += CH) { L.step(a, Math.min(N, a + CH)); await tick(); } L.finish(); r.out = mix; r.outR = mixR; r.approx = true; }
   lap('мастер'); await tick();
-  await tpLoad(r.out, tick);
+  await tpLoad(r.out, tick, r.outR);
   lap('плеер');
 }
 /** Пересчёт кусков дорожки под изменившимися репликами. false — изменений слишком много, проще целиком. */
@@ -450,49 +463,55 @@ async function remixLines(r, ids, before, tick) {
   try { return await remixLinesInner(r, ids, before, tick); } finally { TP.hold = false; if (TP.dirty) { TP.dirty = false; if (TP.playing) tpPlay(tpTime()); } }
 }
 async function remixLinesInner(r, ids, before, tick = async () => {}) {
-  const SR = C.SR, n = r.out.length, spans = [];
-  for (const p of r.lay.placed) {
-    if (!p.item || !ids.has(p.item.id)) continue;
-    const old = before.get(p.item.id) || 0; p.audio = p.item.audio;
-    const a = Math.round(p.at * SR), b = a + Math.max(old, p.audio.length); spans.push([a, Math.min(n, b)]);
-  }
+  const SR = C.SR, n = r.out.length, spans = [], st = !!r.st, changed = [];
+  for (const p of r.lay.placed) { if (!p.item || !ids.has(p.item.id)) continue; p.audio = p.item.audio; changed.push(p); }
+  if (st) await spaceEnsure(changed, r.lay, tick);      // новый звук реплики — заново на её место в пространстве
+  for (const p of changed) { const old = before.get(p.item.id) || 0, a = Math.round(p.at * SR), b = a + Math.max(old, spaceLen(p)); spans.push([a, Math.min(n, b)]); }
   if (!spans.length) return true;
   spans.sort((x, y) => x[0] - y[0]);
   const la = Math.round(0.02 * SR), settle = Math.round(0.6 * SR), merged = [];
   for (const [a, b] of spans) { const A = Math.max(0, a - la), B = Math.min(n, b + settle); const m = merged[merged.length - 1]; if (m && A <= m[1]) m[1] = Math.max(m[1], B); else merged.push([A, B]); }
   if (merged.reduce((s, [a, b]) => s + b - a, 0) > 0.6 * n) return false;
-  const ceil = 0.84, lim = ceil / r.gain;
-  // сумма всего, что звучит на [c0, c1), до мастера — в y со сдвигом off (кусками, чтобы длинный отрезок не держал кадр)
-  const preInto = (y, off, c0, c1) => {
-    for (const p of r.lay.placed) { const i0 = Math.round(p.at * SR), s0 = Math.max(c0, i0), s1 = Math.min(c1, i0 + p.audio.length), au = p.audio; for (let i = s0; i < s1; i++) y[i - off] += au[i - i0]; }
-    for (const c of [...(r.amb || []), ...(r.room || [])]) { const i0 = Math.round(c.at * SR), s0 = Math.max(c0, i0), s1 = Math.min(c1, i0 + c.audio.length), au = c.audio; for (let i = s0; i < s1; i++) y[i - off] += au[i - i0]; }
+  const ceil = 0.84, lim = ceil / r.gain, clips = [...(r.amb || []), ...(r.room || []), ...(r.mus || [])];
+  // сумма всего, что звучит на [c0, c1), до мастера — в y (и yR в стерео) со сдвигом off (кусками, чтобы длинный отрезок не держал кадр)
+  const preInto = (y, off, c0, c1, yR = null) => {
+    for (const p of r.lay.placed) {
+      const i0 = Math.round(p.at * SR);
+      if (yR) { const s0 = Math.max(c0, i0), s1 = Math.min(c1, i0 + C.spLen(p.sp)); if (s1 > s0) C.spAdd(p.sp, y, yR, i0 - off, s0 - i0, s1 - i0); }
+      else { const s0 = Math.max(c0, i0), s1 = Math.min(c1, i0 + p.audio.length), au = p.audio; for (let i = s0; i < s1; i++) y[i - off] += au[i - i0]; }
+    }
+    for (const c of clips) {
+      const i0 = Math.round(c.at * SR), s0 = Math.max(c0, i0), s1 = Math.min(c1, i0 + c.audio.length), au = c.audio, g = c.g || 1;
+      if (yR) { const aR = c.audioR || au; for (let i = s0; i < s1; i++) { y[i - off] += au[i - i0] * g; yR[i - off] += aR[i - i0] * g; } }
+      else for (let i = s0; i < s1; i++) y[i - off] += au[i - i0] * g;
+    }
   };
-  const pre = (a, b) => { const y = new Float32Array(b - a); preInto(y, a, a, b); return y; };
+  const pre = (a, b) => { const y = new Float32Array(b - a), yR = st ? new Float32Array(b - a) : null; preInto(y, a, a, b, yR); if (yR) for (let i = 0; i < y.length; i++) { const l = y[i] < 0 ? -y[i] : y[i], q = yR[i] < 0 ? -yR[i] : yR[i]; if (q > l) y[i] = q; } return y; };
   for (let [a, b] of merged) {
     // границы — где лимитер точно отпущен: пиков нет за 0,6 с до начала и на 20 мс после конца
     for (let guard = 0; guard < 20 && a > 0; guard++) { const w = pre(Math.max(0, a - settle), a); let hit = -1; for (let i = w.length - 1; i >= 0; i--) if (w[i] > lim || w[i] < -lim) { hit = i; break; } if (hit < 0) break; a = Math.max(0, a - settle + hit - la); }
     for (let guard = 0; guard < 20 && b < n; guard++) { const w = pre(b, Math.min(n, b + la)); let hit = false; for (const v of w) if (v > lim || v < -lim) { hit = true; break; } if (!hit) break; b = Math.min(n, b + settle); }
     // то же, что «сумма × усиление → лимитер», но кусками: лимитер потоковый, его состояние идёт через куски
-    const CH = 1 << 18, y = new Float32Array(b - a);
-    for (let c = a; c < b; c += CH) { preInto(y, a, c, Math.min(b, c + CH)); await tick(); }
-    const L = C.limiterStream(y, ceil, r.gain); for (let c = 0; c < y.length; c += CH) { L.step(c, Math.min(y.length, c + CH)); await tick(); } L.finish();
-    r.out.set(y, a); tpUpdate(a, b); await tick();
+    const CH = 1 << 18, y = new Float32Array(b - a), yR = st ? new Float32Array(b - a) : null;
+    for (let c = a; c < b; c += CH) { preInto(y, a, c, Math.min(b, c + CH), yR); await tick(); }
+    const L = st ? C.limiterStream2(y, yR, ceil, r.gain) : C.limiterStream(y, ceil, r.gain); for (let c = 0; c < y.length; c += CH) { L.step(c, Math.min(y.length, c + CH)); await tick(); } L.finish();
+    r.out.set(y, a); if (st) r.outR.set(yR, a); tpUpdate(a, b); await tick();
   }
   return true;
 }
 // ------------------------------------------------------------------ плеер из памяти: без сборки WAV, правки слышны сразу
 const TP = { buf: null, src: null, startAt: 0, offset: 0, playing: false, len: 0, hold: false, dirty: false };
 /** Буфер плеера с запасом в минуту: сдвиги меняют длину дорожки, а новый буфер на 200 МБ — это секунда. */
-async function tpLoad(out, tick = null) {
-  const ctx = audioCtx(); TP.len = out.length;
-  if (!TP.buf || TP.buf.length < out.length || TP.buf.length > out.length + 120 * C.SR) TP.buf = ctx.createBuffer(1, out.length + 60 * C.SR, C.SR);
+async function tpLoad(out, tick = null, outR = null) {
+  const ctx = audioCtx(), ch = outR ? 2 : 1; TP.len = out.length;
+  if (!TP.buf || TP.buf.numberOfChannels !== ch || TP.buf.length < out.length || TP.buf.length > out.length + 120 * C.SR) { TP.buf = null; TP.buf = ctx.createBuffer(ch, out.length + 60 * C.SR, C.SR); }
   const CH = 1 << 21;                                      // 200 МБ одним копированием — 40 мс без кадра; кусками — незаметно
-  for (let a = 0; a < out.length; a += CH) { TP.buf.copyToChannel(out.subarray(a, Math.min(out.length, a + CH)), 0, a); if (tick) await tick(); }
-  if (TP.buf.length > out.length) TP.buf.getChannelData(0).fill(0, out.length);
+  for (let a = 0; a < out.length; a += CH) { TP.buf.copyToChannel(out.subarray(a, Math.min(out.length, a + CH)), 0, a); if (outR) TP.buf.copyToChannel(outR.subarray(a, Math.min(out.length, a + CH)), 1, a); if (tick) await tick(); }
+  if (TP.buf.length > out.length) for (let c = 0; c < ch; c++) TP.buf.getChannelData(c).fill(0, out.length);
   TP.offset = Math.min(TP.offset, out.length / C.SR);
   if (TP.playing) tpPlay(tpTime());
 }
-function tpUpdate(a, b) { if (!TP.buf) return; TP.buf.copyToChannel(S.result.out.subarray(a, b), 0, a); if (TP.playing && (b / C.SR) > tpTime()) { if (TP.hold) TP.dirty = true; else tpPlay(tpTime()); } }
+function tpUpdate(a, b) { if (!TP.buf) return; const r = S.result; TP.buf.copyToChannel(r.out.subarray(a, b), 0, a); if (r.outR && TP.buf.numberOfChannels > 1) TP.buf.copyToChannel(r.outR.subarray(a, b), 1, a); if (TP.playing && (b / C.SR) > tpTime()) { if (TP.hold) TP.dirty = true; else tpPlay(tpTime()); } }
 function tpTime() { return TP.playing ? Math.min(TP.len / C.SR, audioCtx().currentTime - TP.startAt) : TP.offset; }
 function tpPlay(t = tpTime()) {
   if (!TP.buf) return; const ctx = audioCtx(); if (ctx.state === 'suspended') ctx.resume();
@@ -520,6 +539,7 @@ function tpUi() {
   const sk = $('#tp-seek'); if (sk && !sk.matches(':active')) sk.value = tpTime();
   if (typeof drawTimeline === 'function') drawTimeline();
   if (typeof readTick === 'function') readTick();
+  if (typeof spaceLive === 'function') spaceLive();
 }
 /** Перед скачиванием — точная громкость, если были быстрые правки. */
 async function exactResult() {
@@ -552,7 +572,7 @@ async function runRemix() {
 function mixStatusHtml(r) { return `${r.approx ? '<span class="muted small" title="После быстрых правок общее усиление прежнее; при скачивании громкость пересчитается точно">громкость уточнится при скачивании</span> ' : ''}${S.lastRemixMs ? `<span class="muted small">пересчёт ${(S.lastRemixMs / 1000).toFixed(1)} с</span>` : ''}`; }
 function mixStatHtml(r) {
   const sounds = r.lay.rows.filter(x => x.sound).length, recorded = r.lay.placed.length - sounds, paused = r.lay.sheet.filter(s => s.cue).length, voices = new Set(r.items.map(it => it.voice));
-  return `${fmt(r.out.length / C.SR)} · реплик со звуком ${recorded}${sounds ? ` · звуков ${sounds}` : ''} · пауз под незаписанное ${paused} · громкость ${r.target} LUFS${r.master.held ? ` · у ${r.master.held} реплик подъём придержан, чтобы не упирались в лимитер` : ''}${r.items.filter(it => it.fxKey).length ? ` · с эффектом ${r.items.filter(it => it.fxKey).length}` : ''}${r.amb && r.amb.length ? ` · фон в ${r.amb.length} сценах` : ''}${r.room && r.room.length ? ` · комнатный тон в ${r.room.length} паузах` : ''}${Object.keys(S.timing).length ? ` · сдвинуто ${Object.keys(S.timing).length}` : ''}${Object.keys(S.voiceGains).filter(v => voices.has(v)).length ? ' · поправки: ' + Object.entries(S.voiceGains).filter(([v]) => voices.has(v)).map(([v, g]) => `${charName(v)} ${dbv(g)}`).join(', ') : ''}`;
+  return `${fmt(r.out.length / C.SR)} · реплик со звуком ${recorded}${sounds ? ` · звуков ${sounds}` : ''} · пауз под незаписанное ${paused} · громкость ${r.target} LUFS${r.master.held ? ` · у ${r.master.held} реплик подъём придержан, чтобы не упирались в лимитер` : ''}${r.items.filter(it => it.fxKey).length ? ` · с эффектом ${r.items.filter(it => it.fxKey).length}` : ''}${r.amb && r.amb.length ? ` · фон в ${r.amb.length} сценах` : ''}${r.room && r.room.length ? ` · комнатный тон в ${r.room.length} паузах` : ''}${r.mus && r.mus.length ? ` · музыка: ${musicStat(r.mus)}` : ''}${r.outR ? ` · ${spaceOn() ? (S.stage.mode === 'binaural' ? 'объём в наушниках' : 'стерео') : 'стерео (музыка)'}` : ''}${Object.keys(S.timing).length ? ` · сдвинуто ${Object.keys(S.timing).length}` : ''}${Object.keys(S.voiceGains).filter(v => voices.has(v)).length ? ' · поправки: ' + Object.entries(S.voiceGains).filter(([v]) => voices.has(v)).map(([v, g]) => `${charName(v)} ${dbv(g)}`).join(', ') : ''}`;
 }
 /** После быстрого пересчёта — только то, что поменялось: таймлайн, сводка, плеер. Выделение и фокус остаются. */
 function refreshMix() {
@@ -575,21 +595,25 @@ function refreshMix() {
 /** Реплики персонажа — для пересчёта только их. */
 const voiceIds = v => new Set(S.result ? S.result.items.filter(it => it.voice === v).map(it => it.id) : []);
 
-function wav16(x) {
-  const n = x.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+/** WAV 16 бит; с xR — стерео. */
+function wav16(x, xR = null) {
+  const ch = xR ? 2 : 1, n = x.length, bytes = n * 2 * ch, buf = new ArrayBuffer(44 + bytes), v = new DataView(buf);
   const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
-  str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVE'); str(12, 'fmt '); v.setUint32(16, 16, true);
-  v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, C.SR, true); v.setUint32(28, C.SR * 2, true);
-  v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, n * 2, true);
-  const d = new Int16Array(buf, 44); for (let i = 0; i < n; i++) d[i] = Math.max(-32768, Math.min(32767, Math.round(x[i] * 32767)));
+  str(0, 'RIFF'); v.setUint32(4, 36 + bytes, true); str(8, 'WAVE'); str(12, 'fmt '); v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true); v.setUint16(22, ch, true); v.setUint32(24, C.SR, true); v.setUint32(28, C.SR * 2 * ch, true);
+  v.setUint16(32, 2 * ch, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, bytes, true);
+  const d = new Int16Array(buf, 44), q = a => Math.max(-32768, Math.min(32767, Math.round(a * 32767)));
+  if (xR) for (let i = 0; i < n; i++) { d[2 * i] = q(x[i]); d[2 * i + 1] = q(xR[i]); } else for (let i = 0; i < n; i++) d[i] = q(x[i]);
   return buf;
 }
-function encodeMp3(x, kbps) {
+/** MP3 в фоновом потоке; с xR — стерео (joint stereo кодировщика). */
+function encodeMp3(x, kbps, xR = null) {
   const src = `importScripts('${LAME}');
   self.onmessage = e => {
-    const { pcm, sr, kbps } = e.data, enc = new lamejs.Mp3Encoder(1, sr, kbps), out = [], B = 1152 * 20;
-    const s = new Int16Array(pcm.length); for (let i = 0; i < pcm.length; i++) s[i] = Math.max(-32768, Math.min(32767, Math.round(pcm[i] * 32767)));
-    for (let i = 0; i < s.length; i += B) { const b = enc.encodeBuffer(s.subarray(i, i + B)); if (b.length) out.push(new Uint8Array(b)); if ((i / B) % 40 === 0) self.postMessage({ p: i / s.length }); }
+    const { pcm, pcmR, sr, kbps } = e.data, enc = new lamejs.Mp3Encoder(pcmR ? 2 : 1, sr, kbps), out = [], B = 1152 * 20;
+    const i16 = a => { const s = new Int16Array(a.length); for (let i = 0; i < a.length; i++) s[i] = Math.max(-32768, Math.min(32767, Math.round(a[i] * 32767))); return s; };
+    const s = i16(pcm), sR = pcmR ? i16(pcmR) : null;
+    for (let i = 0; i < s.length; i += B) { const b = sR ? enc.encodeBuffer(s.subarray(i, i + B), sR.subarray(i, i + B)) : enc.encodeBuffer(s.subarray(i, i + B)); if (b.length) out.push(new Uint8Array(b)); if ((i / B) % 40 === 0) self.postMessage({ p: i / s.length }); }
     const f = enc.flush(); if (f.length) out.push(new Uint8Array(f));
     self.postMessage({ done: true, blob: new Blob(out, { type: 'audio/mpeg' }) });
   };`;
@@ -597,7 +621,7 @@ function encodeMp3(x, kbps) {
     const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
     w.onmessage = e => { if (e.data.done) { res(e.data.blob); w.terminate(); } else progress('Кодирую MP3…', e.data.p); };
     w.onerror = e => rej(new Error(e.message || 'кодировщик MP3 не загрузился'));
-    w.postMessage({ pcm: x, sr: C.SR, kbps });
+    w.postMessage({ pcm: x, pcmR: xR, sr: C.SR, kbps });
   });
 }
 function download(blob, name) {
@@ -628,7 +652,7 @@ function reportCsv() {
 function projectJson() {
   return JSON.stringify({ app: 'montage', v: 1, script: S.scriptText,
     files: S.files.map(f => ({ name: f.name, size: f.size, chars: [...f.chars] })),
-    room: S.room !== false, edits: S.edits, gains: S.gains, voiced: S.voiced, voiceGains: S.voiceGains, timing: S.timing, tempo: S.tempo, fxVoice: S.fxVoice, fxLine: S.fxLine, amb: ambSaved(), takes: S.takePick, sfx: S.sfxSaved || {}, sfxLib: (S.sfx ? S.sfx.lib : []).map(f => f.db ? { name: f.name, db: f.db, text: f.text || '' } : f.name),
+    room: S.room !== false, edits: S.edits, gains: S.gains, voiced: S.voiced, voiceGains: S.voiceGains, timing: S.timing, tempo: S.tempo, fxVoice: S.fxVoice, fxLine: S.fxLine, amb: ambSaved(), takes: S.takePick, sfx: S.sfxSaved || {}, stage: S.stage ? stageSaved() : null, music: S.music ? musicSaved() : null, sfxLib: (S.sfx ? S.sfx.lib : []).map(f => f.db ? { name: f.name, db: f.db, text: f.text || '' } : f.name),
     cleanup: S.files.filter(f => f.clean && f.clean.chain).map(f => ({ name: f.name, chain: f.clean.chain, preset: f.clean.preset, applied: !!f.raw48 })) }, null, 1);
 }
 
@@ -712,6 +736,8 @@ function render(opt = {}) {
   shownTab = S.tab;
   if (!opt.tab && typeof sfxAuto === 'function') sfxAuto();   // автоподбор звуков к ремаркам — всегда, а не только когда открыта вкладка «Звуки»
   if (DIRTY[S.tab] !== false) { DIRTY[S.tab] = false; if (S.tab === 'clean') renderCleanup(); else if (S.tab === 'sfx') renderSounds(); else if (S.tab === 'home') renderHome(); else if (S.tab === 'tl') renderTl(); else { renderScript(); renderFiles(); renderRun(); renderReview(); renderMix(); } }
+  // сведение пересчиталось, пока таймлайн был закрыт (звук, музыка, фон) — дорожки устарели: нарисовать заново
+  if (S.tab === 'tl' && S.result && S.result.out && !S.tlTracks && typeof drawTimeline === 'function') requestAnimationFrame(() => { drawTimeline(); if (typeof drawOverview === 'function') drawOverview(); });
   if (typeof motionSteps === 'function') motionSteps();
   if (flipBefore) flipPlay(flipBefore, PAGE_FLIP, el => el.id, { damping: 0.9, response: 0.4 });
 }
@@ -959,7 +985,7 @@ function renderMix() {
   if (!r || !r.out) { out.innerHTML = ''; renderMixTl(); if (typeof tpPause === 'function') tpPause(); return; }
   // плеер и нижний блок перестраиваются — фокус с клавиатуры возвращается на тот же элемент, а не теряется
   const ae = document.activeElement, fk = ae && ae !== document.body && out.contains(ae) && !ae.closest('.tl') ? focusKey(ae) : null;
-  if (!out.querySelector('#mix-rest')) out.innerHTML = '<div id="mix-top"></div><div id="mix-read"></div><div id="mix-tlcard"></div><div id="mix-rest"></div>';
+  if (!out.querySelector('#mix-rest')) out.innerHTML = '<div id="mix-top"></div><div id="mix-read"></div><div id="mix-tlcard"></div><div id="mix-space"></div><div id="mix-rest"></div>';
   const voices = new Map();
   for (const it of r.items) { if (!voices.has(it.voice)) voices.set(it.voice, []); voices.get(it.voice).push(it); }
   const spread = list => { const a = list.map(x => x.levelAfter).sort((x, y) => x - y), b = list.map(x => x.level).sort((x, y) => x - y); const p = (arr, q) => arr[Math.min(arr.length - 1, Math.floor(q * (arr.length - 1)))]; return [p(b, 0.9) - p(b, 0.1), p(a, 0.9) - p(a, 0.1)]; };
@@ -970,6 +996,7 @@ function renderMix() {
       <span id="mix-status">${mixStatusHtml(r)}</span></div>
 `;
   setHtml($('#mix-tlcard'), mixTlCardHtml(r));
+  if (typeof renderSpace === 'function') renderSpace();
   renderMixTl();
   setHtml($('#mix-rest'), `
     <p class="stat" data-num="mixstat" data-num-flow>${mixStatHtml(r)}</p>
@@ -984,7 +1011,7 @@ function renderMix() {
       <button class="ghost-b" data-act="pauses">Паузы (.txt)</button>
       <button class="ghost-b" data-act="csv">Разметка (.csv)</button>
       <button class="ghost-b" data-act="proj">Проект (.json)</button>
-      <button class="ghost-b" data-act="stems" title="Дорожки по персонажам, звуки и фон отдельными WAV плюс проект для Reaper">Стемы для Reaper, Audacity (.zip${typeof buildStems === 'function' ? ', ≈ ' + Math.round(buildStems().stems.length * r.out.length * 2 / 1e6) + ' МБ' : ''})</button>
+      <button class="ghost-b" data-act="stems" title="Дорожки по персонажам, звуки и фон отдельными WAV плюс проект для Reaper">Стемы для Reaper, Audacity (.zip${typeof buildStems === 'function' ? ', ≈ ' + Math.round(buildStems().stems.length * r.out.length * 2 * (r.outR ? 2 : 1) / 1e6) + ' МБ' : ''})</button>
       ${r.lay.scenes && r.lay.scenes.length > 1 ? '<button class="ghost-b" data-act="chapters" title="Строки вида «00:00 Сцена 1 — кабинет» для описания на YouTube">Главы (.txt)</button>' : ''}
     </div>
     ${r.lay.scenes && r.lay.scenes.length > 1 ? '<p class="muted small">В MP3 сцены записаны главами: в плеерах подкастов и VLC по ним можно прыгать.</p>' : ''}
@@ -1020,7 +1047,7 @@ function bind() {
   $('.tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
     const go = () => goTab(b.dataset.tab);
     if (typeof motionTabSwitch === 'function' && e.detail !== 0) motionTabSwitch(b.dataset.tab, go); else go(); });
-  bindCleanup(); bindSounds(); if (typeof bindVideo === 'function') bindVideo();
+  bindCleanup(); bindSounds(); if (typeof bindVideo === 'function') bindVideo(); if (typeof bindSpace === 'function') bindSpace();
   const drop = (zone, fn) => {
     zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('over'); });
     zone.addEventListener('dragleave', () => zone.classList.remove('over'));
@@ -1037,7 +1064,7 @@ function bind() {
       // чужой JSON не должен стереть текущую работу: проект — это наш формат со сценарием
       if (!p || typeof p !== 'object' || !(p.app === 'montage' || (typeof p.script === 'string' && (p.edits || p.files)))) throw new Error('не проект');
       $('#script').value = p.script || ''; setScript(p.script || '');
-      S.room = p.room !== false; S.edits = p.edits || {}; S.gains = p.gains || {}; S.voiced = p.voiced || {}; S.voiceGains = p.voiceGains || {}; S.timing = p.timing || {}; S.tempo = p.tempo || 1; S.fxVoice = p.fxVoice || {}; S.fxLine = p.fxLine || {}; S.amb = p.amb ? { duck: 8, scenes: {}, cands: {}, ...p.amb } : null; S.takePick = p.takes || {}; saveEdits();
+      S.room = p.room !== false; S.edits = p.edits || {}; S.gains = p.gains || {}; S.voiced = p.voiced || {}; S.voiceGains = p.voiceGains || {}; S.timing = p.timing || {}; S.tempo = p.tempo || 1; S.fxVoice = p.fxVoice || {}; S.fxLine = p.fxLine || {}; S.amb = p.amb ? { duck: 8, scenes: {}, cands: {}, ...p.amb } : null; S.takePick = p.takes || {}; stageLoad(p.stage); musicLoad(p.music); saveEdits();
       S.pendingChars = new Map((p.files || []).map(x => [x.name, x.chars]));
       for (const f of S.files) if (S.pendingChars.has(f.name)) { f.chars = new Set(S.pendingChars.get(f.name)); f.manualChars = true; }
       S.sfxSaved = p.sfx || {}; sfxState().cues = JSON.parse(JSON.stringify(S.sfxSaved)); saveEdits();
@@ -1131,10 +1158,10 @@ function bind() {
       const pass = async () => !ex || await ex.commit();
       if (['mp3', 'wav', 'stems', 'video'].includes(a)) await mixSettled();          // правка ещё считается — дождаться её
       if (['mp3', 'wav', 'stems'].includes(a) && S.result.approx) { b.disabled = true; await exactResult(); b.disabled = false; }
-      if (a === 'mp3') { b.disabled = true; const blob = await encodeMp3(S.result.out, +$('#kbps').value); progress('', 0); const tag = typeof id3Chapters === 'function' ? id3Chapters((S.P.title || 'Радиоспектакль')) : null; if (!(await pass())) { b.disabled = false; return; } download(tag && tag.length ? new Blob([tag, blob], { type: 'audio/mpeg' }) : blob, `сведение-${stamp}.mp3`); b.disabled = false; }
+      if (a === 'mp3') { b.disabled = true; const blob = await encodeMp3(S.result.out, +$('#kbps').value, S.result.outR); progress('', 0); const tag = typeof id3Chapters === 'function' ? id3Chapters((S.P.title || 'Радиоспектакль')) : null; if (!(await pass())) { b.disabled = false; return; } download(tag && tag.length ? new Blob([tag, blob], { type: 'audio/mpeg' }) : blob, `сведение-${stamp}.mp3`); b.disabled = false; }
       if (a === 'stems') { b.disabled = true; try { const z = await exportStems(); if (z && await pass()) download(z, `стемы-${stamp}.zip`); } catch (err) { progress('', 0); notify('Стемы не получились: ' + err.message); } b.disabled = false; }
       if (a === 'chapters' && await pass()) download(new Blob([chaptersText()], { type: 'text/plain;charset=utf-8' }), `главы-${stamp}.txt`);
-      if (a === 'wav' && await pass()) download(new Blob([C.wav24(S.result.out)], { type: 'audio/wav' }), `сведение-${stamp}.wav`);
+      if (a === 'wav' && await pass()) download(new Blob([C.wav24(S.result.out, C.SR, S.result.outR)], { type: 'audio/wav' }), `сведение-${stamp}.wav`);
       if (a === 'pauses' && await pass()) download(new Blob([reportPauses()], { type: 'text/plain;charset=utf-8' }), `паузы-${stamp}.txt`);
       if (a === 'csv' && await pass()) download(new Blob([reportCsv()], { type: 'text/csv;charset=utf-8' }), `разметка-${stamp}.csv`);
       if (a === 'srt' && await pass()) download(new Blob([srtText()], { type: 'text/plain;charset=utf-8' }), `субтитры-${stamp}.srt`);
@@ -1146,7 +1173,7 @@ function bind() {
 }
 
 // для проверки из консоли и автотестов
-window.montage = { tlFx: () => ({ lift: +TLFX.lift.v.toFixed(3), liftIds: TLFX.liftIds && [...TLFX.liftIds], hoverId: TLFX.hoverId, hover: +TLFX.hover.v.toFixed(3), pulse: TLFX.pulse ? +TLFX.pulse.m.v.toFixed(3) : null, band: !!TLFX.band, snap: tlState().drag ? tlState().drag.snapT : undefined, delta: tlState().drag ? tlState().drag.delta : undefined }), S, C, PRESETS, play: (y, btn) => play(y, btn), stop: () => stop(), progress: (t, p) => progress(t, p), notify: t => notify(t), DECK: typeof DECK !== 'undefined' ? DECK : null, MOTION: typeof MOTION !== 'undefined' ? MOTION : null, audioLevel: () => audioLevel(), projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses, recOpenFor: k => recOpenFor(k), recOpen: l => recOpen(l), REC: typeof REC !== 'undefined' ? REC : null, srtText: () => srtText(), vttText: () => vttText(), subCues: () => subCues(), buildVideo: o => buildVideo(o), videoFormat: () => videoFormat(1280, 720, 24), slipDiff: (a, b) => slipDiff(a, b), slipOf: c => slipOf(c) , ED: typeof ED !== 'undefined' ? ED : null, EDK: typeof EDK !== 'undefined' ? EDK : null, edTime: () => edTime(), edBarUi: () => edBarUi(), edDraw: () => edDraw(), goTab: (t, o) => goTab(t, o) };
+window.montage = { tlFx: () => ({ lift: +TLFX.lift.v.toFixed(3), liftIds: TLFX.liftIds && [...TLFX.liftIds], hoverId: TLFX.hoverId, hover: +TLFX.hover.v.toFixed(3), pulse: TLFX.pulse ? +TLFX.pulse.m.v.toFixed(3) : null, band: !!TLFX.band, snap: tlState().drag ? tlState().drag.snapT : undefined, delta: tlState().drag ? tlState().drag.delta : undefined }), S, C, PRESETS, play: (y, btn) => play(y, btn), stop: () => stop(), progress: (t, p) => progress(t, p), notify: t => notify(t), DECK: typeof DECK !== 'undefined' ? DECK : null, MOTION: typeof MOTION !== 'undefined' ? MOTION : null, audioLevel: () => audioLevel(), projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses, recOpenFor: k => recOpenFor(k), recOpen: l => recOpen(l), REC: typeof REC !== 'undefined' ? REC : null, srtText: () => srtText(), vttText: () => vttText(), subCues: () => subCues(), buildVideo: o => buildVideo(o), videoFormat: () => videoFormat(1280, 720, 24), slipDiff: (a, b) => slipDiff(a, b), slipOf: c => slipOf(c) , ED: typeof ED !== 'undefined' ? ED : null, EDK: typeof EDK !== 'undefined' ? EDK : null, edTime: () => edTime(), edBarUi: () => edBarUi(), edDraw: () => edDraw(), goTab: (t, o) => goTab(t, o) , stageState, musicState, musAddFiles: l => musAddFiles(l), projectJson, spaceSetMove: (ids, k) => spaceSetMove(ids, k), hrtf: () => HRTF_CAL, idle: () => !S.busy && !remixRunning && !remixReq, remixState: () => ({ busy: S.busy, running: !!remixRunning, req: remixReq && remixReq.kind, timer: !!remixTimer }) };
 if (typeof fdrInit === 'function') fdrInit();
 if (typeof numInit === 'function') numInit();
 bind(); render();

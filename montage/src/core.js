@@ -597,16 +597,27 @@ export function loudnessMeter(n, block = 0.4, hop = 0.1) {
       }
       Object.assign(st, { x1, x2, y1, y2, u1, u2, z1, z2, acc, cnt, k, all });
     },
-    result() {
-      if (n < w) return 10 * Math.log10(st.all / Math.max(1, n) + 1e-14) - 0.691;
-      const m = Math.round(w / h), nb = nSub - m + 1, p = []; let run = 0;
-      for (let j = 0; j < m; j++) run += sub[j];
-      for (let q = 0; q < nb; q++) { if (q) run += sub[q + m - 1] - sub[q - 1]; const e = run / w; if (10 * Math.log10(e + 1e-14) - 0.691 > -70) p.push(e); }
-      if (!p.length) return -70;
-      const rel = 10 * Math.log10(p.reduce((s, v) => s + v, 0) / p.length) - 0.691 - 10;
-      const g = p.filter(e => 10 * Math.log10(e) - 0.691 > rel);
-      return 10 * Math.log10(g.reduce((s, v) => s + v, 0) / g.length) - 0.691;
-    },
+    result() { return lufsOf(sub, st.all, n, w, h, nSub); },
+    sub, st,
+  };
+}
+/** Громкость по энергиям подблоков: стробирование −70 LUFS и относительное −10 LU (BS.1770). */
+function lufsOf(sub, all, n, w, h, nSub) {
+  if (n < w) return 10 * Math.log10(all / Math.max(1, n) + 1e-14) - 0.691;
+  const m = Math.round(w / h), nb = nSub - m + 1, p = []; let run = 0;
+  for (let j = 0; j < m; j++) run += sub[j];
+  for (let q = 0; q < nb; q++) { if (q) run += sub[q + m - 1] - sub[q - 1]; const e = run / w; if (10 * Math.log10(e + 1e-14) - 0.691 > -70) p.push(e); }
+  if (!p.length) return -70;
+  const rel = 10 * Math.log10(p.reduce((s, v) => s + v, 0) / p.length) - 0.691 - 10;
+  const g = p.filter(e => 10 * Math.log10(e) - 0.691 > rel);
+  return 10 * Math.log10(g.reduce((s, v) => s + v, 0) / g.length) - 0.691;
+}
+/** Громкость стерео: по стандарту энергии левого и правого каналов складываются. push(xL, xR, from, to). */
+export function loudnessMeter2(n, block = 0.4, hop = 0.1) {
+  const L = loudnessMeter(n, block, hop), R = loudnessMeter(n, block, hop), w = Math.round(block * SR), h = Math.round(hop * SR);
+  return {
+    push(xL, xR, from, to) { L.push(xL, from, to); R.push(xR, from, to); },
+    result() { const sub = new Float64Array(L.sub.length); for (let i = 0; i < sub.length; i++) sub[i] = L.sub[i] + R.sub[i]; return lufsOf(sub, L.st.all + R.st.all, n, w, h, Math.floor(n / h)); },
   };
 }
 function gatedLoudness(x, block, hop) { const m = loudnessMeter(x.length, block, hop); m.push(x, 0, x.length); return m.result(); }
@@ -681,15 +692,16 @@ export function* levelLinesSteps(items, { charLufs = -20, strength = 0.75, voice
  * «пауза» +0,7, «долгая пауза» +1,5, «тишина» +1,0, прочие ремарки +0,15 (до +1,2), сцены 2,6 с.
  * cues — весь сценарий; audioOf(cue) → Float32Array | null. Незаписанная реплика — пауза.
  */
-export function layout(cues, audioOf, isVoiced, bedOf = null, { tempo = 1, timing = {} } = {}) {
+export function layout(cues, audioOf, isVoiced, bedOf = null, { tempo = 1, timing = {}, lead = 0, sceneGap = 0, tail = 0 } = {}) {
   const placed = [], sheet = [], rows = [], scenes = [];
-  let pend = { extra: 0, generic: 0, scene: null, sceneCue: null }, t = 0.6, prev = '', scene = '1', first = true;
-  const tm = id => timing[id] || {};
+  // lead — музыка-заставка до первой реплики; sceneGap — отбивка между сценами не короче стольких секунд; tail — финал
+  let pend = { extra: 0, generic: 0, scene: null, sceneCue: null }, t = 0.6 + lead, prev = '', scene = '1', first = true;
+  const tm = id => timing[id] || {}, sgap = Math.max(2.6 * tempo, sceneGap);
   for (const c of cues) {
     if (c.type === 'scene') { pend.scene = c.n; pend.sceneCue = c; continue; }
     const bed = c.type === 'dir' && bedOf ? bedOf(c) : null;
     if (bed) {                                        // звук фоном: ложится с этого места, реплики не ждут
-      const at = Math.max(0, t + (pend.scene != null ? (first ? 0 : 2.6 * tempo) : 0) + (tm(c.id).before || 0) + (tm(c.id).own || 0));
+      const at = Math.max(0, t + (pend.scene != null ? (first ? 0 : sgap) : 0) + (tm(c.id).before || 0) + (tm(c.id).own || 0));
       placed.push({ at, audio: bed.audio, cue: c, bed: true });
       rows.push({ cue: c, scene: pend.scene != null ? pend.scene : scene, at, dur: bed.audio.length / SR, recorded: true, sound: bed.name, bed: true });
       continue;
@@ -703,7 +715,7 @@ export function layout(cues, audioOf, isVoiced, bedOf = null, { tempo = 1, timin
       continue;
     }
     let gap;
-    if (pend.scene != null) { scene = pend.scene; gap = first ? 0 : 2.6 * tempo; scenes.push({ n: scene, start: t, cue: pend.sceneCue }); sheet.push({ scene, at: t + gap }); }
+    if (pend.scene != null) { scene = pend.scene; gap = first ? 0 : sgap; scenes.push({ n: scene, start: t, cue: pend.sceneCue }); sheet.push({ scene, at: t + gap }); }
     else if (/перебива/i.test(c.note || '')) gap = -0.25;                       // «(перебивая)»: реплика наезжает на предыдущую
     else gap = ((/[—-]\s*$/.test(prev) ? 0.08 : 0.35) + (/\?\s*$/.test(prev) ? 0.15 : 0) + pend.generic + pend.extra) * tempo;
     pend = { extra: 0, generic: 0, scene: null, sceneCue: null }; first = false;
@@ -721,9 +733,9 @@ export function layout(cues, audioOf, isVoiced, bedOf = null, { tempo = 1, timin
     rows.push({ cue: c, scene, at, dur, gap, recorded: !!y });
     t += dur; prev = c.text;
   }
-  const total = t + 1.5;
-  scenes.forEach((sc, i) => { sc.end = i + 1 < scenes.length ? scenes[i + 1].start : total; });
-  return { placed, sheet, rows, scenes, total };
+  const end = t, total = t + 1.5 + tail;
+  scenes.forEach((sc, i) => { sc.end = i + 1 < scenes.length ? scenes[i + 1].start : end + 1.5; });
+  return { placed, sheet, rows, scenes, total, end, lead };
 }
 
 /** Пиковый лимитер с заглядыванием вперёд (5 мс) и восстановлением 60 мс. */
@@ -748,6 +760,43 @@ function limitSpan(x, y, a, b, ceil) {
     if (v > ceil) v = ceil; else if (v < -ceil) v = -ceil;
     y[i] = v;
   }
+}
+/** То же для стерео: усиление одно на оба канала (по большему из них) — картина не уезжает в сторону на пиках. */
+function limitSpan2(xL, xR, a, b, ceil) {
+  const la = Math.round(0.005 * SR), qi = LIM_I, qv = LIM_V;
+  const aAtt = 1 - Math.exp(-1 / (0.0015 * SR)), aRel = 1 - Math.exp(-1 / (0.06 * SR));
+  const need = j => { const l = xL[j] < 0 ? -xL[j] : xL[j], r = xR[j] < 0 ? -xR[j] : xR[j], v = l > r ? l : r; return v > ceil ? ceil / v : 1; };
+  let h = 0, tl = 0, env = 1;
+  for (let j = a, e = Math.min(a + la, b); j < e; j++) { const nj = need(j); while (tl > h && qv[(tl - 1) & LIM_M] >= nj) tl--; qi[tl & LIM_M] = j; qv[tl & LIM_M] = nj; tl++; }
+  for (let i = a; i < b; i++) {
+    const j = i + la;
+    if (j < b) { const nj = need(j); while (tl > h && qv[(tl - 1) & LIM_M] >= nj) tl--; qi[tl & LIM_M] = j; qv[tl & LIM_M] = nj; tl++; }
+    while (qi[h & LIM_M] < i) h++;
+    const tg = qv[h & LIM_M];
+    env += (tg - env) * (tg < env ? aAtt : aRel);
+    let l = xL[i] * env, r = xR[i] * env;
+    if (l > ceil) l = ceil; else if (l < -ceil) l = -ceil;
+    if (r > ceil) r = ceil; else if (r < -ceil) r = -ceil;
+    xL[i] = l; xR[i] = r;
+  }
+}
+/** Потоковый стерео-лимитер (как limiterStream): step(a, b), finish() → пик до усиления. */
+export function limiterStream2(xL, xR, ceil = 0.84, g = 1) {
+  const n = xL.length, la = Math.round(0.005 * SR), settle = Math.round(0.5 * SR);
+  let a = -1, last = -Infinity, pk = 0;
+  return {
+    step(from, to) {
+      for (let k = from; k < to; k++) {
+        let l = xL[k], r = xR[k]; const al = l < 0 ? -l : l, ar = r < 0 ? -r : r; if (al > pk) pk = al; if (ar > pk) pk = ar;
+        if (g !== 1) { l *= g; r *= g; xL[k] = l; xR[k] = r; }
+        if (l <= ceil && l >= -ceil && r <= ceil && r >= -ceil) continue;
+        if (a < 0) a = Math.max(0, k - la);
+        else if (k - last > settle + la) { limitSpan2(xL, xR, a, Math.min(n, last + settle), ceil); a = Math.max(0, k - la); }
+        last = k;
+      }
+    },
+    finish() { if (a >= 0) limitSpan2(xL, xR, a, Math.min(n, last + settle), ceil); a = -1; return pk; },
+  };
 }
 /**
  * Лимитер. Работает только там, где есть превышение: от 5 мс до пика и 0,5 с после последнего (за это время
@@ -778,6 +827,25 @@ export function limiterStream(x, ceil = 0.84, g = 1) {
     finish() { if (a >= 0) limitSpan(x, x, a, Math.min(n, last + settle), ceil); a = -1; return pk; },
   };
 }
+// ------------------------------------------------------------------ реплика в пространстве (мизансцена)
+// sp = {L, gL, gR} — моно-звук в оба канала с множителями (без мизансцены: по центру),
+// или {I, n, k, gL, gR} — готовое стерео 16 бит вперемешку (L, R) с масштабом k: вдвое меньше памяти, чем Float32.
+export const spLen = sp => sp.I ? sp.n : sp.L.length;
+/** Прибавить отсчёты [s0, s1) реплики к yL/yR со сдвигом off (индекс в y = i + off), общий множитель g. */
+export function spAdd(sp, yL, yR, off, s0, s1, g = 1) {
+  const gl = sp.gL * g, gr = sp.gR * g;
+  if (sp.I) { const I = sp.I, kl = sp.k * gl, kr = sp.k * gr; for (let i = s0; i < s1; i++) { yL[i + off] += I[2 * i] * kl; yR[i + off] += I[2 * i + 1] * kr; } }
+  else { const L = sp.L; for (let i = s0; i < s1; i++) { const v = L[i]; yL[i + off] += v * gl; yR[i + off] += v * gr; } }
+}
+/** Два канала → 16 бит вперемешку; затихший хвост (ниже −66 дБ от пика) отрезается. */
+export function spPack(L, R) {
+  let pk = 0; const n0 = L.length; for (let i = 0; i < n0; i++) { const a = L[i] < 0 ? -L[i] : L[i], b = R[i] < 0 ? -R[i] : R[i]; if (a > pk) pk = a; if (b > pk) pk = b; }
+  const thr = pk * 5e-4; let n = n0; while (n > 1 && Math.abs(L[n - 1]) < thr && Math.abs(R[n - 1]) < thr) n--;
+  n = Math.min(n0, n + 64);
+  const k = pk > 0 ? pk / 32767 : 1, inv = 1 / k, I = new Int16Array(n * 2);
+  for (let i = 0; i < n; i++) { I[2 * i] = Math.round(L[i] * inv); I[2 * i + 1] = Math.round(R[i] * inv); }
+  return { I, n, k, gL: 1, gR: 1 };
+}
 /** Мастеринг: подъём реплик, упёршихся в лимитер, забирается назад; общий уровень; лимитер. */
 export function master(mix, placed, opt = {}) {
   const it = masterSteps(mix, placed, opt, Math.max(1, mix.length)); let r; while (!(r = it.next()).done); return r.value;
@@ -786,41 +854,47 @@ export function master(mix, placed, opt = {}) {
  * То же по шагам: генератор отдаёт управление (yield) после каждого куска в chunk отсчётов и каждой реплики —
  * на странице между шагами рисуются кадры, 17 минут сведения не замораживают интерфейс на секунду. Итог — в return.
  */
-export function* masterSteps(mix, placed, { targetLufs = -18, ceil = 0.84 } = {}, chunk = 1 << 18) {
+export function* masterSteps(mix, placed, { targetLufs = -18, ceil = 0.84, R = null } = {}, chunk = 1 << 18) {
+  // R — правый канал: стерео (мизансцена, музыка). Тогда у реплик p.sp = {L, R, gL, gR} — как они легли в каналы
   const n = mix.length;
-  const lufs = function* () { const m = loudnessMeter(n, 0.4, 0.1); for (let a = 0; a < n; a += chunk) { m.push(mix, a, Math.min(n, a + chunk)); yield; } return m.result(); };
+  const lufs = function* () { const m = R ? loudnessMeter2(n, 0.4, 0.1) : loudnessMeter(n, 0.4, 0.1); for (let a = 0; a < n; a += chunk) { R ? m.push(mix, R, a, Math.min(n, a + chunk)) : m.push(mix, a, Math.min(n, a + chunk)); yield; } return m.result(); };
   let L = yield* lufs(), g = Math.pow(10, (targetLufs - L) / 20), held = 0;
   for (const p of placed) {
     const au = p.audio; let pk = 0; for (let i = 0; i < au.length; i++) { const v = au[i] < 0 ? -au[i] : au[i]; if (v > pk) pk = v; }
+    const sp = R && p.sp ? p.sp : null; if (sp) pk *= Math.max(sp.gL, sp.gR);
     const over = 20 * Math.log10(pk * g / ceil + 1e-12);
     const fix = p.item ? p.item.fix : 0;
     if (over > 1 && fix > 0) {
       const back = Math.min(over - 1, fix), k = Math.pow(10, -back / 20), i0 = Math.round(p.at * SR), heldAudio = new Float32Array(au.length);
-      for (let i = 0; i < au.length; i++) { mix[i0 + i] -= au[i] * (1 - k); heldAudio[i] = au[i] * k; }
+      if (sp) {                                        // стерео: вычесть из обоих каналов, а у реплики — только множители (кэш не трогается)
+        spAdd(sp, mix, R, i0, 0, Math.min(spLen(sp), n - i0), -(1 - k));
+        for (let i = 0; i < au.length; i++) heldAudio[i] = au[i] * k;
+        p.sp = { ...sp, gL: sp.gL * k, gR: sp.gR * k };
+      } else for (let i = 0; i < au.length; i++) { mix[i0 + i] -= au[i] * (1 - k); heldAudio[i] = au[i] * k; }
       p.audio = heldAudio;                             // исходный массив реплики не трогается — сведение можно пересчитать
       p.item.fix -= back; p.item.levelAfter -= back; held++;
     }
     yield;
   }
   if (held) { L = yield* lufs(); g = Math.pow(10, (targetLufs - L) / 20); }   // без придержанных реплик громкость не менялась
-  const lim = limiterStream(mix, ceil, g);                // усиление и лимитер одним проходом, на месте: mix — временный массив
+  const lim = R ? limiterStream2(mix, R, ceil, g) : limiterStream(mix, ceil, g);   // усиление и лимитер одним проходом, на месте
   for (let a = 0; a < n; a += chunk) { lim.step(a, Math.min(n, a + chunk)); yield; }
   const pk = lim.finish();
-  return { out: mix, gainDb: 20 * Math.log10(g), peakBefore: 20 * Math.log10(pk * g + 1e-12), held };
+  return { out: mix, outR: R, gainDb: 20 * Math.log10(g), peakBefore: 20 * Math.log10(pk * g + 1e-12), held };
 }
 
 // ------------------------------------------------------------------ файлы
-export function wav24(x, sr = SR) {
-  const n = x.length, buf = new ArrayBuffer(44 + n * 3), v = new DataView(buf);
+/** WAV 24 бит; с xR — стерео (каналы вперемешку, как положено). */
+export function wav24(x, sr = SR, xR = null) {
+  const ch = xR ? 2 : 1, n = x.length, bytes = n * 3 * ch, buf = new ArrayBuffer(44 + bytes), v = new DataView(buf), u = new Uint8Array(buf);
   const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
-  str(0, 'RIFF'); v.setUint32(4, 36 + n * 3, true); str(8, 'WAVE'); str(12, 'fmt ');
-  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, sr, true);
-  v.setUint32(28, sr * 3, true); v.setUint16(32, 3, true); v.setUint16(34, 24, true); str(36, 'data'); v.setUint32(40, n * 3, true);
+  str(0, 'RIFF'); v.setUint32(4, 36 + bytes, true); str(8, 'WAVE'); str(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, ch, true); v.setUint32(24, sr, true);
+  v.setUint32(28, sr * 3 * ch, true); v.setUint16(32, 3 * ch, true); v.setUint16(34, 24, true); str(36, 'data'); v.setUint32(40, bytes, true);
   let o = 44;
-  for (let i = 0; i < n; i++) {
-    let s = Math.max(-1, Math.min(1, x[i])); s = Math.round(s * 8388607);
-    v.setUint8(o, s & 255); v.setUint8(o + 1, (s >> 8) & 255); v.setUint8(o + 2, (s >> 16) & 255); o += 3;
-  }
+  const put = a => { let s = a > 1 ? 1 : a < -1 ? -1 : a; s = Math.round(s * 8388607); u[o] = s & 255; u[o + 1] = (s >> 8) & 255; u[o + 2] = (s >> 16) & 255; o += 3; };
+  if (xR) for (let i = 0; i < n; i++) { put(x[i]); put(xR[i]); }
+  else for (let i = 0; i < n; i++) put(x[i]);
   return buf;
 }
 export const ts = t => `${String(Math.floor(t / 60)).padStart(2, '0')}:${(t % 60).toFixed(1).padStart(4, '0')}`;

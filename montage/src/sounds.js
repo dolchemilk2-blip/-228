@@ -111,7 +111,7 @@ function renderSounds() {
     </div>`);
   }
   // блоки вкладки (фоны, база, библиотека, ремарки) при перестройке доезжают до новых мест, а не прыгают
-  const BLK = '#sfx-body > .sfx-head, #sfx-body > .ambbox, #sfx-body > .dbbox, #sfx-body > .chips, #sfx-body > .srows', bkey = x => x.classList[0];
+  const BLK = '#sfx-body > .sfx-head, #sfx-body > .musbox, #sfx-body > .ambbox, #sfx-body > .dbbox, #sfx-body > .chips, #sfx-body > .srows', bkey = x => x.classList[0];
   const before = typeof flipRecord === 'function' && typeof MOTION !== 'undefined' && MOTION.ready && !el.closest('[hidden]') ? flipRecord(BLK, bkey) : null;
   el.innerHTML = `
     <div class="sfx-head">
@@ -120,6 +120,7 @@ function renderSounds() {
       <span class="pill ok">в дорожке ${inTrack}</span>
       <label class="mini"><input type="checkbox" id="sfx-all" ${st.showAll ? 'checked' : ''}> показывать все ремарки</label>
     </div>
+    ${typeof musicHtml === 'function' ? musicHtml() : ''}
     ${ambHtml()}
     ${dbBoxHtml(db)}
     ${st.lib.length ? `<div class="chips">${st.lib.map(f => `<span class="chip ghost">${esc(f.name)} <i>${fmt(f.dur)}</i> <button class="icon xs" data-act="lib-play" data-name="${esc(f.name)}" aria-label="Слушать">${ic('play')}</button><button class="icon xs" data-act="lib-rm" data-name="${esc(f.name)}" aria-label="Убрать">${ic('close')}</button></span>`).join('')}</div>` : ''}
@@ -154,7 +155,7 @@ function dbBoxHtml(db) {
 }
 function bindSounds() {
   const el = $('#sfx-body');
-  bindAmb(el);
+  bindAmb(el); if (typeof bindMusic === 'function') bindMusic(el);
   el.addEventListener('input', e => { if (e.target.id === 'db-q') dbState().q = e.target.value; });
   el.addEventListener('keydown', e => { if (e.target.id === 'db-q' && e.key === 'Enter') { e.preventDefault(); dbRun(e.target.value); } });
   el.addEventListener('change', e => {

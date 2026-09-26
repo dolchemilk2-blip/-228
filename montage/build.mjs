@@ -21,11 +21,12 @@ self.onmessage = e => {
       const sgAfter = m.sg ? { ...spectrogram(r.y, m.sg), w: m.sg.cols } : null;       // и спектрограмма «стало»
       self.postMessage({ id: m.id, type: 'done', y: r.y, log: r.log, specBefore, specAfter: avgSpectrum(r.y, m.freqs), lufsBefore, lufsAfter: integratedLufs(r.y), sgAfter, sgBefore }, [r.y.buffer]);
     }
+    else if (m.type === 'space') { let r = spaceRender(m.y, m.a, m.b, m.opt); if (r.D == null) r = spPack(r.L, r.R); self.postMessage({ id: m.id, type: 'done', y: r }, [r.I, r.L, r.R, r.D].filter((a, i, all) => a && all.indexOf(a) === i).map(a => a.buffer)); }   // мизансцена: место и движение реплики (стерео — сразу в 16 бит)
     else if (m.type === 'synth') { const y = synthSound(m.key).slice(); self.postMessage({ id: m.id, type: 'done', y }, [y.buffer]); }   // заглушки звуков — тоже в фоне
     else if (m.type === 'run') { const r = runChain(m.y, m.chain, m.aux || {}, p => self.postMessage({ id: m.id, type: 'progress', p })); self.postMessage({ id: m.id, type: 'done', y: r.y, log: r.log }, [r.y.buffer]); }
   } catch (err) { self.postMessage({ id: m.id, type: 'error', message: String(err && err.message || err) }); }
 };`;
-const app = strip(read('app.js')), cleanup = strip(read('cleanup.js')), sounds = strip(read('sounds.js')), sfxdb = strip(read('sfxdb.js')), timeline = strip(read('history.js')) + '\n' + strip(read('timeline.js')) + '\n' + strip(read('motion.js')) + '\n' + strip(read('deck.js')) + '\n' + strip(read('editor.js')) + '\n' + strip(read('home.js')), fx = strip(read('fx.js')), amb = strip(read('amb.js')), extras = strip(read('extras.js')) + '\n' + strip(read('video.js')) + '\n' + strip(read('read.js')) + '\n' + strip(read('record.js'));
+const app = strip(read('app.js')), cleanup = strip(read('cleanup.js')), sounds = strip(read('sounds.js')), sfxdb = strip(read('sfxdb.js')), timeline = strip(read('history.js')) + '\n' + strip(read('space.js')) + '\n' + strip(read('music.js')) + '\n' + strip(read('timeline.js')) + '\n' + strip(read('motion.js')) + '\n' + strip(read('deck.js')) + '\n' + strip(read('editor.js')) + '\n' + strip(read('home.js')), fx = strip(read('fx.js')), amb = strip(read('amb.js')), extras = strip(read('extras.js')) + '\n' + strip(read('video.js')) + '\n' + strip(read('read.js')) + '\n' + strip(read('record.js'));
 const icons = strip(read('icons.js')) + '\n' + strip(read('spring.js')) + '\n' + strip(read('fader.js')) + '\n' + strip(read('nums.js'));
 const bundle = `${bundleLib}\nconst DSP_WORKER_SRC = ${JSON.stringify(workerSrc)};\n\n${icons}\n\n${cleanup}\n\n${sounds}\n\n${sfxdb}\n\n${fx}\n\n${amb}\n\n${timeline}\n\n${extras}\n\n${app}`;
 const page = read('page.html').replace('/*BUNDLE*/', () => bundle);

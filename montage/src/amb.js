@@ -95,25 +95,38 @@ function* ambFillSteps(y, dur) {
   return out;
 }
 /** Фон всех сцен в микс с приглушением под репликами. Возвращает клипы для таймлайна. */
-function ambMix(mix, lay) { const it = ambMixSteps(mix, lay); let r; while (!(r = it.next()).done); return r.value; }
-function* ambMixSteps(mix, lay) {
-  const st = ambState(), clips = [], duck = st.duck || 0;
-  const hop = Math.round(0.01 * C.SR), nH = Math.ceil(mix.length / hop), speech = new Uint8Array(nH);
+function ambMix(mix, lay, mixR = null) { const it = ambMixSteps(mix, lay, mixR); let r; while (!(r = it.next()).done); return r.value; }
+/** Приглушение под речью: множитель на каждые 10 мс (плавно, с упреждением 120 мс). */
+function duckCurve(lay, n, duck, hop = Math.round(0.01 * C.SR)) {
+  const nH = Math.ceil(n / hop), speech = new Uint8Array(nH);
   for (const p of lay.placed) if (p.item) { const a = Math.floor(p.at * C.SR / hop), b = Math.min(nH, Math.ceil((p.at * C.SR + p.audio.length) / hop)); speech.fill(1, Math.max(0, a), b); }
-  const gdb = new Float32Array(nH); { const aA = 1 - Math.exp(-1 / 8), aR = 1 - Math.exp(-1 / 40); let v = 0; for (let k = nH - 1, look = 0; k >= 0; k--) { look = speech[k] ? 12 : Math.max(0, look - 1); if (look) speech[k] = 1; } for (let k = 0; k < nH; k++) { const t = speech[k] ? -duck : 0; v += (t - v) * (t < v ? aA : aR); gdb[k] = v; } }
+  const lin = new Float64Array(nH), aA = 1 - Math.exp(-1 / 8), aR = 1 - Math.exp(-1 / 40); let v = 0;
+  for (let k = nH - 1, look = 0; k >= 0; k--) { look = speech[k] ? 12 : Math.max(0, look - 1); if (look) speech[k] = 1; }
+  for (let k = 0; k < nH; k++) { const t = speech[k] ? -duck : 0; v += (t - v) * (t < v ? aA : aR); lin[k] = Math.pow(10, v / 20); }
+  return { lin, hop };
+}
+/** Стерео: правый канал фона — та же запись с другого места петли, поэтому фон широкий и без эха. */
+function* ambStereoSteps(y, dur, bed) {
+  const off = Math.min(Math.round(3.7 * C.SR), Math.round(y.length / 3)), long = yield* ambFillSteps(y, dur + off / C.SR), n = bed.length;
+  const R = long.slice(off, off + n), f = Math.min(n >> 1, Math.round(1.5 * C.SR)); for (let i = 0; i < f; i++) R[i] *= i / f;
+  return R;
+}
+function* ambMixSteps(mix, lay, mixR = null) {
+  const st = ambState(), clips = [], duck = st.duck || 0;
   // приглушение в разах — один раз на каждые 10 мс, а не Math.pow на каждый отсчёт (50 млн — это секунды)
-  const lin = new Float64Array(nH); for (let k = 0; k < nH; k++) lin[k] = Math.pow(10, gdb[k] / 20);
+  const { lin, hop } = duckCurve(lay, mix.length, duck);
   yield;
   for (const sc of lay.scenes || []) {
     const y = yield* ambAudioSteps(sc.n); if (!y) continue;
     const a = sc.start, dur = sc.end - sc.start; if (dur < 1) continue;
-    const bed = yield* ambFillSteps(y, dur), i0 = Math.round(a * C.SR);
+    const bed = yield* ambFillSteps(y, dur), i0 = Math.round(a * C.SR), bedR = mixR ? yield* ambStereoSteps(y, dur, bed) : null, g = mixR ? Math.SQRT1_2 : 1;
     const end = Math.min(bed.length, mix.length - i0), CH = 1 << 18;
     for (let c0 = 0; c0 < end; c0 += CH) {                // в клип — уже приглушённый: он же идёт в стемы
-      for (let i = c0, c1 = Math.min(end, c0 + CH); i < c1; i++) { bed[i] *= lin[((i0 + i) / hop) | 0]; mix[i0 + i] += bed[i]; }
+      if (bedR) for (let i = c0, c1 = Math.min(end, c0 + CH); i < c1; i++) { const d = lin[((i0 + i) / hop) | 0]; bed[i] *= d; bedR[i] *= d; mix[i0 + i] += bed[i] * g; mixR[i0 + i] += bedR[i] * g; }
+      else for (let i = c0, c1 = Math.min(end, c0 + CH); i < c1; i++) { bed[i] *= lin[((i0 + i) / hop) | 0]; mix[i0 + i] += bed[i]; }
       yield;
     }
-    const cfg = st.scenes[sc.n]; clips.push({ n: sc.n, at: a, dur, name: cfg.src.replace(/^lib:BBC \S+ — |^lib:|^synth:/, ''), audio: bed });
+    const cfg = st.scenes[sc.n]; clips.push({ n: sc.n, at: a, dur, name: cfg.src.replace(/^lib:BBC \S+ — |^lib:|^synth:/, ''), audio: bed, audioR: bedR, g });
   }
   return clips;
 }
@@ -203,8 +216,9 @@ function roomFill(smp, n, seed) {
   const f = Math.min(Math.round(0.04 * SR), n >> 1); for (let i = 0; i < f; i++) { out[i] *= i / f; out[n - 1 - i] *= i / f; }
   return out;
 }
-function roomToneMix(mix, lay) {
+function roomToneMix(mix, lay, mixR = null) {
   if (S.room === false) return [];
+  const gC = mixR ? Math.SQRT1_2 : 1;                  // стерео: тон по центру
   const SR = C.SR, out = [], voice = lay.placed.filter(p => p.item && !p.bed).sort((a, b) => a.at - b.at);
   const sceneOf = t => { const sc = (lay.scenes || []).find(s => t >= s.start - 1e-6 && t < s.end); return sc ? sc.n : null; };
   let reach = -1;
@@ -218,8 +232,8 @@ function roomToneMix(mix, lay) {
     const gA = (sa ? A.item : B.item).roomGain || 1, gB = sb && sb !== s ? B.item.roomGain || 1 : gA;
     const yb = sb && sa && sb !== sa ? roomFill(sb.y, n, k + 7) : null;
     for (let i = 0; i < n; i++) { const m = i / n; y[i] = yb ? y[i] * gA * (1 - m) + yb[i] * gB * m : y[i] * gA; }
-    const i0 = Math.round(t0 * SR); for (let i = 0; i < n && i0 + i < mix.length; i++) mix[i0 + i] += y[i];
-    out.push({ at: t0, audio: y });
+    const i0 = Math.round(t0 * SR); for (let i = 0; i < n && i0 + i < mix.length; i++) { mix[i0 + i] += y[i] * gC; if (mixR) mixR[i0 + i] += y[i] * gC; }
+    out.push({ at: t0, audio: y, g: gC });
   }
   return out;
 }

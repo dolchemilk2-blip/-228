@@ -60,8 +60,9 @@ async function videoFormat(W, H, fps) {
   const avc = { codec: 'avc1.4d0028', width: W, height: H, bitrate: 2_500_000, framerate: fps, avc: { format: 'avc' } };
   const vp9 = { codec: 'vp09.00.31.08', width: W, height: H, bitrate: 2_000_000, framerate: fps };
   const vp8 = { codec: 'vp8', width: W, height: H, bitrate: 2_000_000, framerate: fps };
-  const aac = { codec: 'mp4a.40.2', sampleRate: C.SR, numberOfChannels: 1, bitrate: 160_000 };
-  const opus = { codec: 'opus', sampleRate: C.SR, numberOfChannels: 1, bitrate: 128_000 };
+  const ch = S.result && S.result.outR ? 2 : 1;           // стерео — когда есть мизансцена или музыка
+  const aac = { codec: 'mp4a.40.2', sampleRate: C.SR, numberOfChannels: ch, bitrate: 160_000 * ch };
+  const opus = { codec: 'opus', sampleRate: C.SR, numberOfChannels: ch, bitrate: 128_000 * ch };
   if (await v(avc) && await a(aac)) return { ext: 'mp4', type: 'video/mp4', v: avc, a: aac, lib: MP4_MUX, vc: 'avc', ac: 'aac' };
   if (await v(avc) && await a(opus)) return { ext: 'mp4', type: 'video/mp4', v: avc, a: opus, lib: MP4_MUX, vc: 'avc', ac: 'opus' };
   if (await v(vp9) && await a(opus)) return { ext: 'webm', type: 'video/webm', v: vp9, a: opus, lib: WEBM_MUX, vc: 'V_VP9', ac: 'A_OPUS' };
@@ -80,16 +81,17 @@ async function buildVideo(opt = {}) {
   const lib = await import(fo.lib);
   const target = new lib.ArrayBufferTarget();
   const muxer = fo.ext === 'mp4'
-    ? new lib.Muxer({ target, video: { codec: fo.vc, width: W, height: H }, audio: { codec: fo.ac, numberOfChannels: 1, sampleRate: SR }, fastStart: 'in-memory', firstTimestampBehavior: 'offset' })
-    : new lib.Muxer({ target, video: { codec: fo.vc, width: W, height: H, frameRate: fps }, audio: { codec: fo.ac, numberOfChannels: 1, sampleRate: SR }, firstTimestampBehavior: 'offset' });
+    ? new lib.Muxer({ target, video: { codec: fo.vc, width: W, height: H }, audio: { codec: fo.ac, numberOfChannels: fo.a.numberOfChannels, sampleRate: SR }, fastStart: 'in-memory', firstTimestampBehavior: 'offset' })
+    : new lib.Muxer({ target, video: { codec: fo.vc, width: W, height: H, frameRate: fps }, audio: { codec: fo.ac, numberOfChannels: fo.a.numberOfChannels, sampleRate: SR }, firstTimestampBehavior: 'offset' });
   let fail = null;
   const ve = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: e => { fail = e; } }); ve.configure(fo.v);
   const ae = new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: e => { fail = e; } }); ae.configure(fo.a);
   const t0 = Math.max(0, opt.from || 0), t1 = Math.min(r.out.length / SR, opt.to || r.out.length / SR);
   const a0 = Math.round(t0 * SR), a1 = Math.round(t1 * SR);
   for (let i = a0; i < a1; i += SR) {
-    const n = Math.min(SR, a1 - i), data = r.out.slice(i, i + n);
-    const ad = new AudioData({ format: 'f32-planar', sampleRate: SR, numberOfFrames: n, numberOfChannels: 1, timestamp: Math.round((i - a0) / SR * 1e6), data });
+    const n = Math.min(SR, a1 - i), ch = fo.a.numberOfChannels, data = new Float32Array(n * ch);   // планарно: сначала левый, потом правый
+    data.set(r.out.subarray(i, i + n)); if (ch > 1) data.set((r.outR || r.out).subarray(i, i + n), n);
+    const ad = new AudioData({ format: 'f32-planar', sampleRate: SR, numberOfFrames: n, numberOfChannels: ch, timestamp: Math.round((i - a0) / SR * 1e6), data });
     ae.encode(ad); ad.close();
   }
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;

@@ -49,7 +49,10 @@ function tlTracks(r) {
     const it = S.result.byId && S.result.byId.get(row.cue.id);
     tr.clips.push({ row, idx, kind, peaks, fx: it && it.fxKey ? it.fxKey : null });
   });
-  if (r.amb && r.amb.length) { const t = add('фон сцен', 'Фон сцен', 'ghost'); for (const a of r.amb) { const n = Math.max(8, Math.min(400, Math.ceil(a.dur * 2))), b = Math.ceil(a.audio.length / n), peaks = new Float32Array(n); let mx = 1e-9; for (let k = 0; k < n; k++) { let m = 0; for (let i = k * b; i < Math.min(a.audio.length, (k + 1) * b); i += 64) m = Math.max(m, Math.abs(a.audio[i])); peaks[k] = m; mx = Math.max(mx, m); } for (let k = 0; k < n; k++) peaks[k] /= mx * 1.6; t.clips.push({ row: { cue: { id: 'amb' + a.n, text: a.name, type: 'amb' }, at: a.at, dur: a.dur, sound: a.name }, idx: -1, kind: 'bed', peaks, fixed: true }); } }
+  // фон сцен и музыка — неподвижные клипы: их не двигают, у них своя волна (нормированная, чтобы тихий фон был виден)
+  const fixedTrack = (key, name, list, idOf, cls = 'ghost') => { const t = add(key, name, cls); for (const a of list) { const n = Math.max(8, Math.min(400, Math.ceil(a.dur * 2))), b = Math.ceil(a.audio.length / n), peaks = new Float32Array(n); let mx = 1e-9; for (let k = 0; k < n; k++) { let m = 0; for (let i = k * b; i < Math.min(a.audio.length, (k + 1) * b); i += 64) m = Math.max(m, Math.abs(a.audio[i])); peaks[k] = m; mx = Math.max(mx, m); } for (let k = 0; k < n; k++) peaks[k] /= mx * 1.6; t.clips.push({ row: { cue: { id: idOf(a), text: a.name, type: 'amb' }, at: a.at, dur: a.dur, sound: a.name }, idx: -1, kind: 'bed', peaks, fixed: true }); } };
+  if (r.amb && r.amb.length) fixedTrack('фон сцен', 'Фон сцен', r.amb, a => 'amb' + a.n);
+  if (r.mus && r.mus.length) fixedTrack('музыка', 'Музыка', r.mus, a => 'mus-' + a.kind + (a.n != null ? a.n : ''));
   return tracks;
 }
 const tlAllClips = () => (S.tlTracks || []).flatMap(t => t.clips);
@@ -285,7 +288,7 @@ function tlFollow() {                                  // курсор плее�
   cancelAnimationFrame(tlRaf); drawTimeline();
   const step = () => {
     tlRaf = 0; const st = tlState(), total = S.result && S.result.out ? S.result.out.length / C.SR : 0;
-    tlHeadUpdate(); tlFrame++; if (typeof readTick === 'function') readTick();
+    tlHeadUpdate(); tlFrame++; if (typeof readTick === 'function') readTick(); if (tlFrame % 3 === 0 && typeof spaceLive === 'function') spaceLive();
     const txt = `${fmt(tpTime())} / ${fmt(total)}`;
     tpEls('tp-time', 'tp-time-txt').forEach(el => { if (el.textContent !== txt) el.textContent = txt; });
     const sk = $('#tp-seek'); if (sk && !sk.matches(':active') && tlFrame % 3 === 0) sk.value = tpTime();
@@ -351,12 +354,21 @@ function tlMenuHtml(ctx) {
   return `<div class="m-head">${head}</div>
     ${ctx.t != null ? `<button role="menuitem" data-m="play" data-v="${ctx.t}"><span>${ic('play')}Слушать ${n ? 'с реплики' : 'отсюда'}</span>${kbd(n ? 'двойной щелчок' : 'пробел')}</button>` : ''}
     ${items.length ? `<div class="m-lbl">Эффект${n > 1 ? ' для всех выбранных' : ''}</div>${fx(cur === null ? '—' : cur, 'fx')}<div class="m-lbl">Громкость${n > 1 ? ' выбранных' : ''}</div>${gains('g')}` : ''}
+    ${n ? tlMoveHtml(ids) : ''}
     ${n ? `<div class="m-lbl">Время</div><div class="m-row"><button role="menuitem" data-m="nudge" data-v="-0.5" aria-label="раньше на 0,5 с">${ic('left')}0,5 с</button><button role="menuitem" data-m="nudge" data-v="-0.1" aria-label="раньше на 0,1 с">${ic('left')}0,1 с</button><button role="menuitem" data-m="nudge" data-v="0.1" aria-label="позже на 0,1 с">0,1 с${ic('right')}</button><button role="menuitem" data-m="nudge" data-v="0.5" aria-label="позже на 0,5 с">0,5 с${ic('right')}</button></div>${shifted ? `<button role="menuitem" data-m="reset"><span>Сбросить сдвиг</span></button>` : ''}` : ''}
     <div class="m-sep"></div>
     ${voice ? `<button role="menuitem" data-m="selvoice" data-v="${esc(voice)}"><span>Выделить все реплики: ${esc(charName(voice))}</span></button>` : ''}
     <button role="menuitem" data-m="selall"><span>Выделить всё</span>${kbd('Ctrl+A')}</button>
     ${n ? `<button role="menuitem" data-m="clear"><span>Снять выделение</span>${kbd('Esc')}</button>` : ''}
     <button role="menuitem" data-m="full"><span>${tlState().full ? 'Свернуть таймлайн' : 'Таймлайн на весь экран'}</span>${kbd(tlState().full ? 'Esc' : 'F')}</button>${hist}`;
+}
+/** Меню: движение по сцене (мизансцена) — входит, уходит, проходит… У всех выбранных сразу. */
+function tlMoveHtml(ids) {
+  if (typeof SPACE_MOVES === 'undefined') return '';
+  if ([...ids].every(id => { const it = S.result && S.result.byId.get(id); return it && it.fxKey === 'thought'; })) return '';   // мысли звучат в голове — идти им некуда
+  const st = stageState(), ks = new Set([...ids].map(id => (st.moves[id] || {}).k || '')), cur = ks.size === 1 ? [...ks][0] : null;
+  const opts = Object.entries(SPACE_MOVES).filter(([k]) => k !== 'to');
+  return `<div class="m-lbl">Движение${spaceOn() ? '' : ' <span class="muted">(включит стерео)</span>'}</div><div class="m-fx m-mv">${opts.map(([k, name]) => `<button role="menuitemradio" aria-checked="${cur === k}" class="${cur === k ? 'on' : ''}" data-m="mv" data-v="${k}">${name}</button>`).join('')}<button role="menuitemradio" aria-checked="${cur === ''}" class="${cur === '' ? 'on' : ''}" data-m="mv" data-v="">стоит на месте</button></div>`;
 }
 /** Меню по правому щелчку (transitions.dev: plus to menu morph): у курсора появляется кружок «+», «+» уезжает внутрь
  *  и поворачивается в «×», а кружок вырастает в панель — в ту сторону, где есть место. Уже открытое меню при
@@ -396,12 +408,13 @@ function tlMenuClose(refocus = true) {
 }
 function tlMenuAct(b) {
   const st = tlState(), ctx = st.menu, a = b.dataset.m, v = b.dataset.v; if (!ctx) return;
-  const ids = ctx.ids || new Set(), keep = ['fx', 'g', 'vfx', 'vg', 'nudge'].includes(a);
+  const ids = ctx.ids || new Set(), keep = ['fx', 'g', 'vfx', 'vg', 'nudge', 'mv'].includes(a);
   if (a === 'play') { tlSeek(+v, true); }
   else if (a === 'fx') tlApplyFx(ids, v || null);
   else if (a === 'g') tlApplyGain(ids, +v === 0 ? null : +v);
   else if (a === 'nudge') { const clips = tlAllClips().filter(c => ids.has(c.row.cue.id)), own = clips.length > 1 || st.own; if (clips.length) tlCommit(clips, Math.max(Math.max(...clips.map(c => tlMinDelta(c, own))), +v), own); }
   else if (a === 'reset') tlResetShift(ids);
+  else if (a === 'mv') spaceSetMove(ids, v || null);
   else if (a === 'vfx') tlVoiceFx(ctx.track.voice, v || null);
   else if (a === 'vg') tlVoiceGain(ctx.track.voice, +v === 0 ? null : +v);
   else if (a === 'seltrack') tlSelect(ctx.track.clips.filter(c => !c.fixed).map(c => c.row.cue.id));
@@ -694,8 +707,8 @@ function tlGrain(t, first = false) {
   const rate = Math.max(0.5, Math.min(2.5, speed)), n = Math.round(0.07 * rate * C.SR), a = Math.round((dir < 0 ? t - 0.07 * rate : t) * C.SR);
   if (a < 0 || a + n > TP.len) return;
   const ctx = audioCtx(); if (ctx.state === 'suspended') ctx.resume();
-  const all = TP.buf.getChannelData(0), buf = ctx.createBuffer(1, n, C.SR), y = buf.getChannelData(0), fade = Math.max(1, Math.min(n >> 2, Math.round(0.012 * rate * C.SR)));
-  for (let i = 0; i < n; i++) { const v = all[dir < 0 ? a + n - 1 - i : a + i]; y[i] = i < fade ? v * i / fade : i > n - fade ? v * (n - i) / fade : v; }
+  const nc = TP.buf.numberOfChannels, buf = ctx.createBuffer(nc, n, C.SR), fade = Math.max(1, Math.min(n >> 2, Math.round(0.012 * rate * C.SR)));
+  for (let c = 0; c < nc; c++) { const all = TP.buf.getChannelData(c), y = buf.getChannelData(c); for (let i = 0; i < n; i++) { const v = all[dir < 0 ? a + n - 1 - i : a + i]; y[i] = i < fade ? v * i / fade : i > n - fade ? v * (n - i) / fade : v; } }
   const src = ctx.createBufferSource(); src.buffer = buf; src.playbackRate.value = rate; src.connect(audioOut()); src.start();
 }
 function tlOvSeek(e) {                                 // мини-карта: щелчок и протяжка — сюда вид

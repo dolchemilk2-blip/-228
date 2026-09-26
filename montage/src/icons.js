@@ -32,6 +32,9 @@ const IC = {
   share: '<path d="M8 2.8v7.2M5.2 5.4L8 2.6l2.8 2.8M3.4 8.6v4.6h9.2V8.6"/>',
   tracks: '<path d="M2.6 4.4h6.2M5.4 8h8M2.6 11.6h4.8"/>',
   home: '<path d="M2.8 7.4L8 3l5.2 4.4M4.4 6.2v7h7.2v-7"/>',
+  headphones: '<path d="M3 10.4V8.2a5 5 0 0 1 10 0v2.2"/><rect x="2.4" y="9.4" width="2.8" height="4.2" rx="1"/><rect x="10.8" y="9.4" width="2.8" height="4.2" rx="1"/>',
+  music: '<path d="M6 12.2V3.8l7-1.5v8.3"/><circle cx="4.4" cy="12.2" r="1.6"/><circle cx="11.4" cy="10.6" r="1.6"/>',
+  stage: '<path d="M2.4 13.4h11.2"/><circle cx="5" cy="5.6" r="1.6"/><circle cx="11" cy="7" r="1.6"/><path d="M2.8 11.2c0-1.7 1-2.8 2.2-2.8s2.2 1.1 2.2 2.8M8.8 12.4c0-1.6 1-2.6 2.2-2.6s2.2 1 2.2 2.6"/>',
 };
 const ic = (n, cls = '') => `<svg class="ic${cls ? ' ' + cls : ''}" viewBox="0 0 16 16" aria-hidden="true">${IC[n] || ''}</svg>`;
 const tpIcon = on => `<span class="swap" data-state="${on ? 'b' : 'a'}"><svg class="ic" data-icon="a" viewBox="0 0 16 16" aria-hidden="true">${IC.play}</svg><svg class="ic" data-icon="b" viewBox="0 0 16 16" aria-hidden="true">${IC.pause}</svg></span>`;

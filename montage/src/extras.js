@@ -186,9 +186,16 @@ function buildStems() {
   for (const p of r.lay.placed) { const k = nameOf(p); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); }
   const order = [...S.P.chars.map(c => charName(c.key)), 'остальные голоса', 'звуки', 'звуки фоном'].filter(k => groups.has(k));
   for (const k of groups.keys()) if (!order.includes(k)) order.push(k);
-  const stems = order.map(k => ({ name: k, fill: y => { for (const p of groups.get(k)) { const i0 = Math.round(p.at * C.SR); for (let i = 0; i < p.audio.length && i0 + i < n; i++) y[i0 + i] += p.audio[i] * g; } } }));
-  if (r.room && r.room.length) stems.push({ name: 'комнатный тон', fill: y => { for (const a of r.room) { const i0 = Math.round(a.at * C.SR); for (let i = 0; i < a.audio.length && i0 + i < n; i++) y[i0 + i] += a.audio[i] * g; } } });
-  if (r.amb && r.amb.length) stems.push({ name: 'фон сцен', fill: y => { for (const a of r.amb) { const i0 = Math.round(a.at * C.SR); for (let i = 0; i < a.audio.length && i0 + i < n; i++) y[i0 + i] += a.audio[i] * g; } } });
+  // стерео (мизансцена, музыка): у реплик p.sp — как они легли в каналы, у фона и музыки — audioR и множитель
+  const put = (y, yR, list) => { for (const p of list) { const i0 = Math.round(p.at * C.SR);
+    if (yR && p.sp) C.spAdd(p.sp, y, yR, i0, 0, Math.max(0, Math.min(C.spLen(p.sp), n - i0)), g);
+    else for (let i = 0; i < p.audio.length && i0 + i < n; i++) y[i0 + i] += p.audio[i] * g; } };
+  const clip = (y, yR, list) => { for (const a of list) { const i0 = Math.round(a.at * C.SR), k = (a.g || 1) * g, aR = a.audioR || a.audio;
+    for (let i = 0; i < a.audio.length && i0 + i < n; i++) { y[i0 + i] += a.audio[i] * k; if (yR) yR[i0 + i] += aR[i] * k; } } };
+  const stems = order.map(k => ({ name: k, fill: (y, yR) => put(y, yR, groups.get(k)) }));
+  if (r.room && r.room.length) stems.push({ name: 'комнатный тон', fill: (y, yR) => clip(y, yR, r.room) });
+  if (r.amb && r.amb.length) stems.push({ name: 'фон сцен', fill: (y, yR) => clip(y, yR, r.amb) });
+  if (r.mus && r.mus.length) stems.push({ name: 'музыка', fill: (y, yR) => clip(y, yR, r.mus) });
   return { stems, n };
 }
 function rppText(names, dur, scenes) {
@@ -203,13 +210,13 @@ async function exportStems() {
   const r = S.result; if (!r) return;
   const { stems, n } = buildStems(), files = [], names = [], enc = new TextEncoder();
   const scenes = (r.lay.scenes || []).map(sc => ({ ...sc, desc: typeof sceneDesc === 'function' && sc.cue ? sceneDesc(sc.cue).slice(0, 60) : '' }));
-  const mb = (n * 2 * stems.length / 1e6).toFixed(0);
+  const mb = (n * 2 * (r.outR ? 2 : 1) * stems.length / 1e6).toFixed(0);
   for (let i = 0; i < stems.length; i++) {
     progress(`Стемы: ${stems[i].name} (${i + 1} из ${stems.length}, всего около ${mb} МБ)…`, i / stems.length);
     await new Promise(res => setTimeout(res, 20));
-    const y = new Float32Array(n); stems[i].fill(y);
+    const y = new Float32Array(n), yR = r.outR ? new Float32Array(n) : null; stems[i].fill(y, yR);
     const nm = String(i + 1).padStart(2, '0') + ' ' + stems[i].name.replace(/[\\/:*?"<>|]/g, '_');
-    files.push({ name: 'stems/' + nm + '.wav', data: new Uint8Array(wav16(y)) }); names.push(nm);
+    files.push({ name: 'stems/' + nm + '.wav', data: new Uint8Array(wav16(y, yR)) }); names.push(nm);
   }
   files.push({ name: 'проект.rpp', data: enc.encode(rppText(names, n / C.SR, scenes)) });
   files.push({ name: 'разметка.csv', data: enc.encode(reportCsv()) });

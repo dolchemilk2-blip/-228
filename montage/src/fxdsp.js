@@ -17,8 +17,9 @@ export const FX_DEFS = {
   echo:      { name: 'эхо', level: 0, chain: [], echo: [0.28, -7, 0.4], verb: { room: 0.7, damp: 0.4, wet: 0.14, pre: 0.02 } },
 };
 /** Freeverb, моно: восемь гребенчатых фильтров с демпфированием и четыре фазовых — за один проход по сигналу. */
-function freeverb(x, { room = 0.5, damp = 0.5, pre = 0.01 } = {}, tail = 2.5) {
-  const sc = SR / 44100, T = [1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617].map(v => Math.round(v * sc)), A = [556, 441, 341, 225].map(v => Math.round(v * sc));
+function freeverb(x, { room = 0.5, damp = 0.5, pre = 0.01 } = {}, tail = 2.5, spread = 0) {
+  // spread — сдвиг длин линий правого канала (23 отсчёта, как в оригинальном Freeverb): два вызова дают стерео
+  const sc = SR / 44100, T = [1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617].map(v => Math.round((v + spread) * sc)), A = [556, 441, 341, 225].map(v => Math.round((v + spread) * sc));
   const fb = 0.7 + 0.28 * room, d1 = 0.15 + 0.5 * damp, d2 = 1 - d1, pd = Math.round(pre * SR), n = x.length + pd + Math.round(tail * SR), xl = x.length;
   const c0 = new Float32Array(T[0]), c1 = new Float32Array(T[1]), c2 = new Float32Array(T[2]), c3 = new Float32Array(T[3]), c4 = new Float32Array(T[4]), c5 = new Float32Array(T[5]), c6 = new Float32Array(T[6]), c7 = new Float32Array(T[7]);
   const a0 = new Float32Array(A[0]), a1 = new Float32Array(A[1]), a2 = new Float32Array(A[2]), a3 = new Float32Array(A[3]);
@@ -67,4 +68,48 @@ export function fxProcess(x, key) {
   const g = (isFinite(L0) && isFinite(L1) && L0 > -69 && L1 > -69 ? Math.pow(10, (L0 - L1) / 20) : 1) * Math.pow(10, (P.level || 0) / 20);
   for (let i = 0; i < y.length; i++) y[i] *= g;
   return y;
+}
+
+// ------------------------------------------------------------------ мизансцена: место и движение в пространстве
+// Положение на плане сцены: x от −1 (слева) до 1 (справа), y от 0 (у микрофона) до 1 (в глубине).
+// Дальше — тише, глуше (воздух съедает верх, пропадает близкий бас) и больше комнаты вокруг голоса.
+const SPACE_BL = 128;
+/** Параметры расстояния: усиление прямого звука, срезы фильтров, доля комнаты. */
+export function spaceDist(y, room = 0.5) {
+  return { g: Math.pow(10, -8 * y / 20), lp: 20000 * Math.pow(10, -0.5 * y), hp: 20 + 120 * y, wet: room > 0 ? Math.pow(10, (-12 + 13 * y) / 20) * room * 2 : 0 };
+}
+/** Равная мощность: в центре оба канала по −3 дБ, сумма энергии одна при любом положении. */
+export function spacePan(x) { const th = (Math.max(-1, Math.min(1, x)) + 1) * Math.PI / 4; return [Math.cos(th), Math.sin(th)]; }
+/**
+ * Реплика в пространстве. a, b — положение в начале и в конце (движение — линейно по ходу реплики).
+ * mode 'stereo' → {L, R}: панорама, расстояние, комната; 'direct' → {D, L, R}: прямой звук моно (его потом
+ * разворачивает объёмный звук браузера, HRTF) и отдельно комната — она вокруг, направления у неё нет.
+ * Длина — с хвостом комнаты; начало совпадает с началом реплики.
+ */
+export function spaceRender(x, a, b = a, { mode = 'stereo', room = 0.5 } = {}) {
+  const n = x.length, moving = Math.abs(a.x - b.x) > 1e-4 || Math.abs(a.y - b.y) > 1e-4, TWO_PI = 2 * Math.PI;
+  const verb = room > 0.01, send = verb ? new Float32Array(n) : null, D = new Float32Array(n);
+  let lp = 0, hpx = 0, hpy = 0;
+  for (let i0 = 0; i0 < n; i0 += SPACE_BL) {
+    const f = moving ? Math.min(1, (i0 + SPACE_BL / 2) / n) : 0, y = a.y + (b.y - a.y) * f, P = spaceDist(y, room);
+    const al = 1 - Math.exp(-TWO_PI * Math.min(P.lp, 0.45 * SR) / SR), ah = Math.exp(-TWO_PI * P.hp / SR), g = P.g, gw = P.wet;
+    for (let i = i0, e = Math.min(n, i0 + SPACE_BL); i < e; i++) {
+      const v = x[i]; lp += al * (v - lp) + 1e-20;
+      const h = ah * (hpy + lp - hpx); hpx = lp; hpy = h;
+      D[i] = h * g; if (send) send[i] = v * gw;
+    }
+  }
+  let wL = null, wR = null;
+  if (verb) {
+    const yMax = Math.max(a.y, b.y), P = { room: 0.3 + 0.35 * room, damp: 0.5, pre: 0.006 + 0.018 * yMax }, tail = 0.8 + 0.9 * room;
+    wL = freeverb(send, P, tail, 0); wR = freeverb(send, P, tail, 23);
+  }
+  if (mode === 'direct') return { D, L: wL, R: wR };
+  const len = wL ? Math.max(n, wL.length) : n, L = new Float32Array(len), R = new Float32Array(len);
+  for (let i0 = 0; i0 < n; i0 += SPACE_BL) {
+    const f = moving ? Math.min(1, (i0 + SPACE_BL / 2) / n) : 0, [gl, gr] = spacePan(a.x + (b.x - a.x) * f);
+    for (let i = i0, e = Math.min(n, i0 + SPACE_BL); i < e; i++) { L[i] = D[i] * gl; R[i] = D[i] * gr; }
+  }
+  if (wL) for (let i = 0; i < wL.length; i++) { L[i] += wL[i]; R[i] += wR[i]; }
+  return { L, R };
 }
