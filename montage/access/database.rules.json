@@ -1,13 +1,14 @@
 {
   "rules": {
     "app": {
-      ".read": "auth != null && ((auth.token.email === 'ADMIN_EMAIL' && auth.token.email_verified === true) || (root.child('users').child(auth.uid).child('blocked').val() !== true && (root.child('users').child(auth.uid).child('paid').val() === true || (root.child('users').child(auth.uid).child('trial').child('start').isNumber() && now < root.child('users').child(auth.uid).child('trial').child('start').val() + 432000000))))",
+      ".read": "auth != null && ((auth.token.email === 'ADMIN_EMAIL' && auth.token.email_verified === true) || (root.child('users').child(auth.uid).child('blocked').val() !== true && (root.child('users').child(auth.uid).child('paid').val() === true || (root.child('users').child(auth.uid).child('until').isNumber() && now < root.child('users').child(auth.uid).child('until').val()) || (root.child('users').child(auth.uid).child('grant').isNumber() && now < root.child('users').child(auth.uid).child('grant').val()) || (root.child('users').child(auth.uid).child('trial').child('start').isNumber() && now < root.child('users').child(auth.uid).child('trial').child('start').val() + 432000000))))",
       ".write": "auth != null && auth.token.email === 'ADMIN_EMAIL' && auth.token.email_verified === true"
     },
     "codes": {
       ".read": "auth != null && auth.token.email === 'ADMIN_EMAIL' && auth.token.email_verified === true",
       ".write": "auth != null && auth.token.email === 'ADMIN_EMAIL' && auth.token.email_verified === true",
       "$code": {
+        "days": { ".read": "auth != null" },
         "used": {
           ".write": "auth != null && !data.exists() && data.parent().child('t').exists() && data.parent().child('off').val() !== true",
           ".validate": "newData.child('by').val() === auth.uid && newData.child('at').val() === now && newData.child('email').val() === auth.token.email",
@@ -70,6 +71,20 @@
         "exports": {
           ".write": "auth != null && auth.uid === $uid",
           ".validate": "newData.isNumber() && newData.val() === (data.exists() ? data.val() : 0) + 1 && newData.val() <= 3 * (data.parent().child('bonus').exists() ? data.parent().child('bonus').val() : 0)"
+        },
+        "subs": {
+          "$code": {
+            ".write": "auth != null && auth.uid === $uid && !data.exists() && root.child('codes').child($code).child('used').child('by').val() === auth.uid && root.child('codes').child($code).child('days').isNumber()",
+            ".validate": "newData.val() === true && newData.parent().parent().child('untilCode').val() === $code"
+          }
+        },
+        "untilCode": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.isString() && newData.val().length === 16 && !data.parent().child('subs').child(newData.val()).exists() && newData.parent().child('subs').child(newData.val()).val() === true"
+        },
+        "until": {
+          ".write": "auth != null && auth.uid === $uid && data.parent().child('blocked').val() !== true",
+          ".validate": "newData.isNumber() && newData.parent().child('untilCode').isString() && !data.parent().child('subs').child(newData.parent().child('untilCode').val()).exists() && newData.parent().child('subs').child(newData.parent().child('untilCode').val()).val() === true && ((data.isNumber() && data.val() > now && newData.val() <= data.val() + root.child('codes').child(newData.parent().child('untilCode').val()).child('days').val() * 86400000) || newData.val() <= now + root.child('codes').child(newData.parent().child('untilCode').val()).child('days').val() * 86400000)"
         },
         "paid": {
           ".write": "auth != null && auth.uid === $uid && newData.val() === true && data.parent().child('blocked').val() !== true && newData.parent().child('code').isString() && root.child('codes').child(newData.parent().child('code').val()).child('used').child('by').val() === auth.uid"

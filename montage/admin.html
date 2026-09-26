@@ -159,7 +159,7 @@ function render() {
   const shopAll = codes.filter(c => c.shop).length, shopSold = codes.filter(c => c.shop && c.used).length, shopLeft = codes.filter(c => c.shop && !c.used && !c.off).length;
   const paid = users.filter(u => u.paid && !u.blocked).length, free = codes.filter(c => !c.used && !c.off && !c.shop).length, trial = users.filter(u => !u.paid && !u.blocked && trialOn(u)).length;
   app.innerHTML = `
-  <section class="card"><p class="stat"><span>С доступом: <b>${paid}</b></span><span>На пробе: <b>${trial}</b></span><span>Всего входили: <b>${users.length}</b></span><span>Свободных кодов: <b>${free}</b></span><span>Сборка: <b>${S.meta ? when(S.meta.t) : 'не загружена'}</b></span></p></section>
+  <section class="card"><p class="stat"><span>С доступом: <b>${paid}</b></span><span>Подписка: <b>${users.filter(u => !u.paid && !u.blocked && Math.max(u.until || 0, u.grant || 0) > Date.now()).length}</b></span><span>На пробе: <b>${trial}</b></span><span>Всего входили: <b>${users.length}</b></span><span>Свободных кодов: <b>${free}</b></span><span>Сборка: <b>${S.meta ? when(S.meta.t) : 'не загружена'}</b></span></p></section>
   <section class="card" id="build">
     <h2>Сборка Монтажки</h2>
     <p class="note">${S.meta ? `Сейчас загружена сборка от ${when(S.meta.t)} · ${kb(S.meta.size || 0)} · <span class="mono">${E(String(S.meta.v).slice(0, 10))}</span>. Покупатели получат новую при следующем открытии.` : 'Сборка ещё не загружена — покупатели увидят «Монтажка ещё не загружена».'}</p>
@@ -171,7 +171,7 @@ function render() {
     <p class="note">Магазин продаёт ссылки: каждому покупателю — одна строка из списка, сразу после оплаты на экране и на почту. Покупатель открывает ссылку, входит через Google — покупка активируется сама. Выгрузите ссылки и добавьте их в товар магазина («уникальный товар», «serials»). Кнопка «Купить» на сайте ведёт на этот товар (<code>buyUrl</code> в <code>access/config.js</code>${CFG.buyUrl ? ': ' + E(CFG.buyUrl) : ' — пока не задан'}).</p>
     <p class="stat"><span>В магазине осталось: <b>${shopLeft}</b></span><span>Продано: <b>${shopSold}</b></span><span>Выгружено всего: <b>${shopAll}</b></span></p>
     ${shopAll && shopLeft < 10 ? `<p class="msg bad">Ссылок в магазине осталось мало — выгрузите ещё и добавьте в товар, иначе магазин перестанет продавать.</p>` : ''}
-    <form class="row" data-form="shop"><label>Сколько ссылок <input type="number" name="n" min="1" max="500" value="50"></label><button class="btn" type="submit">Выгрузить ссылки для магазина</button></form>
+    <form class="row" data-form="shop"><label>Сколько ссылок <input type="number" name="n" min="1" max="500" value="50"></label><label>Что даёт <select name="days"><option value="30" selected>подписка на месяц (30 дней)</option><option value="">доступ навсегда</option></select></label><button class="btn" type="submit">Выгрузить ссылки для магазина</button></form>
     <p class="note">Ссылки ведут на <span class="mono">${E(SITE)}</span>. Каждая ссылка — отдельный новый код: выгруженные не смешиваются с кодами, которые вы раздаёте сами.</p>
   </section>
   <section class="card" id="codes">
@@ -193,7 +193,7 @@ function render() {
 
 function codeRows(codes) {
   const f = S.codeFilter, st = c => c.used ? 'used' : c.off ? 'off' : c.shop ? 'shop' : 'free';
-  return codes.filter(c => f === 'all' || st(c) === f).sort((a, b) => (b.t || 0) - (a.t || 0)).map(c => `<div class="it"><div class="main"><b class="mono">${F.fmtCode(c.k)}${c.used ? `<span class="chip ok">${c.shop ? 'продан' : 'активирован'}</span>` : c.off ? '<span class="chip bad">отключён</span>' : c.shop ? '<span class="chip acc">в магазине</span>' : '<span class="chip acc">свободен</span>'}</b>
+  return codes.filter(c => f === 'all' || st(c) === f).sort((a, b) => (b.t || 0) - (a.t || 0)).map(c => `<div class="it"><div class="main"><b class="mono">${F.fmtCode(c.k)}${c.used ? `<span class="chip ok">${c.shop ? 'продан' : 'активирован'}</span>` : c.off ? '<span class="chip bad">отключён</span>' : c.shop ? '<span class="chip acc">в магазине</span>' : '<span class="chip acc">свободен</span>'}${c.days ? `<span class="chip">${c.days} дней</span>` : ''}</b>
     <span class="sub">${c.used ? `${E(c.used.email || '')} · ${when(c.used.at)}` : `создан ${when(c.t)}`}${c.note ? ' · ' + E(c.note) : ''}</span></div>
     <div class="acts">${c.used ? '' : `<button class="btn ghost small" type="button" data-copy="${c.k}"${c.shop ? ' data-link="1"' : ''}>${c.shop ? 'Копировать ссылку' : 'Копировать'}</button><button class="btn ghost small" type="button" data-code-off="${c.k}">${c.off ? 'Включить' : 'Отключить'}</button>`}</div></div>`).join('');
 }
@@ -201,10 +201,11 @@ function userRows(users) {
   const q = S.q.trim().toLowerCase();
   return users.filter(u => !q || (u.email || '').toLowerCase().includes(q) || (u.name || '').toLowerCase().includes(q)).sort((a, b) => (b.seen || 0) - (a.seen || 0)).map(u => {
     const tr = u.trial && u.trial.start ? (trialOn(u) ? `<span class="chip acc">проба до ${new Date(u.trial.start + TRIAL_MS).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}</span>` : '<span class="chip">проба закончилась</span>') : '';
-    const chip = u.blocked ? '<span class="chip bad">отключён</span>' : u.paid ? `<span class="chip ok">${u.code ? 'доступ по коду' : 'доступ выдан'}</span>` : tr || '<span class="chip">без доступа</span>';
+    const se = Math.max(u.until || 0, u.grant || 0), sub = se ? (se > Date.now() ? `<span class="chip ok">подписка до ${new Date(se).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}</span>` : '<span class="chip">подписка закончилась</span>') : '';
+    const chip = u.blocked ? '<span class="chip bad">отключён</span>' : u.paid ? `<span class="chip ok">${u.code ? 'доступ по коду' : 'доступ выдан'}</span>` : sub || tr || '<span class="chip">без доступа</span>';
     const act = u.blocked ? `<button class="btn ghost small" type="button" data-user="${u.uid}" data-do="unblock">Вернуть доступ</button>`
       : u.paid ? `<button class="btn ghost small bad" type="button" data-user="${u.uid}" data-do="block">Отключить</button>`
-      : `<button class="btn small" type="button" data-user="${u.uid}" data-do="grant">Выдать доступ</button>${u.trial ? `<button class="btn ghost small" type="button" data-user="${u.uid}" data-do="extend" title="Пробный период заново на 5 дней с сегодняшнего дня">Продлить пробу</button>` : ''}`;
+      : `<button class="btn small" type="button" data-user="${u.uid}" data-do="grant">Выдать доступ</button><button class="btn ghost small" type="button" data-user="${u.uid}" data-do="month" title="Подписка ещё на 30 дней — от её конца или с сегодняшнего дня">+30 дней</button>${u.trial ? `<button class="btn ghost small" type="button" data-user="${u.uid}" data-do="extend" title="Пробный период заново на 5 дней с сегодняшнего дня">Продлить пробу</button>` : ''}`;
     const inv = u.bonus ? ` · пригласил: ${u.bonus}` : '', exp = !u.paid && (u.bonus || u.exports) ? ` · скачиваний ${u.exports || 0} из ${Math.min(10, u.bonus || 0) * 3}` : '';
     const from = u.trial && u.trial.ref ? ` · по приглашению ${E((S.users[u.trial.ref] || {}).email || u.trial.ref.slice(0, 8) + '…')}` : '';
     return `<div class="it"><div class="main"><b>${E(u.email || u.uid)}${chip}</b><span class="sub">${u.name ? E(u.name) + ' · ' : ''}впервые ${when(u.first)} · был ${when(u.seen)}${u.session ? ' · ' + device(u.session.ua) : ''}${u.code ? ' · код ' + F.fmtCode(u.code).slice(0, 9) + '…' : ''}${inv}${exp}${from}</span></div><div class="acts">${act}</div></div>`;
@@ -253,7 +254,7 @@ document.addEventListener('click', async e => {
     const uid = b.dataset.user, u = S.users[uid] || {}, d = b.dataset.do;
     if (d === 'block' && !confirm(`Отключить доступ для ${u.email || uid}?`)) return;
     b.disabled = true;
-    const body = d === 'grant' ? { paid: true, manual: true, blocked: null } : d === 'block' ? { blocked: true } : d === 'extend' ? { 'trial/start': F.TS } : { blocked: null, paid: true };
+    const body = d === 'month' ? { grant: Math.max(Date.now(), u.until || 0, u.grant || 0) + 30 * 86400000, blocked: null } : d === 'grant' ? { paid: true, manual: true, blocked: null } : d === 'block' ? { blocked: true } : d === 'extend' ? { 'trial/start': F.TS } : { blocked: null, paid: true };
     await F.db('users/' + uid, { method: 'PATCH', body }).catch(() => {});
     return reload();
   }
@@ -262,10 +263,11 @@ document.addEventListener('click', async e => {
 async function shopExport(f) {
   const n = Math.max(1, Math.min(500, Math.round(+f.n.value || 1))), btn = f.querySelector('button'), batch = {}, keys = [];
   btn.disabled = true;
-  for (let i = 0; i < n; i++) { const k = F.newCode(); if (S.codes[k] || batch[k]) { i--; continue; } batch[k] = { t: F.TS, shop: F.TS, note: 'магазин' }; keys.push(k); }
+  const days = +f.days.value || 0;                       // 30 — подписка на месяц: повторная покупка продлевает от конца подписки
+  for (let i = 0; i < n; i++) { const k = F.newCode(); if (S.codes[k] || batch[k]) { i--; continue; } batch[k] = { t: F.TS, shop: F.TS, note: days ? 'магазин, месяц' : 'магазин', ...(days ? { days } : {}) }; keys.push(k); }
   try {
     await F.db('codes', { method: 'PATCH', body: batch });
-    const d = new Date(), name = `монтажка-ссылки-${d.toISOString().slice(0, 10)}-${n}.txt`;
+    const d = new Date(), name = `монтажка-ссылки-${days ? 'месяц-' : ''}${d.toISOString().slice(0, 10)}-${n}.txt`;
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([keys.map(shopLink).join('\n') + '\n'], { type: 'text/plain;charset=utf-8' })); a.download = name;
     document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
     S.codeFilter = 'shop';
