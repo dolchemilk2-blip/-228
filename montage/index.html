@@ -77,6 +77,10 @@ a { color: var(--accent-text); text-underline-offset: 3px; }
 .g-row input::placeholder { color: var(--muted); opacity: .6; }
 .g-row input:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; border-color: transparent; }
 .g-err { min-height: 1.5em; color: var(--bad); font-size: 13.5px; }
+.g-btn.g-wide { width: 100%; }
+.g-gift { padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 16%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); color: var(--ink); font-weight: 500; }
+.g-or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12.5px; }
+.g-or::before, .g-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .g-err:empty { min-height: 0; }
 .g-state { display: flex; align-items: center; gap: 10px; color: var(--muted); }
 .g-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: g-pulse 1s ease-in-out infinite alternate; }
@@ -107,6 +111,28 @@ footer .g-acct-out:focus-visible { outline: 2px solid var(--focus); outline-offs
 .g-lock-row .g-lock-alt { border: 1px solid var(--line, #C6CAC3); }
 .g-lock-row button:focus-visible { outline: 2px solid var(--focus, #875600); outline-offset: 2px; }
 .g-lock-row button[disabled] { opacity: .5; cursor: default; }
+.g-lock-card .g-x { all: unset; position: absolute; top: 12px; right: 12px; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; cursor: pointer; color: var(--muted, #565D61); font-size: 20px; line-height: 1; }
+.g-lock-card .g-x:focus-visible { outline: 2px solid var(--focus, #875600); }
+.g-lock-card { position: relative; max-height: calc(100vh - 32px); overflow: auto; }
+.g-lock-card a.g-lock-go { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; background: var(--accent, #EBA51C); color: var(--accent-ink, #1B1400); }
+.g-lock-card .g-stat { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 0 0 14px; font-size: 14px; }
+.g-lock-card .g-stat b { font-variant-numeric: tabular-nums; }
+.g-lock-card label.g-lbl { display: block; margin: 0 0 6px; font-weight: 600; font-size: 13px; }
+.g-lock-card .g-in { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.g-lock-card .g-in input { flex: 1 1 180px; min-width: 0; height: 40px; padding: 0 10px; border: 1px solid var(--line, #C6CAC3); border-radius: 8px; background: var(--well, #EEEFEB); color: inherit; font: 500 13.5px var(--mono, monospace); }
+.g-lock-card .g-in input:focus-visible { outline: 2px solid var(--focus, #875600); outline-offset: 0; }
+.g-lock-card .g-in button { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--line, #C6CAC3); font-weight: 600; font-size: 13.5px; cursor: pointer; }
+.g-lock-card .g-in button:focus-visible { outline: 2px solid var(--focus, #875600); outline-offset: 2px; }
+.g-lock-card .g-in button[disabled] { opacity: .5; cursor: default; }
+.g-lock-card .g-sep { height: 1px; margin: 4px 0 14px; background: var(--line, #C6CAC3); }
+.g-lock-card .g-msg { margin: -8px 0 12px; min-height: 1.2em; font-size: 13px; color: var(--bad, #B3261E); }
+.g-lock-card .g-msg.ok { color: var(--ok, #1E6C42); }
+.g-lock-card .g-msg:empty { display: none; }
+.g-trial { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--accent, #EBA51C) 16%, transparent); border: 1px solid color-mix(in srgb, var(--accent, #EBA51C) 55%, transparent); color: var(--deck-ink, #F0EAE2); font: 600 12.5px var(--sans, system-ui); white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.g-trial i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent, #EBA51C); }
+.g-trial:focus-visible { outline: 2px solid var(--accent, #EBA51C); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) { .g-trial:hover { background: color-mix(in srgb, var(--accent, #EBA51C) 26%, transparent); } }
+@media (max-width: 520px) { .g-trial .g-trial-l { display: none; } .monitor:has(.g-trial) .onair { display: none; } }   /* на телефоне шапка остаётся в две строки */
 @keyframes g-lock-in { from { opacity: 0; } }
 @keyframes g-lock-card { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
 @media (prefers-reduced-motion: reduce) { .g-lock, .g-lock-card { animation: none; } }
@@ -139,6 +165,16 @@ import * as F from './access/fb.js';
 import CFG from './access/config.js';
 
 const $ = s => document.querySelector(s), E = F.esc;
+// пробный период: 5 дней всё работает и слушается; скачивать — после покупки или за приглашения (3 за друга, до 10 друзей)
+const TRIAL_MS = 5 * 86400000, PER_INVITE = 3, MAX_INVITES = 10;
+const REF = (() => { try { const r = new URLSearchParams(location.search).get('ref'); if (r && /^[A-Za-z0-9_-]{6,128}$/.test(r)) localStorage.setItem('montage-access:ref', r); return localStorage.getItem('montage-access:ref') || ''; } catch { return ''; } })();
+const ACC = { user: null, me: {}, plan: 'paid' };
+const trialLeft = m => m && m.trial && typeof m.trial.start === 'number' ? m.trial.start + TRIAL_MS - Date.now() : -1;
+const exportsLeft = m => Math.max(0, Math.min(MAX_INVITES, (m && m.bonus) || 0) * PER_INVITE - ((m && m.exports) || 0));
+const plural = (n, a, b, c) => { const k = n % 100, j = n % 10; return k > 10 && k < 20 ? c : j === 1 ? a : j > 1 && j < 5 ? b : c; };
+const daysTxt = ms => { const d = Math.ceil(ms / 86400000); return d <= 1 ? 'последний день' : `${d} ${plural(d, 'день', 'дня', 'дней')}`; };
+const dateTxt = t => new Date(t).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+const inviteUrl = uid => location.origin + location.pathname.replace(/[^/]*$/, '') + '?ref=' + encodeURIComponent(uid);
 const view = $('#g-view'), card = $('#g-card');
 const reduced = () => document.documentElement.dataset.motion === 'reduce' || matchMedia('(prefers-reduced-motion: reduce)').matches;
 const contact = CFG.contact ? `Вопросы и помощь: ${/^@|^https?:/.test(CFG.contact) ? `<a href="${E(/^@/.test(CFG.contact) ? 'https://t.me/' + CFG.contact.slice(1) : CFG.contact)}" target="_blank" rel="noopener">${E(CFG.contact)}</a>` : /@/.test(CFG.contact) ? `<a href="mailto:${E(CFG.contact)}">${E(CFG.contact)}</a>` : E(CFG.contact)}` : '';
@@ -151,18 +187,29 @@ const T = {
   wait: t => `<p class="g-state"><span class="g-dot"></span>${t}</p>`,
   setup: () => `<p class="g-lead">Сайт ещё не подключён к Firebase.</p><p class="g-note">Владельцу: заполните <code>access/config.js</code> по инструкции <code>montage/ACCESS.md</code>.</p>`,
   out: () => `<p class="g-lead">Монтажка находит реплики в записях актёров, выравнивает громкость и сводит радиоспектакль — прямо в браузере.</p>
+    ${REF ? '<p class="g-gift">Вас пригласили в Монтажку — 5 дней бесплатно. Войдите через Google, чтобы начать.</p>' : ''}
     <button class="g-btn g-google" type="button" data-act="in"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>Войти через Google</button>
     <p class="g-err" role="alert"></p>
     ${inApp ? `<p class="g-note g-warn">Похоже, ссылка открыта внутри приложения. Вход через Google там может не сработать — откройте её в обычном браузере: меню ⋯ → «Открыть в браузере».</p>` : ''}
-    <p class="g-note">Монтажка открывается после покупки. Уже купили — войдите тем же аккаунтом Google, на который активировали код.${buy ? ` Ещё нет? ${buy}.` : ''}</p>`,
-  nopay: u => `<p>Вы вошли как <b>${E(u.email)}</b>. Доступа к Монтажке у этого аккаунта пока нет.</p>
-    <form class="g-field" data-form="code" novalidate>
+    <p class="g-note">${REF ? '' : 'Новым — 5 дней бесплатно: всё работает и слушается прямо здесь. '}Уже купили — войдите тем же аккаунтом Google, на который активировали код.${buy ? ` ${buy}.` : ''}</p>`,
+  nopay: u => `<p>Вы вошли как <b>${E(u.email)}</b>.</p>
+    <button class="g-btn g-wide" type="button" data-act="trial">Попробовать бесплатно — 5 дней</button>
+    <p class="g-note">Всё работает и слушается прямо в браузере. Скачивать файлы — после покупки или за приглашения: каждый друг, начавший пробный период по вашей ссылке, даёт 3 скачивания.</p>
+    <p class="g-err" role="alert"></p>
+    <p class="g-or">или</p>
+    ${T.code()}
+    ${buy ? `<p class="g-note">Кода ещё нет? ${buy}.</p>` : ''}
+    <button class="g-link" type="button" data-act="switch">Войти в другой аккаунт</button>`,
+  trialOver: (u, m) => `<p>Пробный период для <b>${E(u.email)}</b> закончился ${E(dateTxt(m.trial.start + TRIAL_MS))}.</p>
+    <p class="g-note">Чтобы продолжить — купите Монтажку и введите код. Всё, что вы успели сделать, осталось в этом браузере.</p>
+    ${T.code()}
+    ${buy ? `<p class="g-note">Кода ещё нет? ${buy}.</p>` : ''}
+    <button class="g-link" type="button" data-act="switch">Войти в другой аккаунт</button>`,
+  code: () => `<form class="g-field" data-form="code" novalidate>
       <label for="g-code">Код активации</label>
       <div class="g-row"><input id="g-code" name="code" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX" aria-describedby="g-code-err"><button class="g-btn" type="submit">Активировать</button></div>
       <p class="g-err" id="g-code-err" role="alert"></p>
-    </form>
-    ${buy ? `<p class="g-note">Кода ещё нет? ${buy}.</p>` : ''}
-    <button class="g-link" type="button" data-act="switch">Войти в другой аккаунт</button>`,
+    </form>`,
   blocked: u => `<p>Доступ к Монтажке для <b>${E(u.email)}</b> отключён.</p><p class="g-note">${contact ? 'Если это ошибка — напишите нам. ' + contact : 'Если это ошибка — напишите владельцу Монтажки.'}</p>
     <button class="g-link" type="button" data-act="switch">Войти в другой аккаунт</button>`,
   nobuild: () => `<p>Доступ есть, но сама Монтажка ещё не загружена на сервер.</p><p class="g-note">Владельцу: откройте <a href="admin.html">admin.html</a> и загрузите сборку.</p>`,
@@ -179,7 +226,7 @@ function show(html) {
   const f = view.querySelector('input, button');
   if (f && (hadFocus || f.tagName === 'INPUT')) f.focus({ preventScroll: true });
 }
-const setErr = t => { const e = view.querySelector('.g-err'); if (e) e.textContent = t; };
+const setErr = (t, sel = '.g-err') => { const e = view.querySelector(sel); if (e) e.textContent = t; };
 
 // ---------------------------------------------------------------- устройство
 // Работать можно на одном устройстве за раз: у каждого браузера свой номер сессии, в базе — последний вошедший.
@@ -224,27 +271,43 @@ async function enter(user) {
   F.db('users/' + user.uid, { method: 'PATCH', body: { email: user.email, name: (user.displayName || '').slice(0, 100), seen: F.TS, ...(m.first ? {} : { first: F.TS }) }, user }).catch(() => {});
   if (meta.status === 'rejected') {
     if (meta.reason.code !== 'denied') return show(T.err('Нет связи с сервером. Проверьте интернет.'));
-    return show(m.blocked ? T.blocked(user) : T.nopay(user));
+    return show(m.blocked ? T.blocked(user) : m.trial && m.trial.start ? T.trialOver(user, m) : T.nopay(user));
   }
   if (!meta.value) return show(T.nobuild());
+  ACC.user = user; ACC.me = m; ACC.plan = m.paid ? 'paid' : trialLeft(m) > 0 ? 'trial' : 'admin';
   const sid = sidOf(user.uid);
   try { await claim(user, sid); } catch { /* не страшно: проверим при следующем опросе */ }
   load(user, meta.value, sid);
 }
 
+const BAD_CODE = 'Код не подошёл: проверьте, нет ли опечатки. Каждый код работает только для одного аккаунта.';
+/** Код активации → доступ. true — готово, false — код не подошёл; нет связи — исключение. */
+async function redeem(user, k) {
+  // 1) закрепить код за этим аккаунтом (если он уже наш — база откажет, это нормально), 2) открыть доступ
+  try { await F.db(`codes/${k}/used`, { method: 'PUT', body: { by: user.uid, at: F.TS, email: user.email }, user }); }
+  catch (e) { if (e.code !== 'denied') throw e; }
+  try { await F.db('users/' + user.uid, { method: 'PATCH', body: { code: k, paid: true }, user }); return true; }
+  catch (e) { if (e.code === 'denied') return false; throw e; }
+}
 async function activate(user, form) {
   const inp = form.code, btn = form.querySelector('button'), k = F.normCode(inp.value);
-  if (!F.okCode(k)) { setErr('В коде 16 букв и цифр, например ABCD-EFGH-JKLM-NPQR.'); inp.focus(); return; }
-  btn.disabled = true; btn.textContent = 'Проверяю…'; setErr('');
-  const back = t => { btn.disabled = false; btn.textContent = 'Активировать'; setErr(t); inp.focus(); };
+  if (!F.okCode(k)) { setErr('В коде 16 букв и цифр, например ABCD-EFGH-JKLM-NPQR.', '#g-code-err'); inp.focus(); return; }
+  btn.disabled = true; btn.textContent = 'Проверяю…'; setErr('', '#g-code-err');
+  const back = t => { btn.disabled = false; btn.textContent = 'Активировать'; setErr(t, '#g-code-err'); inp.focus(); };
+  try { if (!(await redeem(user, k))) return back(BAD_CODE); enter(user); }
+  catch (e) { back(F.authError(e)); }
+}
+/** Начать пробный период. По ссылке-приглашению — засчитать приглашение другу. */
+async function startTrial(user, btn) {
+  btn.disabled = true; btn.textContent = 'Открываю…'; setErr('');
+  const ref = REF && REF !== user.uid ? REF : '';
   try {
-    // 1) закрепить код за этим аккаунтом (если он уже наш — база откажет, это нормально), 2) открыть доступ
-    try { await F.db(`codes/${k}/used`, { method: 'PUT', body: { by: user.uid, at: F.TS, email: user.email }, user }); }
-    catch (e) { if (e.code !== 'denied') throw e; }
-    try { await F.db('users/' + user.uid, { method: 'PATCH', body: { code: k, paid: true }, user }); }
-    catch (e) { if (e.code === 'denied') return back('Код не подошёл: проверьте, нет ли опечатки. Каждый код работает только для одного аккаунта.'); throw e; }
+    try { await F.db(`users/${user.uid}/trial`, { method: 'PUT', body: ref ? { start: F.TS, ref } : { start: F.TS }, user }); }
+    catch (e) { if (e.code === 'denied' && ref) await F.db(`users/${user.uid}/trial`, { method: 'PUT', body: { start: F.TS }, user }); else throw e; }   // кривая ссылка не мешает начать
+    if (ref) await F.db('users/' + ref, { method: 'PATCH', body: { [`invited/${user.uid}`]: true, bonus: { '.sv': { increment: 1 } } }, user }).catch(() => {});
+    try { localStorage.removeItem('montage-access:ref'); } catch {}
     enter(user);
-  } catch (e) { back(F.authError(e)); }
+  } catch (e) { btn.disabled = false; btn.textContent = 'Попробовать бесплатно — 5 дней'; setErr(e.code === 'denied' ? 'Пробный период у этого аккаунта уже был.' : F.authError(e)); }
 }
 
 async function load(user, meta, sid) {
@@ -263,7 +326,9 @@ async function load(user, meta, sid) {
     cache('put', { v: meta.v, html });
   }
   if (!reduced()) { card.classList.add('g-out'); await new Promise(r => setTimeout(r, 180)); }
+  window.montageAccess = { get plan() { return ACC.plan; }, locked: () => ACC.plan === 'trial' && exportsLeft(ACC.me) <= 0, exportBegin, open: () => trialPanel() };
   inject(html, user);
+  trialChip();
   watch(user, sid);
 }
 
@@ -301,6 +366,94 @@ async function leave() {
   location.reload();
 }
 
+// ---------------------------------------------------------------- пробный период внутри Монтажки: значок, окно, скачивания
+const fire = () => dispatchEvent(new Event('montage-access'));          // Монтажка перерисует кнопки скачивания
+async function refreshMe() { try { ACC.me = (await F.db('users/' + ACC.user.uid, { user: ACC.user })) || {}; } catch {} return ACC.me; }
+function trialChip() {
+  let b = document.querySelector('.g-trial');
+  if (ACC.plan !== 'trial') { if (b) b.remove(); return; }
+  if (!b) {
+    b = document.createElement('button'); b.type = 'button'; b.className = 'g-trial'; b.addEventListener('click', () => trialPanel());
+    const mon = document.querySelector('.deck .monitor'); if (mon) mon.prepend(b); else { b.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:60'; document.body.append(b); }
+  }
+  const txt = daysTxt(trialLeft(ACC.me)), html = `<i aria-hidden="true"></i><span><span class="g-trial-l">Проба · </span>${E(txt)}</span>`;
+  if (b.innerHTML !== html) b.innerHTML = html;
+  b.setAttribute('aria-label', `Пробный период: ${txt}. Приглашения, покупка, код`);
+}
+/** Окно поверх Монтажки: затемнение, карточка, Esc и щелчок мимо закрывают, фокус возвращается. */
+function pop(html, { closable = true } = {}) {
+  const prev = document.activeElement, el = document.createElement('div');
+  el.className = 'g-lock g-pop'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-labelledby', 'g-pop-h');
+  el.innerHTML = `<div class="g-lock-card">${closable ? '<button type="button" class="g-x" data-a="close" aria-label="Закрыть">×</button>' : ''}${html}</div>`;
+  const off = [...document.body.children].filter(c => !c.inert); off.forEach(c => { c.inert = true; });
+  document.body.append(el);
+  const close = () => { if (!el.isConnected) return; off.forEach(c => { c.inert = false; }); el.remove(); document.removeEventListener('keydown', key, true); if (prev && prev.isConnected) prev.focus({ preventScroll: true }); el.onclose && el.onclose(); };
+  const key = e => { if (e.key === 'Escape' && closable) { e.preventDefault(); e.stopPropagation(); close(); } };
+  document.addEventListener('keydown', key, true);
+  el.addEventListener('click', e => { if (closable && (e.target === el || e.target.closest('[data-a="close"]'))) close(); });
+  (el.querySelector('.g-lock-card button:not(.g-x), .g-lock-card input, .g-lock-card a') || el.querySelector('button')).focus({ preventScroll: true });
+  el.close = close; return el;
+}
+function confirmPop(title, text, ok) {
+  return new Promise(res => {
+    const el = pop(`<h2 id="g-pop-h">${E(title)}</h2><p>${text}</p><div class="g-lock-row"><button type="button" class="g-lock-go" data-a="ok">${E(ok)}</button><button type="button" class="g-lock-alt" data-a="close">Отмена</button></div>`);
+    let done = false; el.onclose = () => { if (!done) res(false); };
+    el.querySelector('[data-a="ok"]').addEventListener('click', () => { done = true; el.close(); res(true); });
+  });
+}
+/** Окно пробного периода: сколько осталось, ссылка-приглашение, покупка, код. why — «скачать MP3» и т. п. */
+function trialPanel(why) {
+  const m = ACC.me, left = exportsLeft(m), inv = Math.min(MAX_INVITES, m.bonus || 0), url = inviteUrl(ACC.user.uid), tl = trialLeft(m);
+  const el = pop(`<h2 id="g-pop-h">${why ? `Скачать ${E(why)} — после покупки` : 'Пробный период'}</h2>
+    <p>${tl > 0 ? `Осталось <b>${E(daysTxt(tl))}</b> — до ${E(dateTxt(m.trial.start + TRIAL_MS))}. ` : ''}Всё работает и слушается прямо здесь. Скачивать файлы можно после покупки — или за приглашения: каждый друг, начавший пробный период по вашей ссылке, даёт ${PER_INVITE} скачивания${inv >= MAX_INVITES ? '' : ` (засчитывается до ${MAX_INVITES} друзей)`}.</p>
+    <p class="g-stat"><span>Приглашено друзей: <b>${inv}</b></span><span>Скачиваний осталось: <b>${left}</b></span></p>
+    <label class="g-lbl" for="g-inv">Ваша ссылка-приглашение</label>
+    <div class="g-in"><input id="g-inv" readonly value="${E(url)}"><button type="button" data-a="copy">Скопировать</button>${navigator.share ? '<button type="button" data-a="share">Поделиться</button>' : ''}</div>
+    <div class="g-sep"></div>
+    <form data-a="code" novalidate><label class="g-lbl" for="g-pcode">Есть код активации?</label><div class="g-in"><input id="g-pcode" name="code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX"><button type="submit">Активировать</button></div><p class="g-msg" role="alert"></p></form>
+    <div class="g-lock-row">${CFG.buyUrl ? `<a class="g-lock-go" href="${E(CFG.buyUrl)}" target="_blank" rel="noopener">Купить Монтажку</a>` : ''}<button type="button" class="g-lock-alt" data-a="close">Закрыть</button></div>`);
+  const msg = el.querySelector('.g-msg'), inp = el.querySelector('#g-pcode');
+  el.querySelector('#g-inv').addEventListener('focus', e => e.target.select());
+  el.addEventListener('click', async e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.a === 'copy') { try { await navigator.clipboard.writeText(url); } catch { const i = el.querySelector('#g-inv'); i.select(); document.execCommand('copy'); } b.textContent = 'Скопировано'; setTimeout(() => { b.textContent = 'Скопировать'; }, 1500); }
+    if (b.dataset.a === 'share') { try { await navigator.share({ title: 'Монтажка', text: 'Собираю радиоспектакль в Монтажке — попробуй 5 дней бесплатно', url }); } catch {} }
+  });
+  inp.addEventListener('input', () => { const k = F.normCode(inp.value).slice(0, 16), f = k ? F.fmtCode(k) : ''; if (f !== inp.value) inp.value = f; msg.textContent = ''; msg.className = 'g-msg'; });
+  el.querySelector('form').addEventListener('submit', async e => {
+    e.preventDefault(); const k = F.normCode(inp.value), btn = e.target.querySelector('button');
+    if (!F.okCode(k)) { msg.textContent = 'В коде 16 букв и цифр, например ABCD-EFGH-JKLM-NPQR.'; inp.focus(); return; }
+    btn.disabled = true; btn.textContent = 'Проверяю…';
+    try {
+      if (!(await redeem(ACC.user, k))) { msg.textContent = BAD_CODE; btn.disabled = false; btn.textContent = 'Активировать'; inp.focus(); return; }
+      ACC.plan = 'paid'; ACC.me.paid = true; trialChip(); fire();
+      msg.className = 'g-msg ok'; msg.textContent = 'Готово — Монтажка ваша, скачивать можно без ограничений.'; btn.textContent = 'Готово';
+      setTimeout(() => el.close(), 1400);
+    } catch (err) { msg.textContent = F.authError(err); btn.disabled = false; btn.textContent = 'Активировать'; }
+  });
+  return el;
+}
+/** Скачивание файла из Монтажки. Купившим — сразу; на пробе — за приглашения, со счётом в базе. */
+async function exportBegin(what) {
+  if (ACC.plan !== 'trial') return { commit: async () => true };
+  await refreshMe();
+  if (ACC.plan === 'trial' && ACC.me.paid) { ACC.plan = 'paid'; trialChip(); fire(); return { commit: async () => true }; }
+  if (exportsLeft(ACC.me) <= 0) { trialPanel(what); return null; }
+  const n = exportsLeft(ACC.me);
+  if (!(await confirmPop(`Скачать ${what}?`, `На пробном периоде скачивания — за приглашения. Осталось: <b>${n}</b>, после этого — ${n - 1}.`, 'Скачать'))) return null;
+  return { commit: async () => {
+    for (let i = 0; i < 2; i++) {
+      const next = (ACC.me.exports || 0) + 1;
+      try { await F.db(`users/${ACC.user.uid}/exports`, { method: 'PUT', body: next, user: ACC.user }); ACC.me.exports = next; fire(); return true; }
+      catch (e) {
+        if (e.code !== 'denied') { confirmPop('Нет связи с сервером', 'Скачивание не засчитано и не началось — проверьте интернет и попробуйте ещё раз.', 'Понятно'); return false; }
+        await refreshMe(); if (exportsLeft(ACC.me) <= 0) { trialPanel(what); return false; }     // посчитали в другой вкладке — сверяемся
+      }
+    }
+    return false;
+  } };
+}
+
 // ---------------------------------------------------------------- пока Монтажка открыта: доступ не отключён? не вошли ли с другого устройства?
 function watch(user, sid) {
   let busy = false, last = Date.now(), lockEl = null;
@@ -308,11 +461,15 @@ function watch(user, sid) {
     if (busy || lockEl || document.hidden || (!force && Date.now() - last < 15000)) return;
     busy = true; last = Date.now();
     try {
-      const [s, ok] = await Promise.all([
-        F.db(`users/${user.uid}/session/id`, { user }),
+      const [me, ok] = await Promise.all([
+        F.db('users/' + user.uid, { user }),
         F.db('app/meta/v', { user }).then(() => true, e => { if (e.code === 'denied') return false; throw e; }),
       ]);
-      if (!ok) lock('revoked');
+      const was = ACC.plan + '|' + exportsLeft(ACC.me); ACC.me = me || {};
+      if (ACC.plan === 'trial' && ACC.me.paid) ACC.plan = 'paid';                  // владелец выдал доступ — проба закончилась сама
+      trialChip(); if (was !== ACC.plan + '|' + exportsLeft(ACC.me)) fire();
+      const s = ACC.me.session && ACC.me.session.id;
+      if (!ok) lock(ACC.plan === 'trial' && trialLeft(ACC.me) <= 0 && !ACC.me.blocked ? 'trial' : 'revoked');
       else if (s && s !== sid) lock('other');
       else if (!s) await claim(user, sid);           // владелец сбросил устройство — занимаем снова
     } catch { /* нет связи — работать не мешаем */ }
@@ -323,22 +480,37 @@ function watch(user, sid) {
     lockEl = document.createElement('div');
     lockEl.className = 'g-lock';
     lockEl.setAttribute('role', 'alertdialog'); lockEl.setAttribute('aria-modal', 'true'); lockEl.setAttribute('aria-labelledby', 'g-lock-h');
-    lockEl.innerHTML = kind === 'other'
+    lockEl.innerHTML = kind === 'trial'
+      ? `<div class="g-lock-card"><h2 id="g-lock-h">Пробный период закончился</h2><p>Чтобы продолжить — купите Монтажку и введите код. Всё, что вы сделали, на месте.</p><form data-a="code" novalidate><label class="g-lbl" for="g-lcode">Код активации</label><div class="g-in"><input id="g-lcode" name="code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX"><button type="submit">Активировать</button></div><p class="g-msg" role="alert"></p></form><div class="g-lock-row">${CFG.buyUrl ? `<a class="g-lock-go" href="${E(CFG.buyUrl)}" target="_blank" rel="noopener">Купить Монтажку</a>` : ''}<button type="button" class="g-lock-alt" data-a="out">Выйти</button></div></div>`
+      : kind === 'other'
       ? `<div class="g-lock-card"><h2 id="g-lock-h">Монтажка открыта на другом устройстве</h2><p>Работать можно на одном устройстве за раз. Всё, что вы сделали здесь, на месте: продолжите — и на том устройстве Монтажка встанет на паузу.</p><div class="g-lock-row"><button type="button" class="g-lock-go" data-a="here">Продолжить здесь</button><button type="button" class="g-lock-alt" data-a="out">Выйти</button></div></div>`
       : `<div class="g-lock-card"><h2 id="g-lock-h">Доступ к Монтажке отключён</h2><p>${contact ? 'Если это ошибка — напишите нам. ' + contact : 'Если это ошибка — напишите владельцу Монтажки.'}</p><div class="g-lock-row"><button type="button" class="g-lock-alt" data-a="out">Выйти</button></div></div>`;
     const off = [...document.body.children].filter(c => !c.inert);
     off.forEach(c => { c.inert = true; });
     document.body.append(lockEl);
     document.querySelectorAll('audio, video').forEach(m => m.pause());
-    lockEl.querySelector('button').focus();
+    const unlock = () => { off.forEach(c => { c.inert = false; }); lockEl.remove(); lockEl = null; last = Date.now(); if (prev && prev.isConnected) prev.focus({ preventScroll: true }); };
+    const form = lockEl.querySelector('form');
+    if (form) {
+      const inp = form.code, msg = form.querySelector('.g-msg');
+      inp.addEventListener('input', () => { const k = F.normCode(inp.value).slice(0, 16), f = k ? F.fmtCode(k) : ''; if (f !== inp.value) inp.value = f; msg.textContent = ''; });
+      form.addEventListener('submit', async e => {
+        e.preventDefault(); const k = F.normCode(inp.value), btn = form.querySelector('button');
+        if (!F.okCode(k)) { msg.textContent = 'В коде 16 букв и цифр, например ABCD-EFGH-JKLM-NPQR.'; return; }
+        btn.disabled = true;
+        try { if (!(await redeem(user, k))) { msg.textContent = BAD_CODE; btn.disabled = false; return; } }
+        catch (err) { msg.textContent = F.authError(err); btn.disabled = false; return; }
+        ACC.plan = 'paid'; ACC.me.paid = true; trialChip(); fire(); unlock();
+      });
+    }
+    (lockEl.querySelector('input') || lockEl.querySelector('button')).focus();
     lockEl.onclick = async e => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.a === 'out') return leave();
+      if (b.dataset.a !== 'here') return;
       b.disabled = true;
       try { await claim(user, sid); } catch { b.disabled = false; return; }
-      off.forEach(c => { c.inert = false; });
-      lockEl.remove(); lockEl = null; last = Date.now();
-      if (prev && prev.isConnected) prev.focus({ preventScroll: true });
+      unlock();
     };
   }
   setInterval(() => check(), 60000);
@@ -352,6 +524,7 @@ view.addEventListener('click', async e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const a = b.dataset.act;
   if (a === 'retry') return start();
+  if (a === 'trial') { const u = await F.currentUser(); if (u) startTrial(u, b); else show(T.out()); return; }
   if (a === 'switch') { try { await F.signOut(); } catch {} return show(T.out()); }
   if (a === 'in') {
     b.disabled = true; setErr('');
