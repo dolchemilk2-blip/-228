@@ -10,10 +10,13 @@ window.SITE_CONFIG = {
      Часовые пояса берутся из базы IANA. Ваши уже стоят:
      Алматы — Asia/Almaty (UTC+5), Баку — Asia/Baku (UTC+4).
      Другие на всякий случай: Europe/Moscow, Asia/Tashkent,
-     Asia/Tbilisi, Asia/Yerevan, Asia/Dubai, Europe/Berlin.        */
+     Asia/Tbilisi, Asia/Yerevan, Asia/Dubai, Europe/Berlin.
+     airport, lat, lon — для посадочного талона и погоды на главной. */
   people: {
-    a: { name: "Дима",  emoji: "💜", city: "Алматы", timeZone: "Asia/Almaty" },
-    b: { name: "Рагим", emoji: "💙", city: "Баку",   timeZone: "Asia/Baku"   }
+    a: { name: "Дима",  emoji: "💜", city: "Алматы", timeZone: "Asia/Almaty",
+         airport: "ALA", lat: 43.2389, lon: 76.8897 },
+    b: { name: "Рагим", emoji: "💙", city: "Баку",   timeZone: "Asia/Baku",
+         airport: "GYD", lat: 40.4093, lon: 49.8671 }
   },
 
   /* ---------- 2. ВАЖНЫЕ ДАТЫ ----------
@@ -25,6 +28,8 @@ window.SITE_CONFIG = {
   meetingDate: "2027-06-01T12:00",
   // Подпись под обратным отсчётом
   meetingLabel: "до встречи",
+  // Кто летит на встречу: "a" — Дима летит в Баку. Нужно для посадочного талона.
+  traveler: "a",
 
   /* ---------- 3. ЖИВОЙ ЧАТ (Firebase) ----------
      Пока здесь пусто — чат работает в локальном режиме

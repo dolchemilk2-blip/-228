@@ -92,6 +92,12 @@ function localDriver() {
   return {
     mode: 'local',
     watch: (path, cb) => register(path, 'value', cb),
+    watchLast: (path, n, cb) => register(path, 'value', (data) => {
+      const keys = Object.keys(data).sort((x, y) => ((data[x] || {}).at || 0) - ((data[y] || {}).at || 0));
+      const out = {};
+      keys.slice(-n).forEach((k) => { out[k] = data[k]; });
+      cb(out);
+    }),
     watchAdded: (path, cb) => register(path, 'added', cb),
     async push(path, value) {
       const id = newId();
@@ -142,6 +148,10 @@ async function firebaseDriver() {
     mode: 'cloud',
     watch(path, cb) {
       return rtdb.onValue(at(path), (snap) => cb(snap.val() || {}));
+    },
+    watchLast(path, n, cb) {
+      const q = rtdb.query(at(path), rtdb.limitToLast(n));
+      return rtdb.onValue(q, (snap) => cb(snap.val() || {}));
     },
     watchAdded(path, cb) {
       return rtdb.onChildAdded(at(path), (snap) => cb(snap.key, snap.val()));
@@ -198,6 +208,7 @@ export const cloud = {
   ready: () => readyPromise,
 
   async watch(path, cb) { const d = await readyPromise; return d.watch(path, cb); },
+  async watchLast(path, n, cb) { const d = await readyPromise; return d.watchLast(path, n, cb); },
   async watchAdded(path, cb) { const d = await readyPromise; return d.watchAdded(path, cb); },
   async push(path, value) { const d = await readyPromise; return d.push(path, value); },
   async set(path, value) { const d = await readyPromise; return d.set(path, value); },
@@ -206,12 +217,12 @@ export const cloud = {
   async presence(who) { const d = await readyPromise; return d.presence(who); }
 };
 
-/* Маленький индикатор режима в шапке — если на странице есть #cloud-badge */
+/* Маленький индикатор режима — если на странице есть #cloud-badge */
 export async function renderCloudBadge() {
   const el = document.getElementById('cloud-badge');
   if (!el) return;
   el.className = 'badge';
-  el.innerHTML = '<span class="pulse dim"></span> подключаюсь…';
+  el.innerHTML = '<span class="pulse"></span> подключаюсь…';
   await readyPromise;
   if (driver.mode === 'cloud') {
     el.className = 'badge live';
@@ -219,9 +230,43 @@ export async function renderCloudBadge() {
     el.title = 'Вы оба видите одно и то же в реальном времени';
   } else {
     el.className = 'badge off';
-    el.innerHTML = '<span class="pulse dim"></span> локальный режим';
+    el.innerHTML = '<span class="pulse"></span> только этот телефон';
     el.title = CONFIGURED
       ? 'Не удалось подключиться к Firebase — данные сохраняются только в этом браузере'
       : 'Firebase ещё не настроен (см. SETUP.md) — данные сохраняются только в этом браузере';
   }
+}
+
+/* ============================================================
+   Непрочитанные: цифра на вкладке «Чат»
+   ============================================================ */
+
+const LS_READ = 'oursite:chatRead';
+
+export function markChatRead(ts) {
+  try {
+    const prev = +localStorage.getItem(LS_READ) || 0;
+    const next = Math.max(prev, ts || Date.now());
+    if (next !== prev) localStorage.setItem(LS_READ, String(next));
+  } catch (e) {}
+}
+
+export async function trackUnread(onCount) {
+  const me = (window.App && App.getMe()) || 'a';
+  await readyPromise;
+  driver.watchLast('messages', 60, (data) => {
+    let read = 0;
+    try { read = +localStorage.getItem(LS_READ) || 0; } catch (e) {}
+    // впервые на этом телефоне — старое непрочитанным не считаем
+    if (!read) { markChatRead(Date.now()); read = Date.now(); }
+    const n = Object.values(data || {}).filter((m) => m && m.by && m.by !== me && (m.at || 0) > read).length;
+    document.querySelectorAll('a[href="chat.html"]').forEach((a) => {
+      let b = a.querySelector('.tab-badge');
+      if (!n) { if (b) b.remove(); return; }
+      if (!b) { b = document.createElement('b'); b.className = 'tab-badge'; a.appendChild(b); }
+      b.textContent = n > 9 ? '9+' : String(n);
+      b.setAttribute('aria-label', n + ' новых');
+    });
+    if (onCount) onCount(n);
+  });
 }

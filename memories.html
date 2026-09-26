@@ -3,348 +3,324 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Наша история 📖</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@400;600&family=Caveat:wght@500;700&display=swap" media="print" onload="this.media='all'" />
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@400;600&family=Caveat:wght@500;700&display=swap" /></noscript>
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f3f0ec" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e0c11" />
+<title>История · Мы вдвоём</title>
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
 <link rel="stylesheet" href="assets/css/style.css" />
 <style>
-  /* --- мост между городами --- */
-  .bridge { position: relative; }
-  /* Раньше рисунок растягивался под ширину без оглядки на пропорции:
-     на телефоне дуга сплющивалась, на широком экране расползалась,
-     а точки городов превращались в овалы. Теперь пропорции держатся,
-     а ширина ограничена — иначе на мониторе мост становится огромным. */
+  /* ---------- между нами ---------- */
+  .bridge { padding: 16px 18px 16px; }
   .bridge-inner { max-width: 620px; margin: 0 auto; }
-  .bridge svg {
-    display: block; width: 100%; height: auto;
-    aspect-ratio: 600 / 150;
-    overflow: visible;
-  }
-  .bridge .dash { stroke-dasharray: 7 9; animation: dash 22s linear infinite; }
-  @keyframes dash { to { stroke-dashoffset: -320; } }
-  .plane { font-size: 22px; }
-  .bridge-cities { display: flex; justify-content: space-between; margin-top: 6px; padding: 0 2px; }
-  .bridge-cities div { text-align: center; }
-  .bridge-cities .c { font-weight: 800; }
-  .bridge-cities .t { font-size: .78rem; color: var(--text-faint); }
+  .bridge svg { display: block; width: 100%; height: auto; aspect-ratio: 600 / 130; overflow: visible; }
+  .bridge-cities { display: flex; justify-content: space-between; margin-top: 4px; }
+  .bridge-cities .c { font-weight: 600; }
+  .bridge-cities .t { font-size: var(--t-foot); color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .bridge-cities > div:last-child { text-align: right; }
+  .bridge-note { margin-top: 10px; font-size: var(--t-sub); color: var(--text-2); text-align: center; }
 
-  /* --- наша история: общая редактируемая лента --- */
-  .story { position: relative; padding-left: 42px; }
+  /* ---------- лента истории ---------- */
+  .story { position: relative; padding-left: 40px; }
   .story::before {
-    content: ''; position: absolute; left: 15px; top: 10px; bottom: 34px;
-    width: 2px; background: linear-gradient(180deg, var(--violet), var(--blue), transparent);
-    opacity: .45;
+    content: ''; position: absolute; left: 15px; top: 16px; bottom: 60px;
+    width: 2px; border-radius: 2px;
+    background: var(--sep);
   }
-
   .story-item {
-    position: relative; margin-bottom: 12px; --au: var(--violet);
-    /* соседи расступаются плавно, пока тащишь */
-    transition: transform .26s cubic-bezier(.2, .85, .25, 1);
+    position: relative; margin-bottom: 10px; --au: var(--dima);
+    transition: transform .26s var(--ease-out);
   }
-  .story-item.by-b { --au: var(--blue); }
+  .story-item.by-b { --au: var(--ragim); }
 
-  /* поднятая карточка: увеличивается, наклоняется и отбрасывает тень —
-     ощущение, что её держат в руке */
+  .story-dot {
+    position: absolute; left: -40px; top: 12px;
+    width: 32px; height: 32px; border-radius: 50%;
+    display: grid; place-items: center; font-size: .95rem;
+    background: var(--surface);
+    box-shadow: inset 0 0 0 2px var(--au), 0 0 0 4px var(--bg);
+  }
+  .story-card {
+    position: relative;
+    display: block; width: 100%; text-align: left;
+    background: var(--surface);
+    border-radius: 18px;
+    padding: 12px 14px 13px;
+    box-shadow: var(--shadow-1);
+    transition: transform var(--d-fast) var(--ease-out), box-shadow var(--d-fast);
+  }
+  button.story-card:active { transform: scale(.98); }
+  .story-top { display: flex; align-items: center; gap: 8px; font-size: var(--t-foot); }
+  .story-who { font-weight: 700; color: var(--au); white-space: nowrap; }
+  .story-date { color: var(--text-3); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .story-title { margin-top: 4px; font-family: var(--font-round); font-size: 1.06rem; font-weight: 600; line-height: 1.28; }
+  .story-text { color: var(--text-2); font-size: var(--t-callout); line-height: 1.5; margin-top: 4px; white-space: pre-wrap; }
+
+  /* режим «Порядок»: подробности прячутся, появляются ручки */
+  .story-tools { display: none; }
+  .story.ordering .story-text { display: none; }
+  .story.ordering .story-card { padding-right: 132px; }
+  .story.ordering .story-tools {
+    position: absolute; top: 50%; right: 6px; translate: 0 -50%;
+    display: flex; gap: 0;
+  }
+  .story-tools button {
+    width: 40px; height: 40px; border-radius: 12px;
+    display: grid; place-items: center;
+    color: var(--text-2);
+    transition: background var(--d-fast), transform var(--d-press) var(--ease-out);
+  }
+  .story-tools button:active { transform: scale(.9); background: var(--fill); }
+  .story-tools button:disabled { opacity: .25; }
+  .story-tools .grab { cursor: grab; touch-action: none; color: var(--text-3); }
+  .story-tools .i { width: 20px; height: 20px; }
+  .story.ordering .story-item { animation: settle-in 320ms var(--ease-out); }
+  @keyframes settle-in { from { transform: scale(.985); } }
+
+  /* поднятая карточка: будто её держат в руке */
   .story-item.lifted { z-index: 30; transition: none; }
   .story-item.lifted .story-card {
     transform: scale(1.035) rotate(var(--tilt, -.9deg));
-    background: rgba(48, 22, 82, .97);
-    border-color: rgba(255, 255, 255, .22);
-    box-shadow: 0 24px 48px rgba(0, 0, 0, .62);
-    transition: transform .18s cubic-bezier(.2, .9, .3, 1.3), box-shadow .18s, background .18s;
+    box-shadow: var(--shadow-2);
+    transition: transform .2s var(--spring), box-shadow .2s;
   }
-  .story-item.lifted .story-dot {
-    transform: scale(1.15);
-    box-shadow: 0 0 0 4px rgba(11, 2, 32, .9), 0 8px 20px rgba(0, 0, 0, .5);
-    transition: transform .18s cubic-bezier(.2, .9, .3, 1.3);
-  }
-  .story-item.lifted .story-tools { opacity: .35; transition: opacity .18s; }
+  .story-item.lifted .story-dot { transform: scale(1.12); transition: transform .2s var(--spring); }
 
-  /* след, откуда карточку подняли */
-  .story-item.gap-here .story-card { border-style: dashed; }
-
-  .story-dot {
-    position: absolute; left: -42px; top: 12px;
-    width: 32px; height: 32px; border-radius: 50%;
-    display: grid; place-items: center; font-size: .95rem;
-    background: rgba(16, 4, 36, .98);
-    border: 2px solid var(--au);
-    box-shadow: 0 0 0 4px rgba(11, 2, 32, .9);
-  }
-
-  .story-card {
-    position: relative;
-    background: var(--glass);
-    border: 1px solid var(--line);
-    border-left: 3px solid var(--au);
-    border-radius: var(--r-md);
-    padding: 13px 15px;
-    transition: border-color .2s, background .2s;
-  }
-  .story-card:hover { background: var(--glass-strong); }
-
-  /* на широком экране кнопки в углу, на телефоне — строкой снизу,
-     чтобы дата не обрезалась ради них */
-  .story-top { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; padding-right: 140px; }
-  .story-who {
-    font-size: .7rem; font-weight: 800; letter-spacing: .05em;
-    color: var(--au); white-space: nowrap;
-  }
-  .story-date {
-    font-size: .73rem; letter-spacing: .06em; text-transform: uppercase;
-    color: var(--text-faint); font-weight: 700;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .story-tools {
-    position: absolute; top: 8px; right: 9px;
-    display: flex; gap: 2px;
-  }
-  .story-tools button {
-    background: none; border: none; cursor: pointer;
-    color: var(--text-faint); font-size: 1rem;
-    width: 32px; height: 32px; border-radius: 9px;
-    display: grid; place-items: center;
-    transition: background .15s, color .15s;
-  }
-  .story-tools button:hover { background: rgba(255,255,255,.09); color: var(--text); }
-  .story-tools button:disabled { opacity: .22; cursor: default; }
-  .story-tools .grab { cursor: grab; touch-action: none; }
-  .story-tools .grab:active { cursor: grabbing; }
-
-  .story-title { font-family: var(--font-display); font-size: 1.03rem; line-height: 1.3; }
-  .story-text { color: var(--text-dim); font-size: .91rem; line-height: 1.6; margin-top: 5px; white-space: pre-wrap; }
-
-  /* кнопка «добавить» прямо в ленте — её видно сразу */
-  .story-add {
+  .add-row {
     display: flex; align-items: center; gap: 10px;
-    width: 100%; text-align: left;
-    background: none; cursor: pointer;
-    border: 1px dashed var(--line); border-radius: var(--r-md);
-    padding: 15px; color: var(--text-dim); font-weight: 700; font-size: .92rem;
-    transition: border-color .2s, color .2s, background .2s;
+    width: 100%; min-height: 50px; padding: 10px 14px;
+    color: var(--accent); font-weight: 600;
+    border-radius: 16px;
+    transition: background var(--d-fast), transform var(--d-press) var(--ease-out);
   }
-  .story-add:hover { border-color: rgba(255,94,156,.55); color: var(--text); background: rgba(255,255,255,.03); }
-  .story-add .plus {
-    width: 26px; height: 26px; border-radius: 50%; flex: none;
-    display: grid; place-items: center; font-size: 1.1rem;
-    background: linear-gradient(135deg, var(--pink), var(--violet)); color: #fff;
+  .add-row:active { background: var(--fill); transform: scale(.98); }
+  .add-row .plus {
+    width: 26px; height: 26px; border-radius: 50%;
+    display: grid; place-items: center; flex: none;
+    background: var(--accent-fill); color: #fff;
   }
+  .add-row .plus .i { width: 16px; height: 16px; stroke-width: 2.4; }
+  .story .add-row { margin-left: -40px; width: calc(100% + 40px); }
 
-  /* --- окно редактирования момента --- */
-  .story-editor { width: min(460px, 100%); text-align: left; max-height: 88vh; overflow-y: auto; }
-  .emoji-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
-    gap: 6px; max-height: 156px; overflow-y: auto; padding: 2px;
-  }
+  /* редактор момента */
+  .emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px; }
   .emoji-grid button {
-    aspect-ratio: 1; font-size: 1.2rem; cursor: pointer;
-    background: var(--glass); border: 1px solid transparent; border-radius: 10px;
-    transition: transform .15s, border-color .15s, background .15s;
+    aspect-ratio: 1; font-size: 1.3rem; border-radius: 12px;
+    background: var(--fill);
+    transition: transform 300ms var(--spring), background var(--d-fast), box-shadow var(--d-fast);
   }
-  .emoji-grid button:hover { transform: scale(1.12); background: var(--glass-strong); }
-  .emoji-grid button.picked { border-color: var(--pink); background: rgba(255,94,156,.2); }
+  .emoji-grid button:active { transform: scale(.88); }
+  .emoji-grid button[aria-pressed="true"] { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
 
-  @media (max-width: 640px) {
-    .story { padding-left: 34px; }
-    .story::before { left: 12px; }
-    .story-dot { left: -34px; width: 27px; height: 27px; font-size: .82rem; }
-    .story-top { padding-right: 0; }
-    .story-tools {
-      position: static; margin-top: 10px;
-      justify-content: flex-end; gap: 4px;
-      border-top: 1px solid var(--line-soft); padding-top: 8px;
-    }
-    .story-tools button { width: 38px; height: 38px; }
+  /* ---------- фото: сетка как в «Фото» ---------- */
+  .gallery {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px;
+    border-radius: 18px; overflow: hidden;
   }
-
-  /* --- фото --- */
-  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 12px; }
   .photo {
-    position: relative; border-radius: var(--r-md); overflow: hidden;
-    aspect-ratio: 1; cursor: pointer; border: 1px solid var(--line);
-    transition: transform .25s;
+    position: relative; aspect-ratio: 1; overflow: hidden;
+    background: var(--fill);
+    transition: opacity var(--d-fast);
   }
-  .photo:hover { transform: scale(1.03); }
-  .photo img { width: 100%; height: 100%; object-fit: cover; }
-  .photo .cap {
-    position: absolute; left: 0; right: 0; bottom: 0;
-    padding: 22px 11px 9px; font-size: .78rem; font-weight: 700;
-    background: linear-gradient(transparent, rgba(0,0,0,.85));
-  }
-  .lightbox img { max-height: 82vh; width: auto; border-radius: var(--r-md); box-shadow: var(--shadow); }
-  .lightbox p { margin-top: 14px; font-family: 'Caveat', cursive; font-size: 1.5rem; }
-
-  /* плитка «добавить фото» стоит прямо в галерее — её видно сразу */
-  .photo-add {
-    aspect-ratio: 1; border-radius: var(--r-md); cursor: pointer;
-    border: 1px dashed var(--line); background: none; color: var(--text-dim);
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
-    font-weight: 700; font-size: .84rem; text-align: center; padding: 10px;
-    transition: border-color .2s, color .2s, background .2s, transform .18s;
-  }
-  .photo-add:hover { border-color: rgba(255,94,156,.55); color: var(--text); background: rgba(255,255,255,.03); }
-  .photo-add:active { transform: scale(.96); }
-  .photo-add .plus {
-    width: 34px; height: 34px; border-radius: 50%;
-    display: grid; place-items: center; font-size: 1.3rem; color: #fff;
-    background: linear-gradient(135deg, var(--pink), var(--violet));
-  }
+  .photo img { width: 100%; height: 100%; object-fit: cover; transition: transform 300ms var(--ease-out); }
+  .photo:active img { transform: scale(.96); }
   .photo .who {
-    position: absolute; top: 7px; left: 8px;
-    font-size: .68rem; font-weight: 800; padding: 3px 7px; border-radius: 999px;
-    background: rgba(0,0,0,.55); backdrop-filter: blur(4px);
+    position: absolute; left: 6px; bottom: 6px;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--dima-fill); box-shadow: 0 0 0 2px rgba(255,255,255,.85);
   }
-  .photo.busy { opacity: .45; }
+  .photo .who[data-p="b"] { background: var(--ragim-fill); }
+  .photo.hide { opacity: 0; }
+  .photo-add {
+    aspect-ratio: 1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+    background: var(--surface);
+    color: var(--accent); font-weight: 600; font-size: var(--t-foot);
+    transition: background var(--d-fast);
+  }
+  .photo-add:active { background: var(--fill); }
+  .photo-add .i { width: 30px; height: 30px; }
 
-  /* окно открытого фото */
-  .lightbox { width: min(560px, 100%); }
-  .lightbox .lb-tools { display: flex; gap: 8px; align-items: center; margin-top: 14px; }
-  .lightbox .lb-tools input { flex: 1; }
+  /* просмотр фото: снимок вырастает из миниатюры */
+  .viewer {
+    position: fixed; inset: 0; z-index: 85;
+    display: flex; flex-direction: column;
+    touch-action: none;
+  }
+  .viewer-bg { position: absolute; inset: 0; background: #000; opacity: 0; transition: opacity 360ms ease; }
+  .viewer.open .viewer-bg { opacity: 1; }
+  .viewer-top, .viewer-bottom {
+    position: relative; z-index: 2;
+    opacity: 0; transition: opacity 260ms ease;
+    color: #fff;
+  }
+  .viewer.open .viewer-top, .viewer.open .viewer-bottom { opacity: 1; transition-delay: 120ms; }
+  .viewer-top { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+  .viewer-top .meta { flex: 1; min-width: 0; font-size: var(--t-foot); color: rgba(255,255,255,.75); }
+  .viewer-top .meta b { display: block; color: #fff; font-size: var(--t-sub); }
+  .viewer .icon-btn { background: rgba(255,255,255,.14); color: #fff; }
+  .viewer-stage { position: relative; flex: 1; min-height: 0; }
+  .viewer-img {
+    position: absolute;
+    object-fit: contain;
+    will-change: transform, clip-path;
+    transform-origin: 0 0;
+  }
+  .viewer-bottom { display: flex; gap: 8px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .viewer-bottom input {
+    flex: 1; min-height: 44px;
+    background: rgba(255,255,255,.12); color: #fff;
+    border-color: transparent;
+  }
+  .viewer-bottom input::placeholder { color: rgba(255,255,255,.55); }
+  .viewer-bottom input:focus { background: rgba(255,255,255,.18); border-color: rgba(255,255,255,.4); }
 
-  /* --- список желаний: пункты редактируются --- */
-  .wish .tools { display: flex; gap: 2px; flex: none; margin-left: 4px; }
-  .wish .tools button {
-    background: none; border: none; cursor: pointer; color: var(--text-faint);
-    width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center;
-    font-size: .92rem; transition: background .15s, color .15s;
-  }
-  .wish .tools button:hover { background: rgba(255,255,255,.09); color: var(--text); }
-  .wish-add {
-    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
-    background: none; cursor: pointer; color: var(--text-dim);
-    border: 1px dashed var(--line); border-radius: var(--r-sm);
-    padding: 13px 15px; font-weight: 700; font-size: .9rem;
-    transition: border-color .2s, color .2s, background .2s;
-  }
-  .wish-add:hover { border-color: rgba(255,94,156,.55); color: var(--text); background: rgba(255,255,255,.03); }
-  .wish-add .plus {
-    width: 23px; height: 23px; border-radius: 50%; flex: none;
-    display: grid; place-items: center; font-size: 1rem; color: #fff;
-    background: linear-gradient(135deg, var(--pink), var(--violet));
-  }
+  /* ---------- список «когда встретимся» ---------- */
+  .progress-line { display: flex; align-items: center; gap: 12px; padding: 14px 16px 6px; }
+  .progress-line .muted { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .progress { flex: 1; height: 6px; border-radius: 99px; background: var(--fill); overflow: hidden; }
+  .progress i { display: block; height: 100%; border-radius: 99px; background: var(--accent-fill); transition: width 600ms var(--ease-out); }
 
-  /* --- список желаний --- */
-  .wish {
-    display: flex; align-items: center; gap: 13px;
-    padding: 13px 15px; border-radius: var(--r-sm);
-    background: var(--glass); border: 1px solid var(--line-soft);
-    cursor: pointer; transition: background .2s, border-color .2s;
+  .wish { display: flex; align-items: center; gap: 12px; padding: 6px 12px 6px 14px; min-height: 52px; position: relative; }
+  .wish + .wish::before { content: ''; position: absolute; top: 0; right: 0; left: 52px; height: .5px; background: var(--sep); }
+  .check {
+    position: relative; flex: none;
+    width: 26px; height: 26px; border-radius: 50%;
+    box-shadow: inset 0 0 0 1.8px var(--text-3);
+    display: grid; place-items: center;
+    transition: box-shadow var(--d-fast), transform var(--d-press) var(--ease-out);
   }
-  .wish:hover { background: var(--glass-strong); border-color: var(--line); }
-  .wish .box {
-    width: 23px; height: 23px; border-radius: 7px; flex: none;
-    border: 2px solid rgba(255,255,255,.28);
-    display: grid; place-items: center; font-size: .8rem;
-    transition: background .2s, border-color .2s;
+  .check::before {
+    content: ''; position: absolute; inset: 0; border-radius: 50%;
+    background: var(--accent-fill);
+    transform: scale(0);
+    transition: transform 340ms var(--spring);
   }
-  .wish.done .box { background: linear-gradient(135deg, var(--pink), var(--violet)); border-color: transparent; }
-  .wish.done .label { text-decoration: line-through; color: var(--text-faint); }
-  .wish .label { flex: 1; line-height: 1.45; }
-  .wish .by { font-size: .7rem; color: var(--text-faint); }
+  .check svg { position: relative; width: 16px; height: 16px; color: #fff; }
+  .check path { stroke-dasharray: 22; stroke-dashoffset: 22; transition: stroke-dashoffset 260ms var(--ease-out) 80ms; }
+  .check:active { transform: scale(.88); }
+  .wish.done .check { box-shadow: none; }
+  .wish.done .check::before { transform: scale(1); }
+  .wish.done .check path { stroke-dashoffset: 0; }
+  /* хитрость: 44px зона касания вокруг маленького кружка */
+  .check::after { content: ''; position: absolute; inset: -9px; }
 
-  .progress { height: 8px; border-radius: 99px; background: rgba(0,0,0,.35); overflow: hidden; }
-  .progress i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--pink), var(--violet)); transition: width .5s ease; }
+  .wish-text {
+    flex: 1; min-width: 0; text-align: left;
+    padding: 8px 0;
+    line-height: 1.4;
+    position: relative;
+    transition: color 300ms ease;
+  }
+  .wish-text .t { position: relative; display: inline; background-image: linear-gradient(currentColor, currentColor); background-repeat: no-repeat; background-position: 0 55%; background-size: 0% 1.5px; transition: background-size 380ms var(--ease-out); }
+  .wish.done .wish-text { color: var(--text-3); }
+  .wish.done .wish-text .t { background-size: 100% 1.5px; }
+  .wish-text .by { display: block; font-size: var(--t-foot); color: var(--text-3); margin-top: 1px; }
+
+  @media (min-width: 900px) {
+    .gallery { grid-template-columns: repeat(4, 1fr); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .viewer-img { transition: none; }
+  }
 </style>
 </head>
-<body>
-
-<div id="starfield"></div>
+<body data-page="memories">
 
 <header class="topbar">
   <div class="topbar-inner">
-    <a class="brand" href="index.html"><span class="dot">💜</span> Мы&nbsp;вдвоём</a>
-    <nav class="nav">
+    <a class="brand" href="index.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#heart-fill"/></svg>Мы&nbsp;вдвоём</a>
+    <div class="bar-title" aria-hidden="true"></div>
+    <nav class="nav" aria-label="Разделы">
       <span class="nav-pill" aria-hidden="true"></span>
-      <a href="index.html" class="nav-home">Главная</a>
+      <a href="index.html">Главная</a>
       <a href="chat.html">Чат</a>
       <a href="letters.html">Письма</a>
       <a href="games.html">Игры</a>
       <a href="memories.html">История</a>
-      <a href="quest.html">Сюрприз</a>
     </nav>
-    <button class="who-chip" id="who-chip">💜</button>
+    <button class="who-chip" id="who-chip" type="button" aria-label="Сменить, кто за экраном"></button>
   </div>
 </header>
 
-<main class="shell">
+<main class="shell" id="main">
 
-  <!-- ---------- МОСТ ---------- -->
-  <section class="section" style="padding-top:34px">
-    <div class="section-head">
-      <h2>Между нами</h2>
-      <p>дорога, которая однажды закончится встречей</p>
-      <span class="badge" id="cloud-badge" style="margin-left:auto"></span>
-    </div>
-    <div class="card bridge">
-     <div class="bridge-inner">
-      <svg viewBox="0 0 600 150" aria-hidden="true">
-        <path id="arc" d="M 40 118 Q 300 -18 560 118" fill="none"
-              stroke="rgba(255,94,156,.55)" stroke-width="2" class="dash" />
-        <circle cx="40" cy="118" r="8" fill="#ff5e9c" />
-        <circle cx="560" cy="118" r="8" fill="#b445ff" />
-        <text class="plane" dy="-6">
-          <textPath href="#arc" startOffset="0%">✈️
-            <animate attributeName="startOffset" from="0%" to="100%" dur="9s" repeatCount="indefinite" />
-          </textPath>
-        </text>
+  <header class="page-head">
+    <h1 class="page-title">История</h1>
+    <p class="page-sub">Наша лента моментов, фото и планы на встречу — всё общее, правите вдвоём.</p>
+  </header>
+
+  <!-- ---------- МЕЖДУ НАМИ ---------- -->
+  <section class="card bridge" aria-label="Между нами">
+    <div class="bridge-inner">
+      <svg viewBox="0 0 600 130" aria-hidden="true">
+        <defs>
+          <linearGradient id="arcg" gradientUnits="userSpaceOnUse" x1="40" x2="560" y1="0" y2="0">
+            <stop offset="0" style="stop-color:var(--dima)" />
+            <stop offset="1" style="stop-color:var(--ragim)" />
+          </linearGradient>
+        </defs>
+        <path id="arc" d="M 40 110 Q 300 -14 560 110" fill="none" stroke="url(#arcg)" stroke-width="2.5" stroke-dasharray="2 9" stroke-linecap="round" />
+        <circle cx="40" cy="110" r="7" style="fill:var(--dima)" />
+        <circle cx="560" cy="110" r="7" style="fill:var(--ragim)" />
+        <g id="arc-plane" style="color:var(--text)">
+          <circle r="15" style="fill:var(--surface)" />
+          <use href="assets/icons.svg#plane" x="-11" y="-11" width="22" height="22" style="stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round" />
+        </g>
       </svg>
       <div class="bridge-cities">
         <div><div class="c" id="bridge-a-city">—</div><div class="t" id="bridge-a-time">--:--</div></div>
         <div><div class="c" id="bridge-b-city">—</div><div class="t" id="bridge-b-time">--:--</div></div>
       </div>
-     </div>
+      <p class="bridge-note" id="bridge-note">&nbsp;</p>
     </div>
   </section>
 
   <!-- ---------- НАША ИСТОРИЯ ---------- -->
-  <section class="section">
+  <section class="section" aria-labelledby="story-title">
     <div class="section-head">
-      <h2>Наша история</h2>
-      <p>добавляйте оба — видно, чей момент</p>
+      <h2 class="section-title" id="story-title">Наша история</h2>
+      <button class="link" type="button" id="story-order" aria-pressed="false">Порядок</button>
     </div>
-    <div class="card">
-      <div class="story" id="story"></div>
-      <p class="muted" style="margin-top:14px">
-        ✏️ — поправить или удалить · ↑ ↓ — переставить · ⠿ — перетащить.
-        Всё, что добавите, сразу увидит второй.
-      </p>
-    </div>
+    <div class="story" id="story"></div>
   </section>
 
   <!-- ---------- ФОТО ---------- -->
-  <section class="section">
+  <section class="section" aria-labelledby="photo-title">
     <div class="section-head">
-      <h2>Воспоминания в кадрах</h2>
-      <p>добавляйте оба — нажмите на фото, чтобы открыть</p>
+      <h2 class="section-title" id="photo-title">Фото</h2>
+      <span class="faint" style="font-size:var(--t-sub)" id="photo-count"></span>
     </div>
-    <div class="card">
-      <div class="gallery" id="gallery"></div>
-      <input type="file" id="photo-input" accept="image/*" multiple hidden />
-      <p class="muted mt" id="photo-note">Снимки сжимаются прямо в браузере и попадают в общую комнату — второй увидит их сразу.</p>
-    </div>
+    <div class="gallery" id="gallery"></div>
+    <input type="file" id="photo-input" accept="image/*" multiple hidden />
+    <p class="section-note" id="photo-note">Снимки сжимаются прямо на телефоне и сразу появляются у обоих.</p>
   </section>
 
   <!-- ---------- СПИСОК ЖЕЛАНИЙ ---------- -->
-  <section class="section">
-    <div class="section-head">
-      <h2>Когда встретимся</h2>
-      <p>список общий — добавляйте и правьте оба</p>
-    </div>
-    <div class="card">
-      <div class="row between" style="margin-bottom:12px">
+  <section class="section" aria-labelledby="wish-title">
+    <div class="section-head"><h2 class="section-title" id="wish-title">Когда встретимся</h2></div>
+    <div class="group">
+      <div class="progress-line">
+        <div class="progress" aria-hidden="true"><i id="wish-progress" style="width:0%"></i></div>
         <span class="muted" id="wish-progress-text">—</span>
       </div>
-      <div class="progress"><i id="wish-progress" style="width:0%"></i></div>
-      <div class="stack mt-lg" id="wishlist"></div>
+      <div id="wishlist"></div>
+      <button class="add-row" type="button" id="wish-add"><span class="plus"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#plus"/></svg></span>Добавить пункт</button>
     </div>
+    <p class="section-note">Кружок — отметить. Нажмите на текст, чтобы поправить или удалить.</p>
   </section>
 
 </main>
 
-<div class="footer">сделано с 💜</div>
+<nav class="tabbar" aria-label="Разделы">
+  <span class="tab-pill" aria-hidden="true" style="--i:4"></span>
+  <a href="index.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#home"/></svg><span>Главная</span></a>
+  <a href="chat.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#chat"/></svg><span>Чат</span></a>
+  <a href="letters.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#letter"/></svg><span>Письма</span></a>
+  <a href="games.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#games"/></svg><span>Игры</span></a>
+  <a href="memories.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#story"/></svg><span>История</span></a>
+</nav>
 
 <script src="assets/js/config.js"></script>
 <script src="assets/js/common.js"></script>

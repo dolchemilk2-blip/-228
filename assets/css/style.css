@@ -1,465 +1,961 @@
 /* ============================================================
-   Наш сайт — общая дизайн-система
+   Мы вдвоём — дизайн-система
+
+   Сначала телефон: базовые правила написаны под iPhone,
+   компьютер — надстройка в конце файла (min-width: 721px).
+
+   Тема следует за системой: днём светлая, вечером тёмная —
+   как всё остальное на телефоне. Цвет каждого из вас свой:
+   у Димы фиолетовый, у Рагима синий. Кнопки и ваши сообщения
+   окрашены в цвет того, кто держит телефон.
    ============================================================ */
 
 :root {
-  --bg-0: #08010f;
-  --bg-1: #16052e;
-  --bg-2: #2b1055;
+  color-scheme: light dark;
 
-  --pink: #ff5e9c;
-  --pink-soft: #ffb3d1;
-  --violet: #b445ff;
-  --violet-soft: #d9a6ff;
-  --gold: #ffd479;
-  --mint: #6ee7c7;
-  --blue: #5aa9ff;
+  /* ---------- светлая тема ---------- */
+  --bg:        #f3f0ec;
+  --surface:   #ffffff;
+  --surface-2: #f6f3f0;
+  --raised:    #ffffff;
+  --fill:      rgba(72, 52, 66, .075);
+  --fill-2:    rgba(72, 52, 66, .13);
+  --sep:       rgba(60, 40, 52, .13);
+  --text:      #1c1a1e;
+  --text-2:    #5c5560;
+  --text-3:    #6f6874;
 
-  --text: #f6ecff;
-  --text-dim: #c9b3e6;
-  --text-faint: #8f7bb0;
+  --dima:      #6f45d8;
+  --dima-fill: #6f45d8;
+  --dima-soft: rgba(111, 69, 216, .12);
+  --ragim:     #2266d6;
+  --ragim-fill:#2266d6;
+  --ragim-soft:rgba(34, 102, 214, .12);
+  --heart:     #d92d5b;
+  --ok:        #16864c;
+  --danger:    #d21f3c;
+  --gold:      #b7791f;
 
-  --glass: rgba(255, 255, 255, .055);
-  --glass-strong: rgba(255, 255, 255, .09);
-  --line: rgba(255, 255, 255, .12);
-  --line-soft: rgba(255, 255, 255, .07);
+  --bar-bg:    rgba(248, 246, 243, .78);
+  --bar-solid: #f8f6f3;
+  --shadow-1:  0 1px 2px rgba(40, 20, 40, .05), 0 3px 12px rgba(40, 20, 40, .05);
+  --shadow-2:  0 12px 40px rgba(30, 10, 30, .16), 0 2px 6px rgba(30, 10, 30, .06);
+  --scrim:     rgba(20, 12, 24, .32);
 
-  --r-sm: 12px;
-  --r-md: 18px;
-  --r-lg: 26px;
+  /* ---------- шрифты: системные, как в iOS ----------
+     SF Pro для текста, SF Pro Rounded для заголовков и цифр,
+     New York для писем и цитат. На других системах — ближайшие. */
+  --font:       -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-round: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-serif: ui-serif, "New York", "Iowan Old Style", Georgia, "Times New Roman", serif;
+  --font-hand:  "Caveat", ui-serif, "New York", Georgia, serif;
 
-  --shadow: 0 18px 50px rgba(0, 0, 0, .45);
-  --glow-pink: 0 0 34px rgba(255, 94, 156, .35);
+  /* ---------- размеры (1rem = 17px, как основной текст iOS) ---------- */
+  --t-caption: .72rem;
+  --t-foot:    .77rem;
+  --t-sub:     .88rem;
+  --t-callout: .94rem;
+  --t-body:    1rem;
+  --t-title3:  1.18rem;
+  --t-title2:  1.3rem;
+  --t-title1:  1.65rem;
+  --t-large:   2rem;
 
-  --font: "Manrope", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", sans-serif;
-  --font-display: "Unbounded", var(--font);
+  --gutter: 16px;
+  --r-card: 20px;
+  --r-ctrl: 12px;
+  --tabbar-h: 62px;
+  --tabbar-gap: 10px;
+
+  /* ---------- движение ----------
+     Вход — с разгона и мягкой посадкой, выход — быстрее входа.
+     Пружины — для того, что откликается на палец. */
+  --ease-out:    cubic-bezier(.23, 1, .32, 1);
+  --ease-in-out: cubic-bezier(.77, 0, .175, 1);
+  --ease-in:     cubic-bezier(.55, 0, 1, .45);
+  --ease-drawer: cubic-bezier(.32, .72, 0, 1);
+  --spring:      cubic-bezier(.34, 1.36, .64, 1);
+  --spring-soft: cubic-bezier(.3, 1.18, .6, 1);
+  --d-press: 120ms;
+  --d-fast:  180ms;
+  --d-base:  260ms;
+  --d-sheet: 460ms;
+
+  --accent:      var(--dima);
+  --accent-fill: var(--dima-fill);
+  --accent-soft: var(--dima-soft);
+  --other:       var(--ragim);
+  --other-fill:  var(--ragim-fill);
+  --other-soft:  var(--ragim-soft);
 }
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
+/* Пружина точнее, где браузер умеет linear(): лёгкий перелёт и успокоение */
+@supports (transition-timing-function: linear(0, 1)) {
+  :root {
+    --spring: linear(0, .025, .088, .176, .278, .386, .492, .593, .685, .766, .835, .893, .94, .977, 1.004, 1.024, 1.037, 1.045, 1.048, 1.049, 1.047, 1.043, 1.038, 1.033, 1.028, 1.023, 1.018, 1.014, 1.01, 1.007, 1.004, 1.002, 1.001, 1);
+    --spring-soft: linear(0, .017, .061, .125, .2, .283, .368, .452, .532, .608, .677, .739, .794, .841, .882, .917, .945, .968, .987, 1.001, 1.011, 1.019, 1.024, 1.027, 1.028, 1.027, 1.024, 1.019, 1.015, 1.01, 1.007, 1.004, 1.002, 1);
+  }
+}
 
-html { scroll-behavior: smooth; }
+/* ---------- тёмная тема ---------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:        #0e0c11;
+    --surface:   #1b1820;
+    --surface-2: #242029;
+    --raised:    #26222c;
+    --fill:      rgba(236, 226, 246, .08);
+    --fill-2:    rgba(236, 226, 246, .14);
+    --sep:       rgba(236, 226, 246, .12);
+    --text:      #f3f0f6;
+    --text-2:    #b4acbb;
+    --text-3:    #958d9d;
+
+    --dima:      #a98bff;
+    --dima-fill: #7b55e8;
+    --dima-soft: rgba(169, 139, 255, .16);
+    --ragim:     #6ca5ff;
+    --ragim-fill:#2a6bdf;
+    --ragim-soft:rgba(108, 165, 255, .16);
+    --heart:     #ff5c80;
+    --ok:        #4cd07f;
+    --danger:    #ff5a6e;
+    --gold:      #e8b04a;
+
+    --bar-bg:    rgba(24, 21, 28, .74);
+    --bar-solid: #18151c;
+    --shadow-1:  0 1px 2px rgba(0, 0, 0, .35);
+    --shadow-2:  0 16px 48px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .3);
+    --scrim:     rgba(0, 0, 0, .5);
+  }
+}
+
+/* Цвет того, кто держит телефон */
+html[data-me="b"] {
+  --accent:      var(--ragim);
+  --accent-fill: var(--ragim-fill);
+  --accent-soft: var(--ragim-soft);
+  --other:       var(--dima);
+  --other-fill:  var(--dima-fill);
+  --other-soft:  var(--dima-soft);
+}
+
+/* ============================================================
+   Основа
+   ============================================================ */
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html {
+  font-size: 106.25%;               /* 17px — основной размер iOS */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  background: var(--bg);
+  accent-color: var(--accent);
+  scrollbar-color: var(--fill-2) transparent;
+}
+/* На телефоне берём размер текста из настроек iOS
+   («Размер текста» в Настройках) — сайт растёт вместе с ним */
+@supports (font: -apple-system-body) {
+  @media (pointer: coarse) {
+    html { font: -apple-system-body; }
+  }
+}
 
 body {
   min-height: 100vh;
+  min-height: 100dvh;
   font-family: var(--font);
+  font-size: var(--t-body);
+  line-height: 1.4;
+  letter-spacing: -.01em;
   color: var(--text);
-  background: var(--bg-0);
-  -webkit-tap-highlight-color: transparent;
+  background: var(--bg);
   overflow-x: hidden;
+  caret-color: var(--accent);
+  -webkit-font-smoothing: antialiased;
+  font-kerning: normal;
 }
 
-/* Фон отдельным закреплённым слоем, а не background-attachment: fixed —
-   тот не закрашивает длинные страницы и подтормаживает на iOS. */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background:
-    radial-gradient(ellipse 90% 60% at 15% 0%, #3a1566 0%, transparent 60%),
-    radial-gradient(ellipse 80% 60% at 90% 10%, #4a1145 0%, transparent 55%),
-    radial-gradient(ellipse 120% 80% at 50% 100%, #1d0838 0%, transparent 60%),
-    linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
-}
+::selection { background: var(--accent-soft); color: inherit; }
 
-img { max-width: 100%; display: block; }
+img, svg { display: block; max-width: 100%; }
 a { color: inherit; text-decoration: none; }
-button, input, textarea, select { font-family: inherit; font-size: inherit; color: inherit; }
+button, input, textarea, select { font: inherit; color: inherit; letter-spacing: inherit; }
+button { background: none; border: 0; cursor: pointer; }
 
-::selection { background: rgba(255, 94, 156, .35); }
-
-/* ---------- звёздное небо ---------- */
-#starfield { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
-.star {
-  position: absolute;
-  border-radius: 50%;
-  background: #fff;
-  animation: twinkle 4s ease-in-out infinite;
-}
-@keyframes twinkle {
-  0%, 100% { opacity: .12; transform: scale(.7); }
-  50%      { opacity: .85; transform: scale(1.2); }
+/* Кнопки на телефоне: без задержки нажатия, без выделения текста */
+button, a, [role="button"], .pressable, label {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
-/* ---------- каркас ---------- */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2.5px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+h1, h2, h3 { font-weight: 700; line-height: 1.18; letter-spacing: -.02em; text-wrap: balance; }
+p { text-wrap: pretty; }
+
+.i {
+  width: 1.3em; height: 1.3em;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  overflow: visible;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  overflow: hidden; clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.hidden { display: none !important; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   Каркас страницы
+   ============================================================ */
+
 .shell {
-  position: relative;
-  z-index: 1;
-  width: min(1120px, 100%);
+  width: 100%;
+  max-width: 760px;
   margin: 0 auto;
-  padding: 0 20px 90px;
+  padding: 4px var(--gutter) calc(var(--tabbar-h) + var(--tabbar-gap) + 40px);
 }
 
-/* ---------- шапка ---------- */
+/* Большой заголовок, как в приложениях iOS.
+   Когда он уезжает под шапку, в шапке проявляется маленький. */
+.page-head { padding: 6px 2px 18px; }
+.page-title {
+  font-family: var(--font-round);
+  font-size: var(--t-large);
+  font-weight: 700;
+  letter-spacing: -.025em;
+  line-height: 1.12;
+}
+.page-sub {
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: var(--t-callout);
+  line-height: 1.45;
+}
+
+.section { margin-top: 30px; }
+.section-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 0 4px 10px;
+}
+.section-title { font-size: var(--t-title3); font-weight: 700; letter-spacing: -.02em; }
+.section-note { color: var(--text-2); font-size: var(--t-sub); padding: 10px 4px 0; line-height: 1.45; }
+.link {
+  color: var(--accent); font-size: var(--t-callout); font-weight: 600;
+  padding: 10px 6px; margin: -10px -6px;       /* зона касания больше, чем текст */
+  border-radius: 10px;
+  transition: opacity var(--d-fast);
+}
+.link:active { opacity: .5; }
+
+/* ============================================================
+   Шапка
+   ============================================================ */
+
 .topbar {
   position: sticky;
   top: 0;
   z-index: 40;
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  background: rgba(11, 2, 32, .72);
-  border-bottom: 1px solid var(--line-soft);
+  view-transition-name: topbar;
 }
-.topbar-inner {
-  width: min(1120px, 100%);
-  margin: 0 auto;
-  padding: 12px 20px;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-}
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 1rem;
-  white-space: nowrap;
-}
-.brand span.dot { font-size: 1.15rem; }
-
-.nav {
-  position: relative;
-  isolation: isolate;
-  display: flex;
-  gap: 4px;
-  margin-left: auto;
-  overflow-x: auto;
-  scrollbar-width: none;
-  /* если пункты не влезают — правый край плавно тает, показывая, что есть прокрутка */
-  mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent);
-  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent);
-}
-.nav::-webkit-scrollbar { display: none; }
-.nav a {
-  padding: 8px 14px;
-  border-radius: 999px;
-  font-size: .9rem;
-  font-weight: 600;
-  color: var(--text-dim);
-  white-space: nowrap;
-  transition: background .2s, color .2s;
-}
-.nav a:hover { background: var(--glass); color: var(--text); }
-/* Подсветку активной вкладки рисует отдельная «пилюля» — так она может
-   переезжать с вкладки на вкладку. Цвет текста оставлен и на самой
-   ссылке: если скрипт не отработает, активная вкладка всё равно видна. */
-.nav a.active { color: #fff; }
-
-.nav-pill {
-  position: absolute;
-  top: 0; left: 0; height: 100%;
-  width: var(--pill-w, 0px);
-  border-radius: 999px;
-  background: linear-gradient(135deg, rgba(255, 94, 156, .25), rgba(180, 69, 255, .25));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14);
-  transform: translate3d(var(--pill-x, 0px), 0, 0);
+.topbar::before {
+  /* материал шапки проявляется, когда под неё уехал контент */
+  content: '';
+  position: absolute; inset: 0;
+  background: var(--bar-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: .5px solid var(--sep);
   opacity: 0;
+  transition: opacity var(--d-base) ease;
   pointer-events: none;
-  z-index: -1;
 }
-.nav-pill.on { opacity: 1; }
-.nav-pill.glide {
-  transition: transform .46s cubic-bezier(.22, 1, .3, 1),
-              width .46s cubic-bezier(.22, 1, .3, 1),
-              opacity .25s ease;
-}
+.topbar.scrolled::before { opacity: 1; }
 
-/* ---------- смена страниц ----------
-   Двигаем только прозрачностью: transform на общем контейнере
-   сломал бы закреплённое окно чата. */
-.shell, .topbar { animation: page-in .4s cubic-bezier(.2, .85, .25, 1); }
-@keyframes page-in { from { opacity: 0; } }
-
-body:not([data-page="chat"]) .shell { animation-name: page-in-lift; }
-@keyframes page-in-lift {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: none; }
-}
-
-html.leaving .shell { opacity: 0; transition: opacity .19s ease; }
-html.leaving .topbar { opacity: .55; transition: opacity .19s ease; }
-
-.who-chip {
+.topbar-inner {
+  position: relative;
+  max-width: 1080px;
+  margin: 0 auto;
+  height: 48px;
+  padding: 0 calc(var(--gutter) - 4px);
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 7px 13px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--glass);
-  cursor: pointer;
-  font-size: .85rem;
+  gap: 12px;
+}
+
+.bar-title {
+  position: absolute; left: 50%; top: 50%;
+  translate: -50% -50%;
+  max-width: 60%;
+  font-size: var(--t-body);
   font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity var(--d-fast) ease, transform var(--d-base) var(--ease-out);
+  pointer-events: none;
+}
+.topbar.scrolled .bar-title { opacity: 1; transform: none; }
+
+.brand {
+  display: none;
+  align-items: center; gap: 8px;
+  font-family: var(--font-round);
+  font-weight: 700;
+  font-size: var(--t-body);
+  letter-spacing: -.02em;
   white-space: nowrap;
-  transition: background .2s, transform .2s;
 }
-.who-chip:hover { background: var(--glass-strong); transform: translateY(-1px); }
+.brand .i { color: var(--heart); width: 1.2em; height: 1.2em; }
 
-/* ---------- типографика ---------- */
-.eyebrow {
-  font-size: .74rem;
-  font-weight: 700;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-h1, h2, h3 { font-family: var(--font-display); font-weight: 600; line-height: 1.2; }
-h1 { font-size: clamp(1.9rem, 6vw, 3.4rem); }
-h2 { font-size: clamp(1.3rem, 3.6vw, 1.9rem); }
-h3 { font-size: 1.06rem; }
+.nav { display: none; }
 
-.grad-text {
-  background: linear-gradient(100deg, #ffd1e8, var(--pink), var(--violet-soft), var(--pink));
-  background-size: 260% auto;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: shine 7s linear infinite;
-}
-@keyframes shine { to { background-position: 260% center; } }
-
-.lead { color: var(--text-dim); font-size: 1.03rem; line-height: 1.65; }
-.muted { color: var(--text-faint); font-size: .85rem; line-height: 1.55; }
-
-/* ---------- секции ---------- */
-.section { padding-top: 54px; }
-.section-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 20px; }
-.section-head p { color: var(--text-faint); font-size: .88rem; }
-
-/* ---------- карточки ---------- */
-.card {
-  background: var(--glass);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  padding: 24px;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: var(--shadow);
-}
-.card.tight { padding: 18px; border-radius: var(--r-md); }
-.card.hoverable { transition: transform .25s ease, border-color .25s ease; }
-.card.hoverable:hover { transform: translateY(-4px); border-color: rgba(255, 94, 156, .4); }
-
-/* Колонки заданы явно: auto-fit на широком экране расползался
-   в лишние колонки и ломал ритм страницы. */
-.grid { display: grid; gap: 16px; grid-template-columns: 1fr; }
-.grid.start { align-items: start; }
-.grid.four { grid-template-columns: repeat(2, 1fr); }
-
-@media (min-width: 680px) {
-  .grid.two   { grid-template-columns: repeat(2, 1fr); }
-  .grid.three { grid-template-columns: repeat(2, 1fr); }
-}
-@media (min-width: 940px) {
-  .grid.three { grid-template-columns: repeat(3, 1fr); }
-  .grid.four  { grid-template-columns: repeat(4, 1fr); }
-}
-
-/* ---------- кнопки ---------- */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: .95rem;
-  font-weight: 700;
-  color: #fff;
-  background: linear-gradient(135deg, var(--pink), var(--violet));
-  border: none;
+/* кто держит телефон — аватар справа */
+.who-chip {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px;
   border-radius: 999px;
-  padding: 13px 26px;
-  cursor: pointer;
-  box-shadow: 0 10px 30px rgba(255, 94, 156, .32);
-  transition: transform .18s ease, box-shadow .18s ease, opacity .18s;
+  font-size: var(--t-sub);
+  font-weight: 600;
+  transition: transform var(--d-press) var(--ease-out), background var(--d-fast);
 }
-.btn:hover { transform: translateY(-2px); box-shadow: 0 14px 38px rgba(255, 94, 156, .48); }
+.who-chip:active { transform: scale(.94); }
+.who-chip .who-name { display: none; }
+
+.ava {
+  --p: var(--dima-fill);
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  flex: none;
+  background: var(--p);
+  color: #fff;
+  font-family: var(--font-round);
+  font-weight: 700;
+  font-size: .9rem;
+  letter-spacing: 0;
+  position: relative;
+}
+.ava[data-p="b"] { --p: var(--ragim-fill); }
+.ava.lg { width: 44px; height: 44px; font-size: 1.05rem; }
+.ava.sm { width: 26px; height: 26px; font-size: .7rem; }
+/* зелёная точка «на сайте» */
+.ava .online-dot {
+  position: absolute; right: -1px; bottom: -1px;
+  width: 30%; height: 30%; min-width: 10px; min-height: 10px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 2.5px var(--surface);
+  transform: scale(0);
+  transition: transform 300ms var(--spring);
+}
+.ava.is-online .online-dot { transform: scale(1); }
+
+/* ============================================================
+   Нижняя панель вкладок (телефон)
+   Плавающая капсула, как в iOS 26. Подсветка переезжает
+   с прошлой вкладки на новую.
+   ============================================================ */
+
+.tabbar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tabbar-gap) + env(safe-area-inset-bottom, 0px));
+  z-index: 50;
+  width: min(calc(100% - 24px), 440px);
+  height: var(--tabbar-h);
+  translate: -50% 0;
+  padding: 5px;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  border-radius: 999px;
+  background: var(--bar-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(22px);
+  backdrop-filter: saturate(180%) blur(22px);
+  box-shadow: var(--shadow-2), inset 0 0 0 .5px var(--sep);
+  view-transition-name: tabbar;
+}
+.tabbar a {
+  position: relative;
+  z-index: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px;
+  border-radius: 999px;
+  color: var(--text-2);
+  font-size: .62rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  transition: color var(--d-fast) ease, transform var(--d-press) var(--ease-out);
+}
+.tabbar a .i { width: 25px; height: 25px; }
+.tabbar a:active { transform: scale(.9); }
+.tabbar a[aria-current="page"] { color: var(--accent); }
+/* значок активной вкладки делает маленький упругий «вдох» */
+.tabbar a[aria-current="page"] .i { animation: tab-bounce 520ms var(--spring) both; }
+@keyframes tab-bounce { from { transform: scale(.82); } }
+
+.tab-pill {
+  position: absolute;
+  top: 5px; bottom: 5px; left: 5px;
+  width: calc((100% - 10px) / 5);
+  border-radius: 999px;
+  background: var(--fill);
+  transform: translateX(calc(var(--i, 0) * 100%));
+  view-transition-name: tab-pill;
+}
+.tab-pill.glide { transition: transform 440ms var(--ease-drawer); }
+
+.tab-badge {
+  position: absolute;
+  top: 4px; left: calc(50% + 6px);
+  min-width: 18px; height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--heart);
+  color: #fff;
+  font-size: .64rem; font-weight: 700;
+  line-height: 18px; text-align: center;
+  box-shadow: 0 0 0 2px var(--bar-solid);
+  animation: badge-in 420ms var(--spring) both;
+}
+@keyframes badge-in { from { transform: scale(.4); opacity: 0; } }
+
+/* ============================================================
+   Поверхности
+   ============================================================ */
+
+.card {
+  background: var(--surface);
+  border-radius: var(--r-card);
+  padding: 18px;
+  box-shadow: var(--shadow-1);
+}
+.card + .card { margin-top: 12px; }
+
+/* Сгруппированный список, как в Настройках */
+.group {
+  background: var(--surface);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+.row-item {
+  position: relative;
+  display: flex; align-items: center; gap: 12px;
+  min-height: 52px;
+  padding: 10px 16px;
+  width: 100%;
+  text-align: left;
+}
+.row-item + .row-item::before {
+  content: '';
+  position: absolute; top: 0; right: 0;
+  left: var(--sep-inset, 16px);
+  height: .5px;
+  background: var(--sep);
+}
+a.row-item, button.row-item { transition: background var(--d-fast) ease; }
+a.row-item:active, button.row-item:active { background: var(--fill); transition-duration: 0s; }
+.row-item .grow { flex: 1; min-width: 0; }
+.row-item .title { font-weight: 600; }
+.row-item .sub { color: var(--text-2); font-size: var(--t-sub); margin-top: 1px; }
+.row-item .tail { color: var(--text-3); display: flex; align-items: center; gap: 4px; font-size: var(--t-sub); }
+.row-icon {
+  width: 32px; height: 32px; border-radius: 9px;
+  display: grid; place-items: center;
+  flex: none;
+  color: #fff;
+  background: var(--accent-fill);
+}
+.row-icon .i { width: 20px; height: 20px; }
+
+.muted { color: var(--text-2); font-size: var(--t-sub); line-height: 1.45; }
+.faint { color: var(--text-3); }
+
+/* ============================================================
+   Кнопки
+   ============================================================ */
+
+.btn {
+  --b-bg: var(--accent-fill);
+  --b-fg: #fff;
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 48px;
+  padding: 12px 22px;
+  border-radius: 999px;
+  background: var(--b-bg);
+  color: var(--b-fg);
+  font-size: var(--t-body);
+  font-weight: 600;
+  letter-spacing: -.01em;
+  white-space: nowrap;
+  transition:
+    transform var(--d-fast) var(--ease-out),
+    background-color var(--d-fast) ease,
+    opacity var(--d-fast) ease,
+    filter var(--d-fast) ease;
+}
+.btn .i { width: 1.15em; height: 1.15em; }
+/* палец коснулся — кнопка сразу отвечает */
 .btn:active { transform: scale(.97); }
-.btn:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: none; }
+.btn:disabled { opacity: .4; cursor: default; transform: none; }
 
-.btn.ghost {
-  background: var(--glass);
-  border: 1px solid var(--line);
-  box-shadow: none;
-  color: var(--text);
+.btn.tinted { --b-bg: var(--accent-soft); --b-fg: var(--accent); }
+.btn.gray   { --b-bg: var(--fill); --b-fg: var(--text); }
+.btn.plain  { --b-bg: transparent; --b-fg: var(--accent); padding-left: 10px; padding-right: 10px; }
+.btn.danger { --b-bg: transparent; --b-fg: var(--danger); }
+.btn.small  { min-height: 36px; padding: 7px 15px; font-size: var(--t-callout); }
+.btn.block  { width: 100%; }
+
+.icon-btn {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  flex: none;
+  color: var(--accent);
+  background: var(--fill);
+  transition: transform var(--d-press) var(--ease-out), background var(--d-fast);
 }
-.btn.ghost:hover { background: var(--glass-strong); box-shadow: none; }
-.btn.small { padding: 9px 17px; font-size: .84rem; }
-.btn.block { width: 100%; }
+.icon-btn:active { transform: scale(.9); }
+.icon-btn.clear { background: transparent; }
+.icon-btn .i { width: 22px; height: 22px; }
 
-/* ---------- поля ---------- */
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.btn-row.stretch > .btn { flex: 1; }
+
+/* ============================================================
+   Поля ввода
+   ============================================================ */
+
 .field { display: flex; flex-direction: column; gap: 7px; }
-.field label { font-size: .8rem; font-weight: 700; color: var(--text-dim); }
+.field label, .field .label {
+  font-size: var(--t-sub);
+  font-weight: 600;
+  color: var(--text-2);
+  padding-left: 4px;
+}
+.input,
 input[type="text"], input[type="date"], input[type="datetime-local"], textarea, select {
   width: 100%;
-  background: rgba(0, 0, 0, .28);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
+  min-height: 48px;
+  background: var(--fill);
+  border: 1.5px solid transparent;
+  border-radius: var(--r-ctrl);
   padding: 12px 14px;
+  font-size: max(16px, 1rem);       /* меньше 16px — iOS приближает страницу */
   outline: none;
-  transition: border-color .2s, background .2s;
+  transition: border-color var(--d-fast) ease, background-color var(--d-fast) ease;
+  -webkit-appearance: none;
+  appearance: none;
 }
+/* у полей своя подсветка рамкой — второе кольцо фокуса не нужно */
+input:focus-visible, textarea:focus-visible, select:focus-visible { outline: none; }
 input:focus, textarea:focus, select:focus {
-  border-color: rgba(255, 94, 156, .6);
-  background: rgba(0, 0, 0, .4);
+  border-color: var(--accent);
+  background: var(--surface);
 }
-textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
-input::placeholder, textarea::placeholder { color: var(--text-faint); }
+textarea { resize: vertical; min-height: 120px; line-height: 1.5; }
+input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
+.hint { color: var(--text-3); font-size: var(--t-foot); padding-left: 4px; line-height: 1.4; }
 
-/* ---------- бейджи / статусы ---------- */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-radius: 999px;
-  font-size: .76rem;
-  font-weight: 700;
-  background: var(--glass);
-  border: 1px solid var(--line);
-  color: var(--text-dim);
+/* ============================================================
+   Сегменты (переключатель, как в iOS)
+   ============================================================ */
+
+.segmented {
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--fill);
+  isolation: isolate;
 }
-.badge.live { border-color: rgba(110, 231, 199, .45); color: var(--mint); }
-.badge.off  { border-color: rgba(255, 255, 255, .1); color: var(--text-faint); }
+.segmented button {
+  position: relative;
+  z-index: 1;
+  min-height: 36px;
+  padding: 6px 8px;
+  border-radius: 9px;
+  font-size: var(--t-sub);
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+  transition: color var(--d-fast) ease;
+}
+.segmented button[aria-pressed="true"] { color: var(--text); }
+.segmented .thumb {
+  position: absolute;
+  z-index: 0;
+  top: 3px; bottom: 3px; left: 3px;
+  width: calc((100% - 6px) / var(--n, 4));
+  border-radius: 9px;
+  background: var(--raised);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .12), 0 0 0 .5px rgba(0, 0, 0, .04);
+  transform: translateX(calc(var(--i, 0) * 100%));
+  transition: transform 380ms var(--spring-soft);
+}
+
+/* ============================================================
+   Статусы
+   ============================================================ */
+
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: var(--t-foot);
+  font-weight: 600;
+  background: var(--fill);
+  color: var(--text-2);
+}
+.badge.live { color: var(--ok); }
 .pulse {
   width: 7px; height: 7px; border-radius: 50%;
-  background: var(--mint);
-  box-shadow: 0 0 0 0 rgba(110, 231, 199, .7);
-  animation: pulse 2s infinite;
+  background: currentColor;
 }
-.pulse.dim { background: var(--text-faint); animation: none; box-shadow: none; }
-@keyframes pulse {
-  70%  { box-shadow: 0 0 0 9px rgba(110, 231, 199, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(110, 231, 199, 0); }
-}
+.badge.live .pulse { animation: breathe 2.4s ease-in-out infinite; }
+@keyframes breathe { 50% { opacity: .35; } }
 
-/* ---------- уведомления ---------- */
+/* ============================================================
+   Шторка снизу (телефон) и окно по центру (компьютер)
+   ============================================================ */
+
+.sheet-layer {
+  /* Слой повторяет видимую часть экрана: когда поднимается клавиатура,
+     он ужимается вместе с ней — и шторка стоит ровно над клавиатурой. */
+  position: fixed;
+  left: 0; right: 0;
+  top: var(--vv-top, 0px);
+  height: var(--vv-h, 100dvh);
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.sheet-scrim {
+  position: fixed; inset: -100px 0;
+  background: var(--scrim);
+  opacity: 0;
+  transition: opacity var(--d-sheet) ease;
+}
+.sheet-layer.open .sheet-scrim { opacity: 1; }
+
+.sheet {
+  position: relative;
+  width: 100%;
+  max-height: calc(100% - 12px);
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  border-radius: 26px 26px 0 0;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, .18);
+  transform: translateY(100%);
+  transition: transform var(--d-sheet) var(--ease-drawer);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  outline: none;
+}
+.sheet-layer.open .sheet { transform: translateY(var(--drag, 0px)); }
+.sheet.dragging { transition: none; }
+
+.sheet-grab {
+  flex: none;
+  display: grid; place-items: center;
+  height: 22px;
+  cursor: grab;
+  touch-action: none;
+}
+.sheet-grab::before {
+  content: '';
+  width: 38px; height: 5px;
+  border-radius: 999px;
+  background: var(--fill-2);
+}
+.sheet-head {
+  flex: none;
+  display: flex; align-items: center; gap: 10px;
+  padding: 2px 16px 10px 20px;
+  touch-action: none;
+}
+.sheet-head h2 { flex: 1; font-size: var(--t-title3); }
+.sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 20px 22px;
+}
+.sheet-foot {
+  flex: none;
+  display: flex; gap: 10px;
+  padding: 10px 20px 16px;
+  border-top: .5px solid var(--sep);
+}
+.sheet-foot .btn { flex: 1; }
+
+html.sheet-open, html.sheet-open body { overflow: hidden; }
+
+/* ============================================================
+   Уведомления снизу — с кнопкой «Вернуть», если что-то удалили
+   ============================================================ */
+
 #toasts {
   position: fixed;
   left: 50%;
-  bottom: 26px;
-  transform: translateX(-50%);
+  bottom: calc(var(--tabbar-h) + var(--tabbar-gap) + 12px + env(safe-area-inset-bottom, 0px));
+  translate: -50% 0;
   z-index: 90;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  align-items: center;
+  width: min(calc(100% - 32px), 420px);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
   pointer-events: none;
-  width: min(440px, calc(100% - 32px));
 }
+body[data-page="chat"] #toasts,
+body[data-page="quest"] #toasts { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+
 .toast {
-  background: rgba(30, 8, 56, .93);
-  border: 1px solid var(--line);
+  display: flex; align-items: center; gap: 12px;
+  max-width: 100%;
+  min-height: 48px;
+  padding: 10px 10px 10px 18px;
   border-radius: 999px;
-  padding: 12px 22px;
-  font-size: .89rem;
+  background: var(--bar-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: var(--shadow-2), inset 0 0 0 .5px var(--sep);
+  font-size: var(--t-callout);
   font-weight: 600;
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(12px);
-  animation: toast-in .35s cubic-bezier(.2, .9, .3, 1.3);
-  text-align: center;
+  pointer-events: auto;
+  /* переход, а не анимация: новые уведомления приходят пачкой,
+     и переход продолжит движение с того места, где был */
+  opacity: 0;
+  transform: translateY(14px) scale(.96);
+  filter: blur(3px);
+  transition:
+    opacity 360ms var(--ease-out),
+    transform 460ms var(--spring-soft),
+    filter 300ms var(--ease-out);
 }
-@keyframes toast-in { from { opacity: 0; transform: translateY(18px) scale(.94); } }
+.toast.no-action { padding-right: 18px; }
+.toast.in { opacity: 1; transform: none; filter: none; }
+.toast.out {
+  opacity: 0;
+  transform: translateY(6px) scale(.97);
+  transition: opacity 180ms var(--ease-in), transform 200ms var(--ease-in);
+}
+.toast .t-text { flex: 1; min-width: 0; }
+.toast .t-action {
+  flex: none;
+  min-height: 34px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: var(--t-sub);
+  transition: transform var(--d-press) var(--ease-out);
+}
+.toast .t-action:active { transform: scale(.94); }
 
-/* ---------- модалка ---------- */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  background: rgba(6, 1, 18, .82);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 22px;
-  animation: fade .3s ease;
-}
-@keyframes fade { from { opacity: 0; } }
-.modal {
-  width: min(430px, 100%);
-  text-align: center;
-  animation: pop .35s cubic-bezier(.2, .9, .3, 1.25);
-}
+/* ============================================================
+   Праздник: вспышка и дождь из сердечек
+   ============================================================ */
 
-/* Карточки внутри модалок — непрозрачные. Полупрозрачное «стекло» поверх
-   затемнённой страницы читается плохо, а вложенный backdrop-filter
-   срабатывает не во всех браузерах. */
-.modal-backdrop .card {
-  background: linear-gradient(180deg, #241041, #150629);
-  border-color: rgba(255, 255, 255, .16);
-}
-@keyframes pop { from { opacity: 0; transform: translateY(22px) scale(.95); } }
-
-/* ---------- анимации-эмоции ---------- */
 .fly-heart {
   position: fixed;
-  bottom: -70px;
+  bottom: -60px;
   z-index: 60;
   pointer-events: none;
   animation: fly linear forwards;
 }
-@keyframes fly { to { transform: translateY(-118vh) rotate(340deg); opacity: 0; } }
+@keyframes fly { to { transform: translateY(-115vh) rotate(160deg); opacity: 0; } }
 
 .burst-piece {
   position: fixed;
   z-index: 70;
   pointer-events: none;
-  animation: burst 1s ease-out forwards;
+  translate: -50% -50%;
+  animation: burst 900ms var(--ease-out) forwards;
 }
 @keyframes burst {
-  to { transform: translate(var(--dx), var(--dy)) scale(.35) rotate(230deg); opacity: 0; }
+  0%   { transform: scale(.6); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(.5) rotate(var(--rot, 90deg)); opacity: 0; }
 }
 
-/* ---------- плавное появление при прокрутке ----------
-   Класс навешивается скриптом, поэтому без JS всё видно сразу. */
-.reveal { opacity: 0; transform: translateY(18px); }
-.reveal.in {
-  opacity: 1; transform: none;
-  transition: opacity .5s ease, transform .6s cubic-bezier(.2, .85, .25, 1);
+/* ============================================================
+   Переходы между страницами
+
+   Где браузер умеет (Safari 18.2+, Chrome 126+), страницы сменяются
+   как экраны приложения: панель вкладок стоит на месте, подсветка
+   перетекает на новую вкладку, а содержимое мягко проявляется.
+   ============================================================ */
+
+@view-transition { navigation: auto; }
+
+::view-transition-old(root) { animation: vt-out 150ms var(--ease-in) both; }
+::view-transition-new(root) { animation: vt-in 300ms var(--ease-out) both; }
+@keyframes vt-out { to { opacity: 0; } }
+@keyframes vt-in { from { opacity: 0; transform: translateY(8px); } }
+
+::view-transition-group(tab-pill),
+::view-transition-group(nav-pill) {
+  animation-duration: 440ms;
+  animation-timing-function: var(--ease-drawer);
+}
+/* панели не мигают: новая просто встаёт на место старой */
+::view-transition-group(tabbar),
+::view-transition-group(topbar) { animation-duration: 0s; }
+::view-transition-old(tabbar),
+::view-transition-old(topbar) { animation: none; opacity: 0; }
+::view-transition-new(tabbar),
+::view-transition-new(topbar) { animation: none; }
+
+/* запасной вариант для браузеров без View Transitions */
+html.no-vt .shell { animation: page-in 320ms var(--ease-out) both; }
+@keyframes page-in { from { opacity: 0; transform: translateY(8px); } }
+html.no-vt.leaving .shell { opacity: 0; transition: opacity 150ms var(--ease-in); }
+
+/* ============================================================
+   Компьютер и планшет
+   ============================================================ */
+
+@media (min-width: 721px) {
+  :root { --gutter: 24px; --tabbar-h: 0px; --tabbar-gap: 0px; }
+
+  .tabbar { display: none; }
+  .shell { padding-top: 12px; padding-bottom: 72px; }
+
+  .topbar::before { opacity: 1; }
+  .topbar-inner { height: 60px; }
+  .bar-title { display: none; }
+  .brand { display: flex; }
+
+  .nav {
+    position: relative;
+    display: flex; gap: 2px;
+    margin: 0 auto;
+    padding: 4px;
+    border-radius: 999px;
+    background: var(--fill);
+    isolation: isolate;
+  }
+  .nav a {
+    position: relative; z-index: 1;
+    padding: 7px 15px;
+    border-radius: 999px;
+    font-size: var(--t-callout);
+    font-weight: 600;
+    color: var(--text-2);
+    white-space: nowrap;
+    transition: color var(--d-fast) ease;
+  }
+  .nav a[aria-current="page"] { color: var(--text); }
+  .nav .tab-badge { top: -3px; left: auto; right: -2px; box-shadow: 0 0 0 2px var(--bar-solid); }
+  .nav-pill {
+    position: absolute;
+    z-index: 0;
+    top: 4px; bottom: 4px; left: 0;
+    width: var(--pill-w, 0px);
+    border-radius: 999px;
+    background: var(--raised);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .1), 0 0 0 .5px rgba(0, 0, 0, .04);
+    transform: translateX(var(--pill-x, 0px));
+    opacity: 0;
+    view-transition-name: nav-pill;
+  }
+  .nav-pill.on { opacity: 1; }
+  .nav-pill.glide { transition: transform 440ms var(--ease-drawer), width 440ms var(--ease-drawer); }
+
+  .who-chip { margin-left: 0; padding: 4px 14px 4px 4px; background: var(--fill); }
+  .who-chip .who-name { display: inline; }
+
+  .page-head { padding-top: 22px; }
+  .page-title { font-size: 2.4rem; }
+
+  #toasts, body[data-page="chat"] #toasts { bottom: 28px; }
+
+  /* на большом экране вместо шторки — окно по центру */
+  .sheet-layer { justify-content: center; align-items: center; padding: 24px; }
+  .sheet {
+    width: min(480px, 100%);
+    max-height: min(86vh, 760px);
+    border-radius: 24px;
+    transform: scale(.96);
+    opacity: 0;
+    transition: transform 280ms var(--ease-out), opacity 200ms ease;
+    padding-bottom: 0;
+  }
+  .sheet-layer.open .sheet { transform: none; opacity: 1; }
+  .sheet-grab { display: none; }
+  .sheet-head { padding-top: 18px; }
 }
 
-/* ---------- отклик на нажатие ---------- */
-.card.hoverable:active,
-.tile:active { transform: scale(.985); }
-.tab { transition: background .2s, color .2s, transform .15s; }
-.tab:active { transform: scale(.94); }
-.envelope-card:active { transform: scale(.97) !important; }
-
-/* ---------- разделитель ---------- */
-.hr { height: 1px; background: var(--line-soft); margin: 26px 0; border: 0; }
-
-/* ---------- подвал ---------- */
-.footer {
-  text-align: center;
-  color: var(--text-faint);
-  font-size: .82rem;
-  padding: 46px 20px 30px;
-  position: relative;
-  z-index: 1;
+/* наведение — только там, где есть мышь, иначе на телефоне
+   подсветка «залипает» после касания */
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover { filter: brightness(1.06); }
+  .btn.gray:hover, .btn.tinted:hover, .btn.plain:hover { filter: none; background: var(--fill-2); }
+  .icon-btn:hover { background: var(--fill-2); }
+  .nav a:hover { color: var(--text); }
+  .who-chip:hover { background: var(--fill-2); }
+  a.row-item:hover, button.row-item:hover { background: var(--fill); }
 }
 
-/* ---------- утилиты ---------- */
-.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-.row.between { justify-content: space-between; }
-.center { text-align: center; }
-.stack { display: flex; flex-direction: column; gap: 14px; }
-.hidden { display: none !important; }
-.mt { margin-top: 16px; }
-.mt-lg { margin-top: 28px; }
+/* ============================================================
+   Доступность
+   ============================================================ */
 
-@media (max-width: 640px) {
-  .topbar-inner { flex-wrap: wrap; gap: 10px; padding: 10px 14px; }
-  .nav { order: 3; width: 100%; margin-left: 0; gap: 2px; }
-  .nav a { padding: 7px 9px; font-size: .8rem; }
-  /* на телефоне «Главная» не нужна — логотип слева ведёт туда же */
-  .nav a.nav-home { display: none; }
-  .who-chip { margin-left: auto; }
-  .shell { padding-left: 14px; padding-right: 14px; }
-  .card { padding: 19px; border-radius: var(--r-md); }
-  .section { padding-top: 40px; }
-}
-
+/* Меньше движения: убираем перемещения, оставляем смену прозрачности —
+   она по-прежнему объясняет, что произошло */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+  .toast, .sheet, .tab-pill.glide, .nav-pill.glide, .segmented .thumb {
+    transition-property: opacity !important;
+    transition-duration: 200ms !important;
+  }
+  .toast, .toast.in, .toast.out { transform: none !important; filter: none !important; }
+  .sheet-layer.open .sheet, .sheet { transform: none; }
+  .sheet { opacity: 0; }
+  .sheet-layer.open .sheet { opacity: 1; }
+  .fly-heart, .burst-piece { display: none; }
+  @view-transition { navigation: none; }
+}
+
+/* Меньше прозрачности: панели становятся сплошными */
+@media (prefers-reduced-transparency: reduce) {
+  .topbar::before, .tabbar, .toast {
+    background: var(--bar-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Повышенный контраст: плотнее разделители и вторичный текст */
+@media (prefers-contrast: more) {
+  :root { --sep: rgba(60, 40, 52, .35); --text-2: #3f3943; --text-3: #4d4652; --fill: rgba(72, 52, 66, .14); }
+}
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  :root { --sep: rgba(236, 226, 246, .35); --text-2: #d6cfdc; --text-3: #c2bac9; --fill: rgba(236, 226, 246, .16); }
 }

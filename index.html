@@ -3,289 +3,393 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Мы вдвоём 💜</title>
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f3f0ec" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e0c11" />
+<title>Мы вдвоём</title>
 <meta name="description" content="Наш маленький общий дом в интернете — пока мы на расстоянии." />
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💜</text></svg>" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@400;600&display=swap" media="print" onload="this.media='all'" />
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@400;600&display=swap" /></noscript>
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
 <link rel="stylesheet" href="assets/css/style.css" />
 <style>
-  .hero { padding: 70px 0 10px; text-align: center; }
-  .hero-names {
-    display: flex; align-items: center; justify-content: center;
-    gap: clamp(14px, 4vw, 34px); flex-wrap: wrap;
+  /* ---------- посадочный талон ---------- */
+  .pass {
+    position: relative;
+    background: var(--surface);
+    border-radius: 24px;
+    box-shadow: var(--shadow-1);
+    /* вырезы по линии отрыва */
+    --notch: 13px;
+    -webkit-mask:
+      radial-gradient(circle at 0 var(--tear), #0000 var(--notch), #000 calc(var(--notch) + .5px)) left / 51% 100% no-repeat,
+      radial-gradient(circle at 100% var(--tear), #0000 var(--notch), #000 calc(var(--notch) + .5px)) right / 51% 100% no-repeat;
+    mask:
+      radial-gradient(circle at 0 var(--tear), #0000 var(--notch), #000 calc(var(--notch) + .5px)) left / 51% 100% no-repeat,
+      radial-gradient(circle at 100% var(--tear), #0000 var(--notch), #000 calc(var(--notch) + .5px)) right / 51% 100% no-repeat;
+    --tear: 226px;   /* уточняется скриптом по высоте верхней части */
   }
-  .hero-heart {
-    font-size: clamp(2rem, 7vw, 3.4rem);
-    animation: beat 1.4s ease-in-out infinite;
-    filter: drop-shadow(0 0 26px rgba(255, 60, 120, .75));
+  .pass-main { padding: 18px 20px 20px; min-height: 210px; display: flex; flex-direction: column; }
+  .pass-top {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: var(--t-foot); color: var(--text-2); font-weight: 600;
   }
-  @keyframes beat {
-    0%, 100% { transform: scale(1); }
-    25% { transform: scale(1.16); }
-    40% { transform: scale(1); }
-    60% { transform: scale(1.1); }
-  }
-  .hero .lead { max-width: 560px; margin: 20px auto 0; }
+  .pass-top .flight { font-variant-numeric: tabular-nums; color: var(--text-3); }
 
-  /* --- плитки со статистикой --- */
-  .stat { text-align: center; padding: 22px 16px; }
-  .stat .big {
-    font-family: var(--font-display);
-    font-size: clamp(1.7rem, 5vw, 2.5rem);
-    font-weight: 600;
-    line-height: 1.1;
+  .pass-route { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; margin-top: 14px; }
+  .pass-city b {
+    display: block;
+    font-family: var(--font-round);
+    font-size: 1.9rem; font-weight: 700; letter-spacing: -.01em; line-height: 1;
+    color: var(--dima);
+  }
+  .pass-city.to b { color: var(--ragim); }
+  .pass-city.to { text-align: right; }
+  .pass-city span { display: block; margin-top: 4px; font-size: var(--t-foot); color: var(--text-2); }
+
+  .pass-path { position: relative; height: 28px; }
+  .pass-path svg { width: 100%; height: 100%; overflow: visible; }
+  .pass-plane {
+    position: absolute; top: 50%; left: 0;
+    width: 26px; height: 26px; margin: -13px 0 0 -13px;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    background: var(--surface);
+    color: var(--text);
+    transform: translateX(calc(var(--p, 0) * var(--track, 0px)));
+    transition: transform 1600ms var(--ease-out);
+  }
+  .pass-plane .i { width: 20px; height: 20px; }
+
+  .pass-count { margin-top: auto; display: flex; align-items: baseline; gap: 10px; }
+  .pass-count .big {
+    font-family: var(--font-round);
+    font-size: 3.4rem; font-weight: 700; letter-spacing: -.035em; line-height: 1;
+  }
+  .pass-count .unit { font-size: var(--t-callout); color: var(--text-2); font-weight: 600; line-height: 1.25; }
+  .pass-clock { margin-top: 6px; font-size: var(--t-sub); color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+  .pass-stub {
+    display: grid; grid-template-columns: 1fr auto auto; gap: 16px;
+    padding: 16px 20px 18px;
+    border-top: 1.5px dashed var(--sep);
+    margin: 0 18px;
+    padding-left: 2px; padding-right: 2px;
+  }
+  .pass-stub span { display: block; font-size: var(--t-caption); color: var(--text-3); font-weight: 600; }
+  .pass-stub b { display: block; margin-top: 3px; font-size: var(--t-callout); font-weight: 600; white-space: nowrap; }
+  .pass.done .pass-count .big { color: var(--heart); }
+
+  /* ---------- два города ---------- */
+  .cities { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .city {
+    --sky: var(--surface); --ink: var(--text); --ink-2: var(--text-2);
+    position: relative;
+    padding: 14px 14px 13px;
+    border-radius: var(--r-card);
+    background: var(--sky);
+    color: var(--ink);
+    box-shadow: var(--shadow-1);
+    transition: background-color 600ms ease, color 600ms ease;
+    min-width: 0;
+  }
+  /* небо над городом: день, сумерки, ночь */
+  .city.dusk  { --sky: #fbe7d3; --ink: #3a2518; --ink-2: #7a5540; }
+  .city.night { --sky: #1f2243; --ink: #eef0ff; --ink-2: #b3b8e0; }
+  @media (prefers-color-scheme: dark) {
+    .city.dusk  { --sky: #3a2a22; --ink: #fbe9da; --ink-2: #d2ae95; }
+    .city.night { --sky: #1c1f3c; --ink: #eef0ff; --ink-2: #aab0dc; }
+  }
+  .city-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .city-name { font-weight: 600; font-size: var(--t-callout); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .city-sky { display: flex; align-items: center; gap: 4px; font-size: var(--t-sub); color: var(--ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .city-sky .i { width: 20px; height: 20px; }
+  .city-time {
+    margin-top: 10px;
+    font-family: var(--font-round);
+    font-size: 2.35rem; font-weight: 600; letter-spacing: -.03em; line-height: 1;
     font-variant-numeric: tabular-nums;
   }
-  .stat .cap { color: var(--text-faint); font-size: .8rem; margin-top: 7px; letter-spacing: .04em; }
-  .stat .ico { font-size: 1.5rem; margin-bottom: 8px; }
+  .city-meta { margin-top: 6px; font-size: var(--t-foot); color: var(--ink-2); line-height: 1.35; }
+  .city-who { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: var(--t-foot); font-weight: 600; color: var(--ink-2); }
 
-  /* --- часы --- */
-  .clocks { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; }
-  .clock { text-align: center; padding: 6px 4px; }
-  .clock .time {
-    font-family: var(--font-display);
-    font-size: clamp(1.6rem, 6vw, 2.3rem);
-    font-variant-numeric: tabular-nums;
+  /* ---------- прямо сейчас ---------- */
+  .mood-quote {
+    font-family: var(--font-serif);
+    font-size: 1.06rem; line-height: 1.45;
+    color: var(--text);
   }
-  .clock .city { font-size: .86rem; color: var(--text-dim); margin-top: 4px; font-weight: 700; }
-  .clock .day { font-size: .74rem; color: var(--text-faint); margin-top: 2px; }
-  .clock-split { color: var(--text-faint); font-size: .72rem; text-align: center; line-height: 1.4; }
-  .clock-split .line { width: 1px; height: 34px; background: var(--line); margin: 6px auto; }
+  .mood-quote.empty { font-family: var(--font); font-size: var(--t-callout); color: var(--text-3); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    min-height: 38px; padding: 8px 14px;
+    border-radius: 999px;
+    background: var(--fill);
+    font-size: var(--t-callout); font-weight: 500;
+    transition: transform var(--d-press) var(--ease-out), background var(--d-fast);
+  }
+  .chip:active { transform: scale(.95); }
+  .chip[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 
-  /* --- присутствие --- */
-  .presence-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .avatar {
-    width: 46px; height: 46px; border-radius: 50%;
-    display: grid; place-items: center; font-size: 1.4rem;
-    background: linear-gradient(135deg, rgba(255,94,156,.3), rgba(180,69,255,.3));
-    border: 1px solid var(--line);
-    flex: none;
+  /* ---------- вопрос дня ---------- */
+  .qday-q {
+    font-family: var(--font-serif);
+    font-size: 1.32rem; line-height: 1.32; font-weight: 600;
+    letter-spacing: -.01em;
+    text-wrap: balance;
+  }
+  .answers { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .answer { display: flex; gap: 10px; align-items: flex-start; }
+  .answer-body { flex: 1; min-width: 0; }
+  .answer .bubble {
+    padding: 10px 13px;
+    border-radius: 18px; border-top-left-radius: 6px;
+    background: var(--fill);
+    font-size: var(--t-callout); line-height: 1.45;
+    white-space: pre-wrap; overflow-wrap: anywhere;
+    transition: filter 700ms var(--ease-out), opacity 500ms ease, transform 700ms var(--ease-out);
+  }
+  .answer .bubble.wait { color: var(--text-3); background: transparent; box-shadow: inset 0 0 0 1px var(--sep); }
+  /* ответ спрятан, пока не ответишь сам */
+  .answer .bubble.hidden-answer {
+    filter: blur(7px);
+    opacity: .7;
+    -webkit-user-select: none; user-select: none;
+    pointer-events: none;
+  }
+  .answer .lock-note {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 6px; font-size: var(--t-foot); color: var(--text-2); font-weight: 600;
+  }
+  .answer .lock-note .i { width: 16px; height: 16px; }
+  .answer .bubble.revealing { animation: reveal 900ms var(--ease-out) both; }
+  @keyframes reveal {
+    from { filter: blur(8px); opacity: .5; transform: scale(.98); }
+    to   { filter: blur(0); opacity: 1; transform: none; }
   }
 
-  /* --- кнопки-эмоции --- */
-  .pings { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; }
-  .ping-btn {
-    background: var(--glass);
-    border: 1px solid var(--line);
-    border-radius: var(--r-md);
-    padding: 16px 10px;
-    cursor: pointer;
-    text-align: center;
-    transition: transform .2s, border-color .2s, background .2s;
-  }
-  .ping-btn:hover { transform: translateY(-3px); background: var(--glass-strong); border-color: rgba(255,94,156,.45); }
-  .ping-btn:active { transform: scale(.96); }
-  .ping-btn .e { font-size: 1.7rem; display: block; }
-  .ping-btn .t { font-size: .8rem; font-weight: 700; color: var(--text-dim); margin-top: 6px; display: block; }
+  .past-day + .past-day { margin-top: 18px; padding-top: 18px; border-top: .5px solid var(--sep); }
+  .past-day .d { font-size: var(--t-foot); color: var(--text-3); font-weight: 600; }
+  .past-day .q { font-family: var(--font-serif); font-weight: 600; margin: 4px 0 10px; line-height: 1.35; }
 
-  /* --- полноэкранное «обнимашки получены» --- */
+  /* ---------- дотянуться ---------- */
+  .pings { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .ping {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 14px 6px 12px;
+    border-radius: 18px;
+    background: var(--surface);
+    box-shadow: var(--shadow-1);
+    transition: transform var(--d-fast) var(--ease-out);
+  }
+  .ping:active { transform: scale(.94); }
+  .ping-e { font-size: 1.9rem; line-height: 1; display: block; transition: transform 500ms var(--spring); }
+  .ping.sent .ping-e { transform: scale(1.18) translateY(-2px); }
+  .ping-t {
+    display: grid; font-size: var(--t-foot); font-weight: 600; color: var(--text-2);
+  }
+  /* подпись меняется на «Отправлено» мягкой сменой с размытием */
+  .ping-t > span { grid-area: 1 / 1; text-align: center; transition: opacity 220ms ease, filter 220ms ease, transform 260ms var(--ease-out); }
+  .ping-t .done { opacity: 0; filter: blur(4px); transform: translateY(4px); color: var(--ok); }
+  .ping.sent .ping-t .idle { opacity: 0; filter: blur(4px); transform: translateY(-4px); }
+  .ping.sent .ping-t .done { opacity: 1; filter: none; transform: none; }
+
+  /* полноэкранное «обнимашка пришла» */
   #ping-overlay {
     position: fixed; inset: 0; z-index: 85;
     display: grid; place-items: center; text-align: center;
-    background: radial-gradient(circle at 50% 50%, rgba(180,69,255,.4), rgba(8,1,15,.94));
-    backdrop-filter: blur(6px);
-    animation: fade .4s ease;
+    background: var(--scrim);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    backdrop-filter: blur(14px) saturate(140%);
+    opacity: 0;
+    transition: opacity 300ms ease;
   }
-  #ping-overlay .huge { font-size: clamp(5rem, 26vw, 12rem); animation: beat 1s ease-in-out infinite; }
-  #ping-overlay .who { font-family: var(--font-display); font-size: clamp(1.1rem, 4vw, 1.7rem); margin-top: 14px; }
+  #ping-overlay.in { opacity: 1; }
+  #ping-overlay .card { padding: 30px 34px 26px; border-radius: 30px; box-shadow: var(--shadow-2); transform: scale(.9); transition: transform 560ms var(--spring); }
+  #ping-overlay.in .card { transform: none; }
+  #ping-overlay .huge { font-size: 5.6rem; line-height: 1.05; }
+  #ping-overlay .who { margin-top: 12px; font-family: var(--font-round); font-size: var(--t-title2); font-weight: 700; }
+  #ping-overlay .sub { margin-top: 4px; color: var(--text-2); font-size: var(--t-sub); }
 
-  /* --- навигационные плитки --- */
-  .tile { display: block; padding: 22px; }
-  .tile .ico { font-size: 2rem; }
-  .tile h3 { margin: 12px 0 6px; }
-  .tile p { color: var(--text-faint); font-size: .86rem; line-height: 1.55; }
+  @media (prefers-reduced-motion: reduce) { .pass-plane { transition: none; } }
+
+  @media (min-width: 721px) {
+    .home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; align-items: start; }
+    .home-grid .section:first-child { margin-top: 30px; }
+  }
 </style>
 </head>
-<body>
-
-<div id="starfield"></div>
+<body data-page="home">
 
 <header class="topbar">
   <div class="topbar-inner">
-    <a class="brand" href="index.html"><span class="dot">💜</span> Мы&nbsp;вдвоём</a>
-    <nav class="nav">
+    <a class="brand" href="index.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#heart-fill"/></svg>Мы&nbsp;вдвоём</a>
+    <div class="bar-title" aria-hidden="true"></div>
+    <nav class="nav" aria-label="Разделы">
       <span class="nav-pill" aria-hidden="true"></span>
-      <a href="index.html" class="nav-home">Главная</a>
+      <a href="index.html">Главная</a>
       <a href="chat.html">Чат</a>
       <a href="letters.html">Письма</a>
       <a href="games.html">Игры</a>
       <a href="memories.html">История</a>
-      <a href="quest.html">Сюрприз</a>
     </nav>
-    <button class="who-chip" id="who-chip">💜</button>
+    <button class="who-chip" id="who-chip" type="button" aria-label="Сменить, кто за экраном"></button>
   </div>
 </header>
 
-<main class="shell">
+<main class="shell" id="main">
 
-  <!-- ---------- ГЕРОЙ ---------- -->
-  <section class="hero">
-    <p class="eyebrow">наш общий дом в интернете</p>
-    <div class="hero-names mt">
-      <h1 class="grad-text" id="name-a">…</h1>
-      <div class="hero-heart">❤️</div>
-      <h1 class="grad-text" id="name-b">…</h1>
+  <header class="page-head">
+    <h1 class="page-title" id="greet" data-short="Главная">Привет</h1>
+    <p class="page-sub" id="together">&nbsp;</p>
+  </header>
+
+  <!-- ---------- ПОСАДОЧНЫЙ ТАЛОН ---------- -->
+  <section class="pass" id="pass" aria-labelledby="pass-title">
+    <div class="pass-main">
+      <div class="pass-top">
+        <span id="pass-title">Посадочный талон</span>
+        <span class="flight" id="pass-flight">рейс 0106</span>
+      </div>
+      <div class="pass-route">
+        <div class="pass-city"><b id="pass-from">ALA</b><span id="pass-from-city">Алматы</span></div>
+        <div class="pass-path" id="pass-path" aria-hidden="true">
+          <svg viewBox="0 0 100 28" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="route" gradientUnits="userSpaceOnUse" x1="0" x2="100" y1="0" y2="0">
+                <stop offset="0" style="stop-color:var(--dima)" />
+                <stop offset="1" style="stop-color:var(--ragim)" />
+              </linearGradient>
+            </defs>
+            <line x1="0" y1="14" x2="100" y2="14" stroke="url(#route)" stroke-width="2" stroke-dasharray="3 4" vector-effect="non-scaling-stroke" stroke-linecap="round" />
+          </svg>
+          <span class="pass-plane" id="pass-plane"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#plane"/></svg></span>
+        </div>
+        <div class="pass-city to"><b id="pass-to">GYD</b><span id="pass-to-city">Баку</span></div>
+      </div>
+      <div class="pass-count">
+        <span class="big num" id="cd-days">—</span>
+        <span class="unit" id="cd-unit">до встречи</span>
+      </div>
+      <div class="pass-clock" id="cd-clock">&nbsp;</div>
     </div>
-    <p class="lead" id="hero-lead">Между нами километры. Но это единственное, что между нами есть.</p>
-    <div class="row center mt-lg" style="justify-content:center">
-      <span class="badge" id="cloud-badge"><span class="pulse dim"></span> подключаюсь…</span>
+    <div class="pass-stub">
+      <div><span>Пассажир</span><b id="pass-who">—</b></div>
+      <div><span>Вылет</span><b id="pass-date">—</b></div>
+      <div><span>Место</span><b id="pass-seat">рядом</b></div>
     </div>
   </section>
 
-  <!-- ---------- СЧЁТЧИКИ ---------- -->
-  <section class="section">
-    <div class="grid four">
-      <div class="card stat">
-        <div class="ico">💞</div>
-        <div class="big" id="stat-together">—</div>
-        <div class="cap" id="stat-together-cap">дней вместе</div>
-      </div>
-      <div class="card stat">
-        <div class="ico">✈️</div>
-        <div class="big" id="stat-countdown">—</div>
-        <div class="cap" id="stat-countdown-cap">до встречи</div>
-      </div>
-      <div class="card stat">
-        <div class="ico">💌</div>
-        <div class="big" id="stat-messages">—</div>
-        <div class="cap">сообщений в чате</div>
-      </div>
-      <div class="card stat">
-        <div class="ico">🫂</div>
-        <div class="big" id="stat-hugs">—</div>
-        <div class="cap">обнимашек отправлено</div>
-      </div>
-    </div>
-  </section>
+  <div class="home-grid">
 
-  <!-- ---------- ЧАСЫ ---------- -->
-  <section class="section">
-    <div class="section-head">
-      <h2>Который час у нас</h2>
-      <p>чтобы не будить друг друга в три ночи</p>
-    </div>
-    <div class="card">
-      <div class="clocks">
-        <div class="clock">
-          <div class="time" id="clock-a">--:--</div>
-          <div class="city" id="city-a">—</div>
-          <div class="day" id="day-a"></div>
-        </div>
-        <div class="clock-split">
-          <div class="line"></div>
-          <div id="tz-diff">—</div>
-          <div class="line"></div>
-        </div>
-        <div class="clock">
-          <div class="time" id="clock-b">--:--</div>
-          <div class="city" id="city-b">—</div>
-          <div class="day" id="day-b"></div>
-        </div>
+    <!-- ---------- ДВА ГОРОДА ---------- -->
+    <section class="section" aria-labelledby="cities-title">
+      <div class="section-head"><h2 class="section-title" id="cities-title">Сейчас у нас</h2></div>
+      <div class="cities">
+        <article class="city" id="city-a" data-p="a">
+          <div class="city-top"><span class="city-name" data-f="city">—</span><span class="city-sky" data-f="sky"></span></div>
+          <div class="city-time" data-f="time">--:--</div>
+          <div class="city-meta" data-f="meta">&nbsp;</div>
+          <div class="city-who" data-f="who"></div>
+        </article>
+        <article class="city" id="city-b" data-p="b">
+          <div class="city-top"><span class="city-name" data-f="city">—</span><span class="city-sky" data-f="sky"></span></div>
+          <div class="city-time" data-f="time">--:--</div>
+          <div class="city-meta" data-f="meta">&nbsp;</div>
+          <div class="city-who" data-f="who"></div>
+        </article>
       </div>
-    </div>
-  </section>
+      <p class="section-note" id="call-hint">&nbsp;</p>
+    </section>
 
-  <!-- ---------- ПРИСУТСТВИЕ И НАСТРОЕНИЕ ---------- -->
-  <section class="section">
-    <div class="section-head">
-      <h2>Прямо сейчас</h2>
-      <p>кто здесь и как настроение</p>
-    </div>
-    <div class="grid two">
-
-      <div class="card">
-        <div class="stack">
-          <div class="presence-row">
-            <div class="avatar" id="pres-a-ava">💜</div>
-            <div style="flex:1">
-              <div style="font-weight:800" id="pres-a-name">—</div>
-              <div class="muted" id="pres-a-status">проверяю…</div>
-            </div>
-          </div>
-          <hr class="hr" style="margin:4px 0" />
-          <div class="presence-row">
-            <div class="avatar" id="pres-b-ava">💙</div>
-            <div style="flex:1">
-              <div style="font-weight:800" id="pres-b-name">—</div>
-              <div class="muted" id="pres-b-status">проверяю…</div>
-            </div>
+    <!-- ---------- ПРЯМО СЕЙЧАС ---------- -->
+    <section class="section" aria-labelledby="now-title">
+      <div class="section-head"><h2 class="section-title" id="now-title">Прямо сейчас</h2></div>
+      <div class="group">
+        <div class="row-item" id="partner-row">
+          <span id="partner-ava"></span>
+          <div class="grow">
+            <div class="title" id="partner-name">—</div>
+            <div class="sub" id="partner-status">проверяю…</div>
           </div>
         </div>
-      </div>
-
-      <div class="card">
-        <div class="field">
-          <label for="mood-input">Как ты сейчас? Пару слов — вторая половинка увидит</label>
-          <input type="text" id="mood-input" maxlength="90" placeholder="устал, но думаю о тебе…" />
+        <div class="row-item" style="--sep-inset:62px; padding-left:62px">
+          <div class="grow">
+            <div class="mood-quote empty" id="partner-mood">пока ничего не написал о настроении</div>
+          </div>
         </div>
-        <button class="btn small mt" id="mood-save">Сохранить настроение</button>
-        <hr class="hr" />
-        <div class="muted" style="font-weight:700; color:var(--text-dim)" id="partner-mood-label">Настроение второй половинки</div>
-        <div class="mt" id="partner-mood" style="font-size:1.02rem; line-height:1.6">пока тихо…</div>
+        <button class="row-item" type="button" id="my-mood">
+          <span class="row-icon"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#sparkles"/></svg></span>
+          <span class="grow">
+            <span class="title" style="display:block">Моё настроение</span>
+            <span class="sub" style="display:block" id="my-mood-text">расскажите, как вы</span>
+          </span>
+          <span class="tail"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#chev-right"/></svg></span>
+        </button>
       </div>
+    </section>
 
-    </div>
-  </section>
+  </div>
 
-  <!-- ---------- ОБНИМАШКИ ---------- -->
-  <section class="section">
+  <!-- ---------- ВОПРОС ДНЯ ---------- -->
+  <section class="section" aria-labelledby="qday-title">
     <div class="section-head">
-      <h2>Дотянуться через экран</h2>
-      <p>нажмите — и у второго это появится на весь экран</p>
+      <h2 class="section-title" id="qday-title">Вопрос дня</h2>
+      <button class="link" type="button" id="qday-past">Прошлые</button>
     </div>
     <div class="card">
-      <div class="pings">
-        <button class="ping-btn" data-ping="hug"   data-emoji="🫂"><span class="e">🫂</span><span class="t">Обнять</span></button>
-        <button class="ping-btn" data-ping="kiss"  data-emoji="😘"><span class="e">😘</span><span class="t">Поцеловать</span></button>
-        <button class="ping-btn" data-ping="think" data-emoji="💭"><span class="e">💭</span><span class="t">Думаю о тебе</span></button>
-        <button class="ping-btn" data-ping="miss"  data-emoji="🥺"><span class="e">🥺</span><span class="t">Скучаю</span></button>
-        <button class="ping-btn" data-ping="night" data-emoji="🌙"><span class="e">🌙</span><span class="t">Спокойной ночи</span></button>
-        <button class="ping-btn" data-ping="love"  data-emoji="❤️"><span class="e">❤️</span><span class="t">Люблю</span></button>
-      </div>
-      <p class="muted mt">Если вторая половинка сейчас на сайте — увидит мгновенно. Если нет — увидит, когда зайдёт.</p>
+      <p class="qday-q" id="qday-q">…</p>
+      <div class="answers" id="qday-answers"></div>
+      <button class="btn block" type="button" id="qday-btn" style="margin-top:16px">Ответить</button>
     </div>
+    <p class="section-note">Ответ второго откроется, когда ответите оба. Каждый день — новый вопрос.</p>
   </section>
 
-  <!-- ---------- РАЗДЕЛЫ ---------- -->
-  <section class="section">
-    <div class="section-head">
-      <h2>Куда дальше</h2>
+  <!-- ---------- ДОТЯНУТЬСЯ ---------- -->
+  <section class="section" aria-labelledby="ping-title">
+    <div class="section-head"><h2 class="section-title" id="ping-title">Дотянуться через экран</h2></div>
+    <div class="pings">
+      <button class="ping" type="button" data-ping="hug"   data-emoji="🫂"><span class="ping-e" aria-hidden="true">🫂</span><span class="ping-t"><span class="idle">Обнять</span><span class="done">Готово</span></span></button>
+      <button class="ping" type="button" data-ping="kiss"  data-emoji="😘"><span class="ping-e" aria-hidden="true">😘</span><span class="ping-t"><span class="idle">Поцеловать</span><span class="done">Готово</span></span></button>
+      <button class="ping" type="button" data-ping="think" data-emoji="💭"><span class="ping-e" aria-hidden="true">💭</span><span class="ping-t"><span class="idle">Думаю</span><span class="done">Готово</span></span></button>
+      <button class="ping" type="button" data-ping="miss"  data-emoji="🥺"><span class="ping-e" aria-hidden="true">🥺</span><span class="ping-t"><span class="idle">Скучаю</span><span class="done">Готово</span></span></button>
+      <button class="ping" type="button" data-ping="night" data-emoji="🌙"><span class="ping-e" aria-hidden="true">🌙</span><span class="ping-t"><span class="idle">Спокойной ночи</span><span class="done">Готово</span></span></button>
+      <button class="ping" type="button" data-ping="love"  data-emoji="❤️"><span class="ping-e" aria-hidden="true">❤️</span><span class="ping-t"><span class="idle">Люблю</span><span class="done">Готово</span></span></button>
     </div>
-    <div class="grid three">
-      <a class="card hoverable tile" href="chat.html">
-        <div class="ico">💬</div>
-        <h3>Живой чат</h3>
-        <p>Общая лента на двоих. Видно, когда второй печатает.</p>
+    <p class="section-note">Если второй сейчас на сайте — увидит на весь экран. Если нет — когда зайдёт.</p>
+  </section>
+
+  <!-- ---------- ЕЩЁ ---------- -->
+  <section class="section" aria-labelledby="more-title">
+    <div class="section-head"><h2 class="section-title" id="more-title">Ещё</h2></div>
+    <div class="group" style="--sep-inset:60px">
+      <a class="row-item" href="quest.html">
+        <span class="row-icon" style="background:var(--gold)"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#key"/></svg></span>
+        <span class="grow"><span class="title" style="display:block">Секретный квест</span><span class="sub" style="display:block">поймать ключ и открыть конверт</span></span>
+        <span class="tail"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#chev-right"/></svg></span>
       </a>
-      <a class="card hoverable tile" href="letters.html">
-        <div class="ico">✉️</div>
-        <h3>Письма и капсулы</h3>
-        <p>Написать письмо и запечатать его до нужной даты.</p>
-      </a>
-      <a class="card hoverable tile" href="games.html">
-        <div class="ico">🎲</div>
-        <h3>Игры для двоих</h3>
-        <p>Причины, вопросы, скретч-карточки, колесо свиданий.</p>
-      </a>
-      <a class="card hoverable tile" href="memories.html">
-        <div class="ico">📖</div>
-        <h3>Наша история</h3>
-        <p>Таймлайн, фото и список «когда встретимся».</p>
-      </a>
-      <a class="card hoverable tile" href="quest.html">
-        <div class="ico">🗝️</div>
-        <h3>Секретный квест</h3>
-        <p>Найди ключ, открой конверт. Внутри — признание.</p>
-      </a>
+      <button class="row-item" type="button" id="switch-me">
+        <span class="row-icon" style="background:var(--other-fill)"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#person"/></svg></span>
+        <span class="grow"><span class="title" style="display:block">Кто за экраном</span><span class="sub" style="display:block" id="switch-me-sub">—</span></span>
+        <span class="tail"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#chev-right"/></svg></span>
+      </button>
+      <div class="row-item">
+        <span class="row-icon" style="background:var(--ok)"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#chat"/></svg></span>
+        <span class="grow"><span class="title" style="display:block">Комната</span><span class="sub" style="display:block" id="room-sub">подключаюсь…</span></span>
+      </div>
     </div>
+    <p class="section-note num" id="stats">&nbsp;</p>
   </section>
 
 </main>
 
-<div class="footer">сделано с 💜 · <span id="footer-note"></span></div>
+<nav class="tabbar" aria-label="Разделы">
+  <span class="tab-pill" aria-hidden="true" style="--i:0"></span>
+  <a href="index.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#home"/></svg><span>Главная</span></a>
+  <a href="chat.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#chat"/></svg><span>Чат</span></a>
+  <a href="letters.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#letter"/></svg><span>Письма</span></a>
+  <a href="games.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#games"/></svg><span>Игры</span></a>
+  <a href="memories.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#story"/></svg><span>История</span></a>
+</nav>
 
 <script src="assets/js/config.js"></script>
 <script src="assets/js/common.js"></script>

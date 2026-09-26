@@ -1,18 +1,19 @@
 /* Живой чат на двоих */
 
-import { cloud, renderCloudBadge } from './cloud.js';
+import { cloud, markChatRead } from './cloud.js';
 
 const $ = (id) => document.getElementById(id);
 
 App.init();
-renderCloudBadge();
 
 const meKey = App.getMe() || 'a';
 const other = App.partner();
 const TOUCH = matchMedia('(pointer: coarse)').matches;
 
-$('head-ava').textContent = other.emoji;
+const otherKey = App.partnerKey();
+$('head-ava').innerHTML = App.avatar(otherKey);
 $('head-name').textContent = other.name;
+const icon = App.icon;
 
 document.addEventListener('me-changed', () => location.reload());
 
@@ -249,7 +250,7 @@ function makeBubble(m) {
 
   const arrow = document.createElement('span');
   arrow.className = 'swipe-arrow';
-  arrow.textContent = '↩';
+  arrow.innerHTML = icon('reply');
   el.appendChild(arrow);
 
   if (!TOUCH) {
@@ -257,7 +258,8 @@ function makeBubble(m) {
     rb.className = 'reply-btn';
     rb.type = 'button';
     rb.title = 'Ответить';
-    rb.textContent = '↩';
+    rb.setAttribute('aria-label', 'Ответить');
+    rb.innerHTML = icon('reply');
     el.appendChild(rb);
   }
   return el;
@@ -305,9 +307,11 @@ function decorate(el, m, groupStart, groupEnd) {
     if (mine) {
       let tick = meta.querySelector('.tick');
       if (!tick) { tick = document.createElement('span'); tick.className = 'tick'; meta.appendChild(tick); }
-      const want = m.pending ? '🕐' : '✓';
-      if (tick.textContent !== want) {
-        tick.textContent = want;
+      const want = m.pending ? 'clock' : 'check';
+      if (tick.dataset.state !== want) {
+        tick.dataset.state = want;
+        tick.innerHTML = icon(want);
+        tick.setAttribute('aria-label', m.pending ? 'отправляется' : 'доставлено');
         // часики превращаются в галочку с хлопком, а не подменяются молча
         if (wasPending && !m.pending) {
           tick.classList.remove('pop');
@@ -322,6 +326,69 @@ function decorate(el, m, groupStart, groupEnd) {
   } else if (meta) {
     meta.remove();
   }
+
+  paintReactions(el, m);
+}
+
+/* ---------- реакции ---------- */
+
+const REACTIONS = ['❤️', '😂', '🥺', '😮', '👍', '🔥'];
+
+function paintReactions(el, m) {
+  const rx = Object.entries(m.reactions || {}).filter(([, v]) => typeof v === 'string' && v);
+  let box = el.querySelector('.reacts');
+  const sig = rx.map(([k, v]) => k + v).sort().join('|');
+
+  if (!rx.length) {
+    if (box) box.remove();
+    el.classList.remove('has-reacts');
+    el.dataset.rx = '';
+    return;
+  }
+  if (!box) {
+    box = document.createElement('span');
+    box.className = 'reacts';
+    el.appendChild(box);
+  }
+  el.classList.add('has-reacts');
+
+  // одинаковые складываем: «❤️ 2»
+  const counts = {};
+  rx.forEach(([, v]) => { counts[v] = (counts[v] || 0) + 1; });
+  box.innerHTML = Object.entries(counts)
+    .map(([e, n]) => '<span>' + e + '</span>' + (n > 1 ? '<span class="n">' + n + '</span>' : ''))
+    .join('');
+  box.setAttribute('aria-label', 'Реакции: ' + rx.map(([k, v]) => App.person(k).name + ' ' + v).join(', '));
+
+  // пружинка — только когда реакция правда новая, а не при первой отрисовке
+  if (el.dataset.rx !== undefined && el.dataset.rx !== sig && el.isConnected) {
+    box.classList.remove('pop');
+    void box.offsetWidth;
+    box.classList.add('pop');
+  }
+  el.dataset.rx = sig;
+}
+
+function toggleReaction(key, emoji) {
+  const m = visibleMessages().find((x) => keyOf(x) === key);
+  if (!m || !m.id || m.pending) return;
+  const current = (m.reactions || {})[meKey];
+  const next = current === emoji ? null : emoji;
+  // отклик сразу, не дожидаясь базы
+  m.reactions = { ...(m.reactions || {}) };
+  if (next) m.reactions[meKey] = next; else delete m.reactions[meKey];
+  const el = nodes.get(key);
+  if (el) paintReactions(el, m);
+  cloud.set('messages/' + m.id + '/reactions/' + meKey, next);
+}
+
+function heartPop(el) {
+  if (App.reduceMotion()) return;
+  const h = document.createElement('span');
+  h.className = 'heart-pop';
+  h.innerHTML = icon('heart-fill');
+  el.appendChild(h);
+  setTimeout(() => h.remove(), 800);
 }
 
 function render() {
@@ -331,7 +398,8 @@ function render() {
   if (!list.length) {
     nodes.forEach((el) => el.remove());
     nodes.clear();
-    if (!empty) log.innerHTML = '<div class="empty-note">Здесь пока пусто.<br />Напишите первое сообщение 💜</div>';
+    if (!empty) log.innerHTML = '<div class="empty-note">' + App.avatar(otherKey, 'lg') +
+      'Здесь пока пусто.<br />Напишите ' + App.escapeHtml(other.name) + ' первое сообщение.</div>';
     return;
   }
   if (empty) empty.remove();
@@ -510,8 +578,7 @@ function setTypingVisible(on) {
   typingVisible = on;
   if (on) { log.appendChild(typingEl); if (stick) log.scrollTop = log.scrollHeight; }
   else typingEl.remove();
-  $('head-sub').textContent = on ? 'печатает…' : lastSeenText;
-  $('head-sub').classList.toggle('online', !on && lastSeenOnline);
+  $('head-sub').classList.toggle('is-typing', on);
 }
 
 /* ============================================================
@@ -527,6 +594,7 @@ function startReply(key) {
   replyTo = { key, who: m.by, text: (m.text || '').slice(0, 140) };
   $('rb-who').textContent = m.by === meKey ? 'Ваше сообщение' : App.person(m.by).name;
   $('rb-text').textContent = replyTo.text;
+  $('rb-icon').innerHTML = icon('reply');
   $('reply-bar').classList.add('show');
   input.focus();
 }
@@ -569,13 +637,16 @@ function closeMenu() {
   const { veil, menu, bubble } = menuEls;
   menuEls = null;
   bubble.classList.remove('menu-open');
-  menu.style.transition = 'opacity .14s, transform .14s';
-  menu.style.opacity = '0';
-  menu.style.transform = 'scale(.92)';
-  veil.style.opacity = '0';
-  setTimeout(() => { veil.remove(); menu.remove(); }, 150);
+  // уходит быстрее, чем появлялось
+  menu.style.transition = 'opacity 140ms ease, transform 160ms var(--ease-in)';
+  menu.classList.remove('in');
+  menu.style.transform = 'scale(.94)';
+  veil.classList.remove('in');
+  setTimeout(() => { veil.remove(); menu.remove(); }, 170);
 }
 
+/* Меню как в iOS: сверху — реакции, ниже — действия.
+   Раскрывается из точки, где лежит палец. */
 function openMenu(bubble, x, y) {
   closeMenu();
 
@@ -585,55 +656,76 @@ function openMenu(bubble, x, y) {
 
   const mine = m.by === meKey;
   const saved = Boolean(m.id) && !m.pending;   // править и удалять можно только записанное
+  const myReact = (m.reactions || {})[meKey];
 
   const veil = document.createElement('div');
   veil.className = 'menu-veil';
 
   const menu = document.createElement('div');
   menu.className = 'msg-menu';
+  menu.setAttribute('role', 'menu');
   menu.innerHTML =
-    '<button data-do="reply"><span class="ic">↩</span>Ответить</button>' +
-    (mine && saved ? '<button data-do="edit"><span class="ic">✏️</span>Изменить</button>' : '') +
-    '<button data-do="copy"><span class="ic">📋</span>Копировать</button>' +
-    (mine && saved ? '<hr /><button class="danger" data-do="delete"><span class="ic">🗑</span>Удалить</button>' : '');
+    (saved
+      ? '<div class="react-bar" aria-label="Реакция">' +
+          REACTIONS.map((e) => '<button type="button" data-react="' + e + '" aria-pressed="' + (myReact === e) + '">' + e + '</button>').join('') +
+        '</div>'
+      : '') +
+    '<div class="actions">' +
+      '<button type="button" role="menuitem" data-do="reply">Ответить' + icon('reply') + '</button>' +
+      (mine && saved ? '<button type="button" role="menuitem" data-do="edit">Изменить' + icon('pencil') + '</button>' : '') +
+      '<button type="button" role="menuitem" data-do="copy">Копировать' + icon('copy') + '</button>' +
+      (mine && saved ? '<button type="button" role="menuitem" class="danger" data-do="delete">Удалить' + icon('trash') + '</button>' : '') +
+    '</div>';
 
   document.body.append(veil, menu);
   bubble.classList.add('menu-open');
   menuEls = { veil, menu, bubble };
 
-  // держим меню в пределах экрана
-  const r = menu.getBoundingClientRect();
+  // держим меню в пределах экрана; размер берём без учёта стартового
+  // сжатия, иначе меню, развернувшись, наедет на палец
+  const r = { width: menu.offsetWidth, height: menu.offsetHeight };
   const pad = 10;
   // clientY отсчитывается от видимой области, а position:fixed — от страницы;
   // на iOS при поднятой клавиатуре это разные системы координат
   const off = vv ? vv.offsetTop : 0;
   const top0 = off + pad;
   const bottom0 = off + (vv ? vv.height : innerHeight) - pad;
-  menu.style.left = Math.round(Math.min(Math.max(pad, x - r.width / 2), innerWidth - r.width - pad)) + 'px';
-  menu.style.top = Math.round(Math.min(Math.max(top0, y + off - r.height - 12), bottom0 - r.height)) + 'px';
+  const left = Math.round(Math.min(Math.max(pad, x - r.width / 2), innerWidth - r.width - pad));
+  const top = Math.round(Math.min(Math.max(top0, y + off - r.height - 12), bottom0 - r.height));
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
+  // раскрывается от пальца, а не от центра
+  menu.style.transformOrigin = Math.round(x - left) + 'px ' + Math.round(y + off - top) + 'px';
+  requestAnimationFrame(() => { veil.classList.add('in'); menu.classList.add('in'); });
 
   veil.addEventListener('pointerdown', closeMenu);
 
+  // палец, открывший меню долгим нажатием, отпускается уже над ним —
+  // этот «клик» не считается, нужен отдельный тап
+  let armed = false;
+  menu.addEventListener('pointerdown', () => { armed = true; });
+
   menu.addEventListener('click', (e) => {
+    if (!armed && e.detail !== 0) return;
+    const r2 = e.target.closest('[data-react]');
+    if (r2) {
+      closeMenu();
+      toggleReaction(key, r2.getAttribute('data-react'));
+      return;
+    }
     const btn = e.target.closest('[data-do]');
     if (!btn) return;
     const act = btn.getAttribute('data-do');
+    closeMenu();
 
     if (act === 'delete') {
-      // подтверждение прямо в меню, без системного окна
-      if (!btn.classList.contains('armed')) {
-        btn.classList.add('armed');
-        btn.lastChild.textContent = 'Точно удалить?';
-        return;
-      }
-      closeMenu();
-      cloud.remove('messages/' + m.id);
-      App.toast('Удалено');
-      return;
-    }
-
-    closeMenu();
-    if (act === 'reply') startReply(key);
+      // удаляем сразу, но пять секунд можно вернуть
+      const { id, pending, ...data } = m;
+      cloud.remove('messages/' + id);
+      App.undoToast('Сообщение удалено', () => {
+        cloud.set('messages/' + id, data);
+      });
+    } else if (act === 'reply') startReply(key);
     else if (act === 'edit') startEdit(m);
     else if (act === 'copy') {
       navigator.clipboard?.writeText(m.text || '')
@@ -641,10 +733,37 @@ function openMenu(bubble, x, y) {
         .catch(() => App.toast('Не вышло скопировать'));
     }
   });
+
+  const first = menu.querySelector('button');
+  if (first && !TOUCH) first.focus({ preventScroll: true });
 }
 
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
 log.addEventListener('scroll', closeMenu);
+
+// двойной клик мышью — ❤️ (касания пальцем разбираются отдельно,
+// а браузер вдобавок шлёт dblclick и на двойной тап — его пропускаем)
+let lastPointer = 'mouse';
+log.addEventListener('pointerdown', (e) => { lastPointer = e.pointerType; }, true);
+log.addEventListener('dblclick', (e) => {
+  if (lastPointer !== 'mouse') return;
+  const b = e.target.closest('.bubble');
+  if (!b || e.target.closest('.quote, .reacts, .reply-btn')) return;
+  window.getSelection()?.removeAllRanges();
+  const m = visibleMessages().find((x) => keyOf(x) === b.dataset.key);
+  if (!m || !m.id || m.pending) return;
+  if ((m.reactions || {})[meKey] !== '❤️') heartPop(b);
+  toggleReaction(b.dataset.key, '❤️');
+});
+
+// нажатие на реакции — открыть меню, чтобы поменять свою
+log.addEventListener('click', (e) => {
+  const rx = e.target.closest('.reacts');
+  if (!rx) return;
+  const b = rx.closest('.bubble');
+  const r = rx.getBoundingClientRect();
+  openMenu(b, r.left + r.width / 2, r.top);
+});
 
 // правый клик на компьютере
 log.addEventListener('contextmenu', (e) => {
@@ -667,6 +786,7 @@ function startEdit(m) {
   autoGrow();
   refreshSendBtn();
   $('rb-who').textContent = 'Изменить сообщение';
+  $('rb-icon').innerHTML = icon('pencil');
   $('rb-text').textContent = m.text || '';
   $('reply-bar').classList.add('show', 'editing');
   input.focus();
@@ -712,7 +832,8 @@ log.addEventListener('pointermove', (e) => {
   const dx = e.clientX - swipe.x;
   const dy = e.clientY - swipe.y;
 
-  if (pressTimer && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) {
+  if (Math.abs(dx) > 10 || Math.abs(dy) > 10) swipe.moved = true;
+  if (pressTimer && swipe.moved) {
     clearPress();
     swipe.el.classList.remove('press');
   }
@@ -733,13 +854,30 @@ log.addEventListener('pointermove', (e) => {
   swipe.el.style.setProperty('--sw', Math.min(1, swipe.d / SWIPE_TRIGGER).toFixed(2));
 });
 
-function endSwipe() {
+let lastTap = null;
+
+function endSwipe(e) {
   clearPress();
   log.querySelectorAll('.bubble.press').forEach((el) => el.classList.remove('press'));
   if (!swipe) return;
   const { el, d, on } = swipe;
+  const moved = swipe.moved;
   swipe = null;
-  if (!on) return;
+  if (!on) {
+    // двойное касание по пузырю — ❤️, как в Instagram и iMessage
+    if (moved || !e || e.type !== 'pointerup' || e.target.closest('.quote, .reacts')) return;
+    const now = performance.now();
+    if (lastTap && lastTap.el === el && now - lastTap.t < 320) {
+      lastTap = null;
+      const k = el.dataset.key;
+      const m = visibleMessages().find((x) => keyOf(x) === k);
+      if (m && m.id && !m.pending) {
+        if ((m.reactions || {})[meKey] !== '❤️') heartPop(el);
+        toggleReaction(k, '❤️');
+      }
+    } else lastTap = { el, t: now };
+    return;
+  }
 
   el.classList.remove('swiping');
   el.classList.add('releasing');
@@ -879,7 +1017,16 @@ cloud.watch('messages', (data) => {
   }
   render();
   if (firstLoad) { toBottom(); firstLoad = false; }
+  readUpTo();
 });
+
+// всё, что видно в ленте, — прочитано: вкладка «Чат» на других страницах
+// перестанет показывать цифру
+function readUpTo() {
+  if (document.hidden || !messages.length) return;
+  markChatRead(Math.max(Date.now(), messages[messages.length - 1].at || 0));
+}
+document.addEventListener('visibilitychange', readUpTo);
 
 let lastSeenText = '—';
 let lastSeenOnline = false;
@@ -888,12 +1035,12 @@ cloud.watch('presence', (data) => {
   const info = (data || {})[App.partnerKey()];
   lastSeenOnline = Boolean(info && info.online);
   if (!info) lastSeenText = 'ещё не заходил сюда';
-  else if (info.online) lastSeenText = '● сейчас на сайте';
+  else if (info.online) lastSeenText = 'сейчас на сайте';
   else lastSeenText = 'был ' + App.formatWhen(info.at);
-  if (!typingVisible) {
-    $('head-sub').textContent = lastSeenText;
-    $('head-sub').classList.toggle('online', lastSeenOnline);
-  }
+  $('seen-label').textContent = lastSeenText;
+  $('head-sub').classList.toggle('online', lastSeenOnline);
+  const ava = $('head-ava').querySelector('.ava');
+  if (ava) ava.classList.toggle('is-online', lastSeenOnline);
 });
 
 cloud.watch('typing', (data) => {

@@ -3,201 +3,261 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Письма и капсулы ✉️</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✉️</text></svg>" />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f3f0ec" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e0c11" />
+<title>Письма · Мы вдвоём</title>
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@400;600&family=Caveat:wght@500;700&display=swap" media="print" onload="this.media='all'" />
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Unbounded:wght@400;600&family=Caveat:wght@500;700&display=swap" /></noscript>
+<!-- рукописный шрифт — только для самих писем, грузится не мешая странице -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap" media="print" onload="this.media='all'" />
 <link rel="stylesheet" href="assets/css/style.css" />
 <style>
-  /* --- полка с конвертами --- */
-  .shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 14px; }
+  :root {
+    --paper: #fffaf1;
+    --paper-ink: #3b2f2a;
+    --paper-ink-2: #8a7466;
+    --paper-line: rgba(120, 90, 70, .12);
+    --air-1: var(--dima-fill);
+    --air-2: var(--ragim-fill);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #231e1b; --paper-ink: #f1e8de; --paper-ink-2: #b39e8e; --paper-line: rgba(255, 230, 200, .08); }
+  }
 
-  .envelope-card {
-    position: relative;
-    text-align: center;
-    padding: 24px 16px 20px;
-    cursor: pointer;
-    transition: transform .25s ease, border-color .25s ease;
-  }
-  .envelope-card:hover { transform: translateY(-5px) rotate(-1deg); border-color: rgba(255,94,156,.45); }
-  .envelope-card .ico { font-size: 2.6rem; filter: drop-shadow(0 6px 18px rgba(255,94,156,.35)); }
-  .envelope-card .from { font-weight: 800; margin-top: 10px; font-size: .95rem; }
-  .envelope-card .title { color: var(--text-dim); font-size: .86rem; margin-top: 4px; line-height: 1.45; }
-  .envelope-card .when { color: var(--text-faint); font-size: .74rem; margin-top: 9px; }
-  .envelope-card.sealed { opacity: .82; }
-  .envelope-card.sealed .ico { filter: grayscale(.35) drop-shadow(0 6px 18px rgba(120,120,180,.3)); }
-  .envelope-card .lock { position: absolute; top: 13px; right: 15px; font-size: 1.05rem; }
-  .envelope-card .del {
-    position: absolute; top: 9px; left: 10px;
-    background: none; border: none; cursor: pointer;
-    color: var(--text-faint); font-size: .95rem; opacity: 0; transition: opacity .2s;
-  }
-  .envelope-card:hover .del { opacity: .7; }
-  .envelope-card .del:hover { opacity: 1; color: var(--pink); }
+  .write-btn { width: 100%; margin-bottom: 18px; }
 
-  /* --- открытое письмо (бумага) --- */
-  .paper {
-    width: min(560px, 100%);
-    max-height: 84vh;
-    overflow-y: auto;
-    background: linear-gradient(175deg, #fffaf2, #ffeede);
-    color: #3a2a3f;
-    border-radius: 20px;
-    padding: 34px 30px 28px;
-    box-shadow: 0 30px 70px rgba(0,0,0,.6);
-    animation: pop .45s cubic-bezier(.2,.9,.3,1.25);
-    text-align: left;
+  /* ---------- конверты «авиапочта» ---------- */
+  .shelf { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 14px; }
+
+  .env {
     position: relative;
+    display: grid; width: 100%; text-align: left;
+    padding: 5px;
+    border-radius: 16px;
+    /* полоски авиапочты — в цветах вас двоих */
+    background: repeating-linear-gradient(135deg,
+      var(--air-1) 0 11px, var(--paper) 11px 18px, var(--air-2) 18px 29px, var(--paper) 29px 36px);
+    box-shadow: var(--shadow-1);
+    transition: transform var(--d-fast) var(--ease-out), box-shadow var(--d-fast);
   }
-  .paper::before {
-    content: '';
-    position: absolute; inset: 12px;
-    border: 1px dashed rgba(180,69,255,.28);
-    border-radius: 13px;
-    pointer-events: none;
+  .env:active { transform: scale(.975); }
+  .env-inner {
+    position: relative;
+    display: block;
+    min-height: 118px;
+    padding: 14px 76px 14px 16px;
+    border-radius: 12px;
+    background: var(--paper);
+    color: var(--paper-ink);
   }
-  .paper .p-from { font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; color: #a2789b; font-weight: 700; }
-  .paper .p-title { font-family: 'Caveat', cursive; font-size: 2.1rem; line-height: 1.15; margin: 6px 0 16px; color: #7a2f66; }
-  .paper .p-body {
-    font-family: 'Caveat', cursive;
-    font-size: 1.42rem;
-    line-height: 1.6;
-    white-space: pre-wrap;
-    word-wrap: break-word;
+  .env-from { display: block; font-size: var(--t-foot); font-weight: 600; color: var(--paper-ink-2); }
+  .env-title {
+    display: block;
+    margin-top: 6px;
+    font-family: var(--font-hand);
+    font-size: 1.55rem; line-height: 1.12; font-weight: 700;
     overflow-wrap: anywhere;
   }
-  .paper .p-foot { margin-top: 22px; font-size: .78rem; color: #a2789b; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-  .paper .p-close {
-    position: absolute; top: 10px; right: 14px;
-    background: none; border: none; font-size: 1.3rem; cursor: pointer; color: #b78bad;
-    z-index: 2;
+  .env-when { display: block; margin-top: 8px; font-size: var(--t-foot); color: var(--paper-ink-2); }
+
+  /* марка с инициалом отправителя: перфорация по краю */
+  .env-stamp {
+    position: absolute; top: 12px; right: 12px;
+    width: 50px; height: 58px;
+    display: grid; place-items: center;
+    background: var(--p, var(--dima-fill));
+    background-clip: padding-box;
+    border: 3.5px dotted var(--paper);
+    color: #fff;
+    font-family: var(--font-serif); font-size: 1.5rem; font-weight: 700;
+    rotate: 4deg;
+    box-shadow: 0 0 0 1px var(--p, var(--dima-fill));
+  }
+  .env-stamp[data-p="b"] { --p: var(--ragim-fill); }
+  .env-stamp::after {
+    content: ''; position: absolute; inset: 6px;
+    border: 1px solid rgba(255, 255, 255, .5);
+  }
+  /* почтовый штемпель поверх марки */
+  .env-postmark {
+    position: absolute; top: 40px; right: 44px;
+    width: 42px; height: 42px; border-radius: 50%;
+    border: 1.5px solid var(--paper-ink-2);
+    opacity: .45;
+    display: grid; place-items: center;
+    font-size: .52rem; font-weight: 700; letter-spacing: .02em; color: var(--paper-ink-2);
+    rotate: -14deg;
+    pointer-events: none;
   }
 
-  /* --- ссылка-капсула --- */
-  .link-box {
-    display: flex; gap: 8px; align-items: stretch; margin-top: 12px;
+  /* непрочитанное — маленькая метка */
+  .env .new {
+    position: absolute; top: -6px; left: -6px;
+    padding: 3px 8px; border-radius: 999px;
+    background: var(--heart); color: #fff;
+    font-size: var(--t-caption); font-weight: 700;
+    box-shadow: 0 0 0 2px var(--bg);
   }
-  .link-box input { font-size: .8rem; font-family: ui-monospace, monospace; }
 
-  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
-  .tab {
-    padding: 9px 18px; border-radius: 999px; cursor: pointer;
-    background: var(--glass); border: 1px solid var(--line);
-    font-size: .88rem; font-weight: 700; color: var(--text-dim);
-    transition: all .2s;
+  /* запечатанное письмо: сургучная печать с замком */
+  .env.sealed .env-title { font-family: var(--font); font-size: var(--t-body); font-weight: 600; color: var(--paper-ink-2); }
+  .env-seal {
+    position: absolute; right: 18px; bottom: 14px;
+    width: 44px; height: 44px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: radial-gradient(circle at 35% 30%, #d4435e, #9e1d3a 70%);
+    color: #ffe3e8;
+    box-shadow: 0 2px 6px rgba(120, 10, 40, .35), inset 0 -2px 4px rgba(0, 0, 0, .25);
   }
-  .tab.active {
-    background: linear-gradient(135deg, rgba(255,94,156,.28), rgba(180,69,255,.28));
-    color: #fff; border-color: rgba(255,255,255,.2);
+  .env-seal .i { width: 20px; height: 20px; }
+  .env.sealed .env-stamp { display: none; }
+  .env.sealed .env-postmark { display: none; }
+
+  @keyframes env-in { from { opacity: 0; transform: translateY(12px) scale(.98); } }
+
+  .empty-shelf { text-align: center; padding: 36px 20px 20px; color: var(--text-2); }
+  .empty-shelf .i { width: 44px; height: 44px; margin: 0 auto 12px; color: var(--text-3); }
+
+  /* ---------- открытое письмо ---------- */
+  .letter-sheet .sheet-body { padding-top: 0; }
+  .paper {
+    position: relative;
+    padding: 22px 22px 26px;
+    border-radius: 16px;
+    background:
+      repeating-linear-gradient(to bottom, transparent 0 33px, var(--paper-line) 33px 34px) 0 58px / 100% calc(100% - 58px) no-repeat,
+      var(--paper);
+    color: var(--paper-ink);
+    /* письмо разворачивается сверху вниз */
+    animation: unfold 720ms var(--ease-out) both;
+  }
+  @keyframes unfold {
+    from { clip-path: inset(0 0 92% 0 round 16px); transform: translateY(18px); opacity: .6; }
+    to   { clip-path: inset(0 0 0 0 round 16px); transform: none; opacity: 1; }
+  }
+  .paper .p-meta { display: flex; justify-content: space-between; gap: 10px; font-size: var(--t-foot); color: var(--paper-ink-2); font-weight: 600; }
+  .paper .p-title { font-family: var(--font-hand); font-size: 2.05rem; line-height: 1.08; margin: 12px 0 10px; font-weight: 700; }
+  .paper .p-body {
+    font-family: var(--font-hand);
+    font-size: 1.5rem;
+    line-height: 34px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .paper .p-sign { margin-top: 16px; text-align: right; font-family: var(--font-hand); font-size: 1.5rem; color: var(--paper-ink-2); }
+
+  .seal-view { text-align: center; padding: 8px 0 6px; }
+  .seal-view .env-seal { position: static; width: 72px; height: 72px; margin: 0 auto 16px; animation: seal-in 620ms var(--spring) both; }
+  .seal-view .env-seal .i { width: 30px; height: 30px; }
+  @keyframes seal-in { from { transform: scale(.6) rotate(-20deg); opacity: 0; } }
+  .seal-view .count {
+    font-family: var(--font-round); font-size: 2.2rem; font-weight: 700; letter-spacing: -.02em;
+    margin-top: 14px; font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- переключатель «запечатать» ---------- */
+  .switch-row { display: flex; align-items: center; gap: 12px; padding: 4px 4px 0; }
+  .switch-row .grow { flex: 1; }
+  .switch {
+    position: relative; flex: none;
+    width: 51px; height: 31px; border-radius: 999px;
+    background: var(--fill-2);
+    transition: background 220ms ease;
+  }
+  .switch::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 27px; height: 27px; border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .2);
+    transition: transform 320ms var(--spring-soft);
+  }
+  .switch[aria-checked="true"] { background: var(--ok); }
+  .switch[aria-checked="true"]::after { transform: translateX(20px); }
+  .seal-date { overflow: hidden; display: grid; grid-template-rows: 0fr; transition: grid-template-rows 320ms var(--ease-out); }
+  .seal-date.open { grid-template-rows: 1fr; }
+  .seal-date > div { min-height: 0; }
+
+  .link-box { display: flex; gap: 8px; margin-top: 10px; }
+  .link-box input { font-size: max(16px, .8rem); font-family: ui-monospace, monospace; }
+
+  @media (min-width: 721px) {
+    .shelf { grid-template-columns: repeat(2, 1fr); }
+    .write-btn { width: auto; }
+    .letters-top { display: flex; gap: 16px; align-items: center; justify-content: space-between; }
+    .letters-top .segmented { flex: 1; max-width: 460px; }
+    .write-btn { margin-bottom: 0; }
   }
 </style>
 </head>
-<body>
-
-<div id="starfield"></div>
+<body data-page="letters">
 
 <header class="topbar">
   <div class="topbar-inner">
-    <a class="brand" href="index.html"><span class="dot">💜</span> Мы&nbsp;вдвоём</a>
-    <nav class="nav">
+    <a class="brand" href="index.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#heart-fill"/></svg>Мы&nbsp;вдвоём</a>
+    <div class="bar-title" aria-hidden="true"></div>
+    <nav class="nav" aria-label="Разделы">
       <span class="nav-pill" aria-hidden="true"></span>
-      <a href="index.html" class="nav-home">Главная</a>
+      <a href="index.html">Главная</a>
       <a href="chat.html">Чат</a>
       <a href="letters.html">Письма</a>
       <a href="games.html">Игры</a>
       <a href="memories.html">История</a>
-      <a href="quest.html">Сюрприз</a>
     </nav>
-    <button class="who-chip" id="who-chip">💜</button>
+    <button class="who-chip" id="who-chip" type="button" aria-label="Сменить, кто за экраном"></button>
   </div>
 </header>
 
-<main class="shell">
+<main class="shell" id="main">
 
-  <section class="section" style="padding-top:34px">
-    <div class="section-head">
-      <h2>Письма и капсулы времени</h2>
-      <p>то, что не помещается в обычное сообщение</p>
-      <span class="badge" id="cloud-badge" style="margin-left:auto"></span>
+  <header class="page-head">
+    <h1 class="page-title">Письма</h1>
+    <p class="page-sub">То, что не помещается в обычное сообщение. Можно запечатать до нужного дня.</p>
+  </header>
+
+  <div class="letters-top">
+    <button class="btn write-btn" type="button" id="write"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#pencil"/></svg>Написать письмо</button>
+    <div class="segmented" id="tabs" role="group" aria-label="Какие письма показать" style="--n:4">
+      <span class="thumb" aria-hidden="true"></span>
+      <button type="button" data-filter="all" aria-pressed="true">Все</button>
+      <button type="button" data-filter="in" aria-pressed="false">Мне</button>
+      <button type="button" data-filter="out" aria-pressed="false">От меня</button>
+      <button type="button" data-filter="sealed" aria-pressed="false">Ждут</button>
     </div>
+  </div>
 
-    <div class="grid two">
+  <div class="shelf" id="shelf" aria-live="polite"></div>
 
-      <!-- ---------- НАПИСАТЬ ---------- -->
-      <div class="card">
-        <h3>✍️ Написать письмо</h3>
-        <div class="stack mt">
-          <div class="field">
-            <label for="l-title">О чём это письмо</label>
-            <input type="text" id="l-title" maxlength="80" placeholder="Например: «Прочитай, когда будет грустно»" />
-          </div>
-          <div class="field">
-            <label for="l-body">Само письмо</label>
-            <textarea id="l-body" maxlength="4000" placeholder="Пиши как есть. Здесь можно всё."></textarea>
-          </div>
-          <div class="field">
-            <label for="l-open">Запечатать до… <span class="muted">(необязательно)</span></label>
-            <input type="datetime-local" id="l-open" />
-            <span class="muted">Пока дата не наступит, письмо нельзя будет открыть — даже вам.</span>
-          </div>
-          <div class="row">
-            <button class="btn" id="l-send">Положить на полку</button>
-            <button class="btn ghost" id="l-link">Сделать ссылку 🔗</button>
-          </div>
-        </div>
-
-        <div id="link-result" class="hidden">
-          <hr class="hr" />
-          <div style="font-weight:800; font-size:.9rem">Ссылка-капсула готова</div>
-          <p class="muted mt" style="margin-top:6px">Всё письмо зашито прямо в ссылку — просто отправьте её в мессенджер. Никакого сервера, никто посторонний не прочитает.</p>
-          <div class="link-box">
-            <input type="text" id="link-value" readonly />
-            <button class="btn small" id="link-copy">Копировать</button>
-          </div>
-        </div>
+  <section class="section" aria-labelledby="how-title">
+    <div class="section-head"><h2 class="section-title" id="how-title">Как это работает</h2></div>
+    <div class="group" style="--sep-inset:60px">
+      <div class="row-item">
+        <span class="row-icon"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#letter"/></svg></span>
+        <span class="grow"><span class="title" style="display:block">Полка общая</span><span class="sub" style="display:block">Что положите сюда — увидит второй, сразу.</span></span>
       </div>
-
-      <!-- ---------- ПОЛКА ---------- -->
-      <div class="card">
-        <h3>📮 Наша почта</h3>
-        <div class="tabs mt" id="tabs">
-          <div class="tab active" data-filter="all">Все</div>
-          <div class="tab" data-filter="in">Мне</div>
-          <div class="tab" data-filter="out">От меня</div>
-          <div class="tab" data-filter="sealed">Запечатанные</div>
-        </div>
-        <div class="shelf" id="shelf"></div>
-        <p class="muted mt" id="shelf-empty">Полка пока пуста. Напишите первое письмо слева 💌</p>
+      <div class="row-item">
+        <span class="row-icon" style="background:#9e1d3a"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#lock"/></svg></span>
+        <span class="grow"><span class="title" style="display:block">Капсула времени</span><span class="sub" style="display:block">Письмо с датой откроется только в этот день — даже вам.</span></span>
       </div>
-
-    </div>
-  </section>
-
-  <section class="section">
-    <div class="card">
-      <h3>💡 Как этим пользоваться</h3>
-      <div class="grid three mt">
-        <div>
-          <div style="font-size:1.5rem">💌</div>
-          <p class="muted mt" style="margin-top:8px"><b style="color:var(--text-dim)">Полка</b> — общая. Всё, что вы туда положите, увидит вторая половинка (если подключён Firebase).</p>
-        </div>
-        <div>
-          <div style="font-size:1.5rem">🔒</div>
-          <p class="muted mt" style="margin-top:8px"><b style="color:var(--text-dim)">Капсула времени</b> — письмо с датой. Напишите сегодня, а откроется в день рождения или в день встречи.</p>
-        </div>
-        <div>
-          <div style="font-size:1.5rem">🔗</div>
-          <p class="muted mt" style="margin-top:8px"><b style="color:var(--text-dim)">Ссылка</b> — письмо целиком внутри адреса. Работает всегда, даже без настройки. Отправьте её в Telegram.</p>
-        </div>
+      <div class="row-item">
+        <span class="row-icon" style="background:var(--other-fill)"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#link"/></svg></span>
+        <span class="grow"><span class="title" style="display:block">Письмо-ссылка</span><span class="sub" style="display:block">Всё письмо зашито в адрес. Отправьте его куда угодно.</span></span>
       </div>
     </div>
   </section>
 
 </main>
 
-<div class="footer">сделано с 💜</div>
+<nav class="tabbar" aria-label="Разделы">
+  <span class="tab-pill" aria-hidden="true" style="--i:2"></span>
+  <a href="index.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#home"/></svg><span>Главная</span></a>
+  <a href="chat.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#chat"/></svg><span>Чат</span></a>
+  <a href="letters.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#letter"/></svg><span>Письма</span></a>
+  <a href="games.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#games"/></svg><span>Игры</span></a>
+  <a href="memories.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#story"/></svg><span>История</span></a>
+</nav>
 
 <script src="assets/js/config.js"></script>
 <script src="assets/js/common.js"></script>
