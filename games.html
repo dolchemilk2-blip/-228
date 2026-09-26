@@ -29,7 +29,8 @@
   /* под верхней карточкой — ещё две, край колоды виден */
   .deck .under-1 { transform: translateY(10px) scale(.95); opacity: .75; }
   .deck .under-2 { transform: translateY(20px) scale(.9); opacity: .45; }
-  .deck .top { z-index: 3; }
+  .deck .top { z-index: 3; touch-action: pan-y; cursor: grab; -webkit-user-select: none; user-select: none; will-change: transform; }
+  .deck .top:active { cursor: grabbing; }
   .reason-text {
     font-family: var(--font-serif);
     font-style: italic;
@@ -40,9 +41,7 @@
   .reason-mark .i { width: 22px; height: 22px; }
   .reason-num { position: absolute; left: 24px; bottom: 16px; font-size: var(--t-foot); color: var(--text-3); font-variant-numeric: tabular-nums; }
 
-  /* верхняя карточка улетает в сторону, следующая встаёт на её место */
-  .deck .top.leaving { animation: card-away 420ms var(--ease-in) forwards; }
-  @keyframes card-away { to { transform: translate(-120%, -18px) rotate(-14deg); opacity: 0; } }
+  /* следующая карточка поднимается из колоды на место улетевшей */
   .deck .top.arriving { animation: card-rise 520ms var(--spring-soft) both; }
   @keyframes card-rise { from { transform: translateY(10px) scale(.95); opacity: .75; } }
 
@@ -269,7 +268,7 @@
 
   </div>
 
-  <p class="section-note" style="margin-top:28px">Причины, вопросы и идеи лежат в <code>assets/js/config.js</code> — дописывайте свои, чем личнее, тем лучше.</p>
+  <p class="section-note" style="margin-top:28px">Карточку с причиной можно смахнуть пальцем. Причины, вопросы и идеи лежат в <code>assets/js/config.js</code> — дописывайте свои, чем личнее, тем лучше.</p>
 
 </main>
 

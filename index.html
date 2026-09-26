@@ -33,7 +33,25 @@
     display: flex; justify-content: space-between; align-items: center;
     font-size: var(--t-foot); color: var(--text-2); font-weight: 600;
   }
-  .pass-top .flight { font-variant-numeric: tabular-nums; color: var(--text-3); }
+  .pass-top .flight { font-variant-numeric: tabular-nums; color: var(--text-3); margin-left: 6px; }
+  .pass-top .flight:empty { display: none; }
+  .pass-top .flight::before { content: '· '; }
+  .pass-edit {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px 4px 8px; margin: -4px -6px -4px 0;
+    border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent);
+    font-size: var(--t-foot); font-weight: 600;
+  }
+  .pass-edit .i { width: 15px; height: 15px; }
+  .pass { cursor: pointer; --ps: .985; transition: transform var(--release); }
+  .pass:focus-visible { outline-offset: 4px; border-radius: 24px; }
+  /* смена даты: подписи меняются мягко, с размытием */
+  .swap-in { animation: swap-in 420ms var(--ease-out) both; }
+  @keyframes swap-in { from { opacity: 0; filter: blur(4px); transform: translateY(4px); } }
+  .trip-sheet .zone { display: flex; align-items: center; gap: 8px; padding: 10px 4px 0; color: var(--text-2); font-size: var(--t-sub); }
+  .trip-sheet .zone .i { width: 18px; height: 18px; color: var(--text-3); }
+  .trip-sheet .quick-dates { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 
   .pass-route { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; margin-top: 14px; }
   .pass-city b {
@@ -69,7 +87,7 @@
   .pass-clock { margin-top: 6px; font-size: var(--t-sub); color: var(--text-3); font-variant-numeric: tabular-nums; }
 
   .pass-stub {
-    display: grid; grid-template-columns: 1fr auto auto; gap: 16px;
+    display: grid; grid-template-columns: auto auto 1fr; gap: 14px 16px;
     padding: 16px 20px 18px;
     border-top: 1.5px dashed var(--sep);
     margin: 0 18px;
@@ -77,6 +95,8 @@
   }
   .pass-stub span { display: block; font-size: var(--t-caption); color: var(--text-3); font-weight: 600; }
   .pass-stub b { display: block; margin-top: 3px; font-size: var(--t-callout); font-weight: 600; white-space: nowrap; }
+  .pass-stub > div:last-child { min-width: 0; }
+  .pass-stub #pass-seat { white-space: normal; text-wrap: balance; }
   .pass.done .pass-count .big { color: var(--heart); }
 
   /* ---------- два города ---------- */
@@ -125,9 +145,9 @@
     border-radius: 999px;
     background: var(--fill);
     font-size: var(--t-callout); font-weight: 500;
-    transition: transform var(--d-press) var(--ease-out), background var(--d-fast);
+    transition: transform var(--release), background-color var(--d-fast), color var(--d-fast);
+    --ps: .93;
   }
-  .chip:active { transform: scale(.95); }
   .chip[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 
   /* ---------- вопрос дня ---------- */
@@ -179,9 +199,9 @@
     border-radius: 18px;
     background: var(--surface);
     box-shadow: var(--shadow-1);
-    transition: transform var(--d-fast) var(--ease-out);
+    transition: transform var(--release);
+    --ps: .93;
   }
-  .ping:active { transform: scale(.94); }
   .ping-e { font-size: 1.9rem; line-height: 1; display: block; transition: transform 500ms var(--spring); }
   .ping.sent .ping-e { transform: scale(1.18) translateY(-2px); }
   .ping-t {
@@ -244,11 +264,11 @@
   </header>
 
   <!-- ---------- ПОСАДОЧНЫЙ ТАЛОН ---------- -->
-  <section class="pass" id="pass" aria-labelledby="pass-title">
+  <section class="pass pressable" id="pass" role="button" tabindex="0" aria-labelledby="pass-title" aria-describedby="pass-edit">
     <div class="pass-main">
       <div class="pass-top">
-        <span id="pass-title">Посадочный талон</span>
-        <span class="flight" id="pass-flight">рейс 0106</span>
+        <span id="pass-title">Посадочный талон<span class="flight" id="pass-flight"></span></span>
+        <span class="pass-edit" id="pass-edit"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#pencil"/></svg>Изменить</span>
       </div>
       <div class="pass-route">
         <div class="pass-city"><b id="pass-from">ALA</b><span id="pass-from-city">Алматы</span></div>
@@ -270,11 +290,11 @@
         <span class="big num" id="cd-days">—</span>
         <span class="unit" id="cd-unit">до встречи</span>
       </div>
-      <div class="pass-clock" id="cd-clock">&nbsp;</div>
+      <div class="pass-clock" id="cd-clock"><span id="cd-pre">и ещё </span><span class="num" id="cd-hms"></span><span id="cd-post"></span></div>
     </div>
     <div class="pass-stub">
       <div><span>Пассажир</span><b id="pass-who">—</b></div>
-      <div><span>Вылет</span><b id="pass-date">—</b></div>
+      <div><span>Прилёт</span><b id="pass-date">—</b></div>
       <div><span>Место</span><b id="pass-seat">рядом</b></div>
     </div>
   </section>

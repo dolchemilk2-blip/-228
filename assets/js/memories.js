@@ -1,6 +1,6 @@
 /* Наша история: мост, общая лента моментов, фото, список желаний */
 
-import { cloud, trackUnread } from './cloud.js';
+import { cloud, trackUnread, watchTrip } from './cloud.js';
 
 const CFG = window.SITE_CONFIG;
 const $ = (id) => document.getElementById(id);
@@ -29,45 +29,41 @@ function tickBridge() {
 tickBridge();
 setInterval(tickBridge, 15000);
 
-(function placePlane() {
-  const arc = $('arc');
-  const plane = $('arc-plane');
-  if (!arc || !plane || !arc.getTotalLength) return;
-  const start = CFG.startDate ? new Date(CFG.startDate + 'T00:00:00') : null;
-  const meet = CFG.meetingDate ? new Date(CFG.meetingDate) : null;
-  let p = 0.5;
-  if (start && meet && !isNaN(start) && !isNaN(meet)) p = Math.max(0, Math.min(1, (Date.now() - start) / (meet - start)));
-  const fromA = CFG.traveler !== 'b';
+/* самолётик на дуге: пролетает от начала до сегодняшней точки,
+   а если дату прилёта поменяли — переезжает на новое место */
+const arc = $('arc');
+const arcPlane = $('arc-plane');
+let planeAt = 0;
+let planeAnim = null;
+
+function putPlane(t, fromA) {
+  if (!arc || !arc.getTotalLength) return;
   const len = arc.getTotalLength();
+  const d = fromA ? t : 1 - t;
+  const pt = arc.getPointAtLength(len * d);
+  const ahead = arc.getPointAtLength(Math.min(len, Math.max(0, len * d + (fromA ? 1 : -1))));
+  const ang = Math.atan2(ahead.y - pt.y, ahead.x - pt.x) * 180 / Math.PI;
+  arcPlane.setAttribute('transform', 'translate(' + pt.x.toFixed(1) + ' ' + pt.y.toFixed(1) + ') rotate(' + ang.toFixed(1) + ')');
+}
 
-  const put = (t) => {
-    const d = fromA ? t : 1 - t;
-    const pt = arc.getPointAtLength(len * d);
-    const ahead = arc.getPointAtLength(Math.min(len, Math.max(0, len * d + (fromA ? 1 : -1))));
-    const ang = Math.atan2(ahead.y - pt.y, ahead.x - pt.x) * 180 / Math.PI;
-    plane.setAttribute('transform', 'translate(' + pt.x.toFixed(1) + ' ' + pt.y.toFixed(1) + ') rotate(' + ang.toFixed(1) + ')');
-  };
+function renderBridge(trip) {
+  const start = CFG.startDate ? new Date(CFG.startDate + 'T00:00:00') : null;
+  let p = 0.5;
+  if (start && !isNaN(start) && !isNaN(trip.at)) p = Math.max(0, Math.min(1, (Date.now() - start) / (trip.at - start)));
+  const fromA = trip.traveler !== 'b';
+  if (planeAnim) planeAnim.stop();
+  planeAnim = App.spring({
+    from: planeAt, to: p, damping: 1, response: 1.1, precision: 0.0005,
+    onUpdate: (v) => { planeAt = v; putPlane(v, fromA); }
+  });
 
-  // самолётик пролетает от начала до сегодняшней точки — один раз, при входе
-  if (App.reduceMotion()) { put(p); }
-  else {
-    const t0 = performance.now(), dur = 1400;
-    const ease = (t) => 1 - Math.pow(1 - t, 4);
-    const step = (now) => {
-      const t = Math.min(1, (now - t0) / dur);
-      put(p * ease(t));
-      if (t < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-  }
-
-  if (meet && !isNaN(meet)) {
-    const days = Math.max(0, Math.ceil((meet - Date.now()) / 86400000));
+  if (!isNaN(trip.at)) {
+    const days = Math.max(0, Math.ceil((trip.at - Date.now()) / 86400000));
     $('bridge-note').textContent = days
       ? 'Пройдено ' + Math.round(p * 100) + '% пути · ещё ' + days + ' ' + App.plural(days, 'день', 'дня', 'дней')
       : 'Мы долетели';
   }
-})();
+}
 
 /* ============================================================
    Наша история — общая лента, которую оба могут править
@@ -188,6 +184,7 @@ function startDrag(e, item) {
   let to = from;
 
   dragging = true;
+  App.haptic();
   item.classList.add('lifted');
   try { e.target.setPointerCapture(e.pointerId); } catch (err) {}
 
@@ -516,6 +513,7 @@ function openPhoto(p, cell) {
     closing = true;
     window.removeEventListener('resize', onResize);
     document.removeEventListener('keydown', onKey);
+    v.querySelector('.viewer-bg').style.opacity = '';
     v.classList.remove('open');
     const cur = fromDrag || rest;
     const live = cell && cell.isConnected ? cell : $('gallery').querySelector('[data-id="' + p.id + '"]');
@@ -537,39 +535,52 @@ function openPhoto(p, cell) {
   v.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) close(); });
 
   /* потянуть снимок вниз — он уменьшается, фон светлеет; отпустить — закрыть */
+  /* Снимок идёт за пальцем 1:1, уменьшается и отпускает фон.
+     Отпустил: если бросил вниз — закрывается, иначе пружиной
+     возвращается, продолжая движение с той же скоростью. */
   let drag = null;
+  let back = { x: null, y: null };
+  const bgEl = v.querySelector('.viewer-bg');
+  const scaleFor = (dy) => Math.max(0.6, 1 - Math.max(0, dy) / 900);
+  const place = (x, y) => {
+    img.style.transform = 'translate(' + x.toFixed(1) + 'px, ' + y.toFixed(1) + 'px) scale(' + scaleFor(y).toFixed(3) + ')';
+    bgEl.style.opacity = String(Math.max(0.2, 1 - Math.abs(y) / 500));
+  };
   stage.addEventListener('pointerdown', (e) => {
-    drag = { x: e.clientX, y: e.clientY, t: performance.now(), dx: 0, dy: 0 };
+    if (back.x) back.x.stop();
+    if (back.y) back.y.stop();
+    drag = { x: e.clientX, y: e.clientY, dx: 0, dy: 0, tr: App.tracker() };
+    drag.tr.add(e.clientX, e.clientY);
     try { stage.setPointerCapture(e.pointerId); } catch (err) {}
   });
   stage.addEventListener('pointermove', (e) => {
     if (!drag) return;
+    drag.tr.add(e.clientX, e.clientY);
     drag.dx = e.clientX - drag.x;
-    drag.dy = e.clientY - drag.y;
-    const k = Math.max(0.6, 1 - Math.max(0, drag.dy) / 900);
-    img.style.transform = 'translate(' + drag.dx + 'px, ' + drag.dy + 'px) scale(' + k + ')';
-    v.querySelector('.viewer-bg').style.opacity = String(Math.max(0.2, 1 - Math.abs(drag.dy) / 500));
+    // вверх — туго, как у края прокрутки
+    const raw = e.clientY - drag.y;
+    drag.dy = raw < 0 ? App.rubberband(raw, 400) : raw;
+    place(drag.dx, drag.dy);
   });
   const endDrag = () => {
     if (!drag) return;
-    const v2 = drag.dy / Math.max(1, performance.now() - drag.t);
-    const moved = Math.hypot(drag.dx, drag.dy);
     const d = drag;
     drag = null;
-    if (moved < 6) {
-      // простое касание по фону вокруг снимка — закрыть
+    if (Math.hypot(d.dx, d.dy) < 6) return;
+    const vel = d.tr.velocity();
+    if (d.dy + App.project(vel.y, 0.99) > 160) {
+      const from = { transform: img.style.transform, clipPath: rest.clipPath };
+      img.style.transform = '';
+      App.haptic();
+      close(from);
       return;
     }
-    if (d.dy > 110 || v2 > 0.5) {
-      const k = Math.max(0.6, 1 - Math.max(0, d.dy) / 900);
-      const from = { transform: 'translate(' + d.dx + 'px, ' + d.dy + 'px) scale(' + k + ')', clipPath: rest.clipPath };
-      img.style.transform = '';
-      close(from);
-    } else {
-      img.style.transform = '';
-      img.animate([{ transform: 'translate(' + d.dx + 'px, ' + d.dy + 'px)' }, { transform: 'none' }], { duration: 320, easing: 'cubic-bezier(.3, 1.18, .6, 1)' });
-      v.querySelector('.viewer-bg').style.opacity = '';
-    }
+    // обе оси — отдельными пружинами, каждая со своей скоростью
+    let x = d.dx, y = d.dy;
+    back.x = App.spring({ from: d.dx, to: 0, velocity: vel.x, damping: 0.82, response: 0.36, onUpdate: (val) => { x = val; place(x, y); } });
+    back.y = App.spring({ from: d.dy, to: 0, velocity: vel.y, damping: 0.82, response: 0.36,
+      onUpdate: (val) => { y = val; place(x, y); },
+      onDone: () => { img.style.transform = ''; bgEl.style.opacity = ''; } });
   };
   stage.addEventListener('pointerup', endDrag);
   stage.addEventListener('pointercancel', endDrag);
@@ -681,6 +692,7 @@ $('wishlist').addEventListener('click', async (e) => {
   const done = wishes.filter((x) => x.done).length;
   $('wish-progress').style.width = Math.round(done / wishes.length * 100) + '%';
   $('wish-progress-text').textContent = done + ' из ' + wishes.length;
+  App.haptic();
   if (next) {
     const r = row.querySelector('.check').getBoundingClientRect();
     App.burst(r.left + r.width / 2, r.top + r.height / 2, ['✨', '💜', '💙'], 8);
@@ -693,6 +705,14 @@ paintWishes();
 /* ============================================================
    Подключение к общей базе
    ============================================================ */
+
+let lastTripKey = '';
+watchTrip((t) => {
+  const key = t.wall + t.traveler;
+  if (key === lastTripKey) return;
+  lastTripKey = key;
+  renderBridge(t);
+});
 
 await cloud.ready();
 cloud.presence(meKey);

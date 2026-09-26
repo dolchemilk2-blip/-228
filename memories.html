@@ -48,9 +48,9 @@
     border-radius: 18px;
     padding: 12px 14px 13px;
     box-shadow: var(--shadow-1);
-    transition: transform var(--d-fast) var(--ease-out), box-shadow var(--d-fast);
+    transition: transform var(--release), box-shadow var(--d-fast);
+    --ps: .98;
   }
-  button.story-card:active { transform: scale(.98); }
   .story-top { display: flex; align-items: center; gap: 8px; font-size: var(--t-foot); }
   .story-who { font-weight: 700; color: var(--au); white-space: nowrap; }
   .story-date { color: var(--text-3); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -69,9 +69,10 @@
     width: 40px; height: 40px; border-radius: 12px;
     display: grid; place-items: center;
     color: var(--text-2);
-    transition: background var(--d-fast), transform var(--d-press) var(--ease-out);
+    transition: background-color var(--d-fast), transform var(--release);
+    --ps: .86;
   }
-  .story-tools button:active { transform: scale(.9); background: var(--fill); }
+  .story-tools button.is-pressed { background: var(--fill); }
   .story-tools button:disabled { opacity: .25; }
   .story-tools .grab { cursor: grab; touch-action: none; color: var(--text-3); }
   .story-tools .i { width: 20px; height: 20px; }
@@ -92,9 +93,10 @@
     width: 100%; min-height: 50px; padding: 10px 14px;
     color: var(--accent); font-weight: 600;
     border-radius: 16px;
-    transition: background var(--d-fast), transform var(--d-press) var(--ease-out);
+    transition: background-color 320ms ease, transform var(--release);
+    --ps: .98;
   }
-  .add-row:active { background: var(--fill); transform: scale(.98); }
+  .add-row.is-pressed { background: var(--fill); }
   .add-row .plus {
     width: 26px; height: 26px; border-radius: 50%;
     display: grid; place-items: center; flex: none;
@@ -108,9 +110,9 @@
   .emoji-grid button {
     aspect-ratio: 1; font-size: 1.3rem; border-radius: 12px;
     background: var(--fill);
-    transition: transform 300ms var(--spring), background var(--d-fast), box-shadow var(--d-fast);
+    transition: transform var(--release), background-color var(--d-fast), box-shadow var(--d-fast);
+    --ps: .84;
   }
-  .emoji-grid button:active { transform: scale(.88); }
   .emoji-grid button[aria-pressed="true"] { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
 
   /* ---------- фото: сетка как в «Фото» ---------- */
@@ -123,8 +125,8 @@
     background: var(--fill);
     transition: opacity var(--d-fast);
   }
-  .photo img { width: 100%; height: 100%; object-fit: cover; transition: transform 300ms var(--ease-out); }
-  .photo:active img { transform: scale(.96); }
+  .photo { transition: opacity var(--d-fast), transform var(--release); --ps: .95; }
+  .photo img { width: 100%; height: 100%; object-fit: cover; }
   .photo .who {
     position: absolute; left: 6px; bottom: 6px;
     width: 8px; height: 8px; border-radius: 50%;
@@ -137,9 +139,9 @@
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
     background: var(--surface);
     color: var(--accent); font-weight: 600; font-size: var(--t-foot);
-    transition: background var(--d-fast);
+    transition: background-color var(--d-fast), transform var(--release);
+    --ps: .95;
   }
-  .photo-add:active { background: var(--fill); }
   .photo-add .i { width: 30px; height: 30px; }
 
   /* просмотр фото: снимок вырастает из миниатюры */
@@ -189,7 +191,8 @@
     width: 26px; height: 26px; border-radius: 50%;
     box-shadow: inset 0 0 0 1.8px var(--text-3);
     display: grid; place-items: center;
-    transition: box-shadow var(--d-fast), transform var(--d-press) var(--ease-out);
+    transition: box-shadow var(--d-fast), transform var(--release);
+    --ps: .84;
   }
   .check::before {
     content: ''; position: absolute; inset: 0; border-radius: 50%;
@@ -199,7 +202,7 @@
   }
   .check svg { position: relative; width: 16px; height: 16px; color: #fff; }
   .check path { stroke-dasharray: 22; stroke-dashoffset: 22; transition: stroke-dashoffset 260ms var(--ease-out) 80ms; }
-  .check:active { transform: scale(.88); }
+
   .wish.done .check { box-shadow: none; }
   .wish.done .check::before { transform: scale(1); }
   .wish.done .check path { stroke-dashoffset: 0; }
@@ -207,6 +210,7 @@
   .check::after { content: ''; position: absolute; inset: -9px; }
 
   .wish-text {
+    --ps: .985;
     flex: 1; min-width: 0; text-align: left;
     padding: 8px 0;
     line-height: 1.4;

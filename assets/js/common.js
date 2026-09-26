@@ -62,6 +62,218 @@ window.App = (function () {
            escapeHtml(initial(key)) + '<i class="online-dot"></i></span>';
   }
 
+  /* ============================================================
+     Физика движения — по мотивам Apple («Designing Fluid Interfaces»)
+
+     Пружина задаётся как в iOS: damping (1 — плавно, без перелёта;
+     меньше — с отскоком) и response (насколько быстро, в секундах).
+     Её можно перехватить в любой момент: новая пружина стартует
+     с текущего места и текущей скорости — без рывка.
+     ============================================================ */
+
+  function spring(o) {
+    var damping = o.damping == null ? 1 : o.damping;
+    var response = o.response || 0.4;
+    var to = o.to;
+    var x0 = o.from - to;                   // отклонение от цели
+    var v0 = o.velocity || 0;               // единиц в секунду
+    var w0 = 2 * Math.PI / response;
+    var t0 = performance.now();
+    var raf = 0, done = false, cur = o.from, vel = v0;
+
+    function disp(t) {
+      if (damping < 1) {
+        var wd = w0 * Math.sqrt(1 - damping * damping);
+        return Math.exp(-damping * w0 * t) * (x0 * Math.cos(wd * t) + ((v0 + damping * w0 * x0) / wd) * Math.sin(wd * t));
+      }
+      return Math.exp(-w0 * t) * (x0 + (v0 + w0 * x0) * t);
+    }
+
+    function finish() {
+      if (done) return;
+      done = true;
+      cancelAnimationFrame(raf);
+      cur = to; vel = 0;
+      if (o.onUpdate) o.onUpdate(to, 0);
+      if (o.onDone) o.onDone();
+    }
+
+    function step(now) {
+      if (done) return;
+      var t = (now - t0) / 1000;
+      var x = disp(t);
+      vel = (disp(t + 0.001) - x) / 0.001;
+      cur = to + x;
+      if (Math.abs(x) < (o.precision || 0.4) && Math.abs(vel) < 8) { finish(); return; }
+      if (o.onUpdate) o.onUpdate(cur, vel);
+      raf = requestAnimationFrame(step);
+    }
+
+    if (reduceMotion.matches || o.instant) { finish(); }
+    else { if (o.onUpdate) o.onUpdate(o.from, v0); raf = requestAnimationFrame(step); }
+
+    return {
+      stop: function () { done = true; cancelAnimationFrame(raf); },
+      get value() { return cur; },
+      get velocity() { return vel; },
+      get running() { return !done; }
+    };
+  }
+
+  // Мягкий край: чем дальше тянешь за границу, тем туже идёт
+  function rubberband(over, size, c) {
+    c = c || 0.55;
+    var s = Math.sign(over), a = Math.abs(over);
+    return s * (a * size * c) / (size + c * a);
+  }
+
+  // Куда «докатится» жест с этой скоростью (px/с) — как прокрутка iOS
+  function project(velocity, rate) {
+    rate = rate || 0.99;
+    return (velocity / 1000) * rate / (1 - rate);
+  }
+
+  // Скорость пальца по последним точкам — для передачи в пружину
+  function tracker() {
+    var pts = [];
+    return {
+      add: function (x, y) {
+        var t = performance.now();
+        pts.push({ x: x, y: y, t: t });
+        while (pts.length > 2 && t - pts[0].t > 70) pts.shift();
+      },
+      velocity: function () {
+        if (pts.length < 2) return { x: 0, y: 0 };
+        var a = pts[0], b = pts[pts.length - 1];
+        var dt = Math.max(1, b.t - a.t) / 1000;
+        // палец давно стоит — скорости нет
+        if (performance.now() - b.t > 80) return { x: 0, y: 0 };
+        return { x: (b.x - a.x) / dt, y: (b.y - a.y) / dt };
+      }
+    };
+  }
+
+  /* ---------------- тактильный отклик ----------------
+     На iPhone (iOS 18+) переключатель-свитч сам даёт лёгкий «тик»
+     Taptic Engine — нажимаем невидимый. Там, где есть Vibration API
+     (Android), — короткая вибрация. Только на значимые моменты. */
+
+  var hapticEl = null;
+  function haptic() {
+    if (!matchMedia('(pointer: coarse)').matches) return;
+    // пока открыта клавиатура, фокус не трогаем — иначе она закроется
+    var a = document.activeElement;
+    if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') && a.type !== 'checkbox') {
+      if (navigator.vibrate) navigator.vibrate(8);
+      return;
+    }
+    try {
+      if (!hapticEl) {
+        hapticEl = document.createElement('label');
+        hapticEl.setAttribute('aria-hidden', 'true');
+        hapticEl.style.cssText = 'position:fixed;left:-40px;top:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none';
+        var inp = document.createElement('input');
+        inp.type = 'checkbox';
+        inp.setAttribute('switch', '');
+        inp.tabIndex = -1;
+        hapticEl.appendChild(inp);
+        document.body.appendChild(hapticEl);
+      }
+      hapticEl.click();
+    } catch (e) {}
+    if (navigator.vibrate) navigator.vibrate(8);
+  }
+
+  /* ---------------- нажатия ----------------
+     Отклик — в момент касания, а не когда палец отпустили.
+     Сдвинул палец дальше 10px или начал прокрутку — нажатие
+     отменяется, как в iOS. Отпускание — на пружине (в CSS). */
+
+  var PRESS = 'button, a[href], [role="button"], label.pressable, .pressable';
+  var NO_PRESS = '.bubble, .no-press, .sheet-grab, [data-act="drag"], canvas, input, textarea, select';
+  var pressed = null;
+
+  function releasePress() {
+    if (!pressed) return;
+    pressed.el.classList.remove('is-pressed');
+    pressed = null;
+  }
+
+  document.addEventListener('pointerdown', function (e) {
+    if (e.button > 0) return;
+    var el = e.target.closest(PRESS);
+    if (!el || el.closest(NO_PRESS) || el.disabled || el.getAttribute('aria-disabled') === 'true') return;
+    releasePress();
+    pressed = { el: el, x: e.clientX, y: e.clientY, id: e.pointerId };
+    el.classList.add('is-pressed');
+  }, true);
+  document.addEventListener('pointermove', function (e) {
+    if (!pressed || e.pointerId !== pressed.id) return;
+    if (Math.abs(e.clientX - pressed.x) > 10 || Math.abs(e.clientY - pressed.y) > 10) releasePress();
+  }, { capture: true, passive: true });
+  ['pointerup', 'pointercancel', 'dragstart'].forEach(function (t) {
+    document.addEventListener(t, releasePress, true);
+  });
+  window.addEventListener('blur', releasePress);
+  window.addEventListener('scroll', releasePress, { passive: true, capture: true });
+  // без этого iOS Safari не показывает :active на касании
+  document.addEventListener('touchstart', function () {}, { passive: true });
+
+  /* ---------------- цифры, которые перекатываются ----------------
+     Как numericText в iOS: меняются только те цифры, что изменились,
+     старая уезжает, новая въезжает с лёгким размытием. */
+
+  function roll(el, text, opts) {
+    opts = opts || {};
+    text = String(text);
+    if (el.dataset.roll === text) return;
+    var first = el.dataset.roll === undefined;
+    el.dataset.roll = text;
+    el.setAttribute('aria-label', text);
+
+    if (first || reduceMotion.matches || !el.animate) {
+      el.innerHTML = '';
+      Array.from(text).forEach(function (ch) {
+        var s = document.createElement('span');
+        s.className = 'rl';
+        s.setAttribute('aria-hidden', 'true');
+        s.textContent = ch;
+        el.appendChild(s);
+      });
+      return;
+    }
+
+    var down = opts.down ? -1 : 1;           // обратный отсчёт катится сверху
+    var olds = [].slice.call(el.children);
+    var chars = Array.from(text);
+    // выравниваем по правому краю: 99 → 100 меняет все разряды
+    var shift = chars.length - olds.length;
+    var frag = [];
+    chars.forEach(function (ch, i) {
+      var old = olds[i - shift];
+      if (old && old.textContent === ch && !old.classList.contains('rl-out')) { frag.push(old); return; }
+      var s = document.createElement('span');
+      s.className = 'rl';
+      s.setAttribute('aria-hidden', 'true');
+      s.textContent = ch;
+      frag.push(s);
+      s.animate([
+        { transform: 'translateY(' + (45 * down) + '%)', opacity: 0, filter: 'blur(2px)' },
+        { transform: 'none', opacity: 1, filter: 'blur(0)' }
+      ], { duration: opts.duration || 420, easing: 'cubic-bezier(.23, 1, .32, 1)', delay: Math.max(0, (chars.length - 1 - i)) * 0 });
+      if (old) {
+        var ghost = old.cloneNode(true);
+        ghost.classList.add('rl-out');
+        s.appendChild(ghost);
+        ghost.animate([
+          { transform: 'none', opacity: 1, filter: 'blur(0)' },
+          { transform: 'translateY(' + (-90 * down) + '%)', opacity: 0, filter: 'blur(2px)' }
+        ], { duration: 320, easing: 'cubic-bezier(.55, 0, 1, .45)', fill: 'forwards' }).finished.then(function () { ghost.remove(); }, function () {});
+      }
+    });
+    el.replaceChildren.apply(el, frag);
+  }
+
   /* ---------------- уведомления ---------------- */
 
   function toastBox() {
@@ -114,6 +326,49 @@ window.App = (function () {
       });
       t.appendChild(b);
     }
+
+    /* уведомление можно смахнуть вниз или в сторону; пока палец на нём,
+       оно не пропадает само */
+    var g = null;
+    t.addEventListener('pointerdown', function (e) {
+      if (e.target.closest('.t-action')) return;
+      clearTimeout(timer);
+      g = { x: e.clientX, y: e.clientY, tr: tracker(), dx: 0, dy: 0 };
+      g.tr.add(e.clientX, e.clientY);
+      t.style.transition = 'none';
+      try { t.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    t.addEventListener('pointermove', function (e) {
+      if (!g) return;
+      g.tr.add(e.clientX, e.clientY);
+      g.dx = e.clientX - g.x;
+      var raw = e.clientY - g.y;
+      g.dy = raw < 0 ? rubberband(raw, 60) : raw;
+      t.style.transform = 'translate(' + g.dx.toFixed(1) + 'px,' + g.dy.toFixed(1) + 'px)';
+      t.style.opacity = String(Math.max(0.2, 1 - Math.abs(g.dx) / 260));
+    });
+    function letGo() {
+      if (!g) return;
+      var v = g.tr.velocity(), d = g;
+      g = null;
+      var outY = d.dy + project(v.y) > 50, outX = Math.abs(d.dx + project(v.x)) > 130;
+      if (outY || outX) {
+        t.style.transition = 'transform 280ms cubic-bezier(.23, 1, .32, 1), opacity 220ms ease';
+        t.style.transform = outX
+          ? 'translate(' + (Math.sign(d.dx + v.x) * 420) + 'px,' + d.dy + 'px)'
+          : 'translate(' + d.dx + 'px,' + (d.dy + 90) + 'px)';
+        t.style.opacity = '0';
+        t.classList.add('out');
+        setTimeout(function () { t.remove(); }, 300);
+        return;
+      }
+      t.style.transition = '';
+      t.style.transform = '';
+      t.style.opacity = '';
+      timer = setTimeout(dismiss, 2400);
+    }
+    t.addEventListener('pointerup', letGo);
+    t.addEventListener('pointercancel', letGo);
 
     box.appendChild(t);
     // кадр на то, чтобы браузер увидел стартовое состояние
@@ -192,28 +447,60 @@ window.App = (function () {
     document.body.appendChild(layer);
     inerted.forEach(function (n) { n.inert = true; });
 
-    requestAnimationFrame(function () {
-      requestAnimationFrame(function () { layer.classList.add('open'); });
-    });
+    /* На телефоне шторка движется пружиной, а затемнение фона идёт
+       ровно за ней: потянул наполовину — фон наполовину посветлел. */
+    var phone = window.innerWidth <= 720;
+    var scrim = layer.querySelector('.sheet-scrim');
+    var y = 0, H = 1, anim = null;
+
+    function setY(v) {
+      y = v;
+      el.style.transform = 'translate3d(0,' + v.toFixed(2) + 'px,0)';
+      scrim.style.opacity = String(Math.max(0, Math.min(1, 1 - v / H)));
+    }
+    function measure() { H = el.offsetHeight + 24; }
+
+    if (phone) {
+      layer.classList.add('physics');
+      measure();
+      setY(H);
+      requestAnimationFrame(function () {
+        anim = spring({ from: H, to: 0, damping: 0.88, response: 0.44, onUpdate: setY });
+      });
+    } else {
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () { layer.classList.add('open'); });
+      });
+    }
 
     var focusTarget = opts.focus ? layer.querySelector(opts.focus) : el;
     // на телефоне поле с клавиатурой лучше не фокусировать до конца выезда
     setTimeout(function () {
       if (focusTarget && layer.isConnected) focusTarget.focus({ preventScroll: true });
-    }, opts.focus ? 320 : 30);
+    }, opts.focus ? 340 : 30);
 
     var closed = false;
-    function close() {
+    function close(velocity) {
       if (closed) return;
       closed = true;
-      layer.classList.remove('open');
-      el.style.setProperty('--drag', '0px');
       inerted.forEach(function (n) { n.inert = false; });
       document.removeEventListener('keydown', onKey);
       openSheets = Math.max(0, openSheets - 1);
       if (!openSheets) root.classList.remove('sheet-open');
       if (document.activeElement && layer.contains(document.activeElement)) document.activeElement.blur();
-      setTimeout(function () { layer.remove(); }, 420);
+      layer.style.pointerEvents = 'none';
+      if (phone) {
+        if (anim) anim.stop();
+        measure();
+        anim = spring({
+          from: y, to: H, velocity: typeof velocity === 'number' ? Math.max(0, velocity) : 0,
+          damping: 1, response: 0.32, onUpdate: setY,
+          onDone: function () { layer.remove(); }
+        });
+      } else {
+        layer.classList.remove('open');
+        setTimeout(function () { layer.remove(); }, 300);
+      }
       if (prevFocus && prevFocus.focus && document.contains(prevFocus) && !matchMedia('(pointer: coarse)').matches) {
         prevFocus.focus({ preventScroll: true });
       }
@@ -223,38 +510,38 @@ window.App = (function () {
     function onKey(e) { if (e.key === 'Escape') close(); }
     document.addEventListener('keydown', onKey);
 
-    layer.querySelector('.sheet-scrim').addEventListener('click', close);
+    scrim.addEventListener('click', function () { close(); });
     layer.addEventListener('click', function (e) {
       if (e.target.closest('[data-close]')) close();
     });
 
-    /* Потянуть вниз за «язычок» или заголовок — закрыть.
-       Решает не только расстояние, но и скорость: короткий резкий
-       смах тоже закрывает, как в iOS. */
+    /* Потянуть за «язычок» или заголовок: шторка идёт за пальцем 1:1,
+       вверх упирается мягко. Отпустил — решает не расстояние, а то,
+       куда жест «докатился» бы с этой скоростью; и пружина продолжает
+       движение ровно с той скоростью, с какой шёл палец. */
     var drag = null;
     function dragStart(e) {
+      if (!phone || closed) return;
       if (e.target.closest('button, input, textarea, a')) return;
-      if (e.pointerType === 'mouse' && window.innerWidth > 720) return;
-      drag = { y: e.clientY, t: performance.now(), dy: 0, id: e.pointerId };
-      el.classList.add('dragging');
+      if (anim) anim.stop();
+      measure();
+      drag = { y0: y, start: e.clientY, id: e.pointerId, tr: tracker() };
+      drag.tr.add(0, e.clientY);
       try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {}
     }
     function dragMove(e) {
       if (!drag || e.pointerId !== drag.id) return;
-      var dy = e.clientY - drag.y;
-      // вверх шторка почти не идёт — упирается
-      drag.dy = dy > 0 ? dy : dy * 0.18;
-      el.style.setProperty('--drag', drag.dy.toFixed(1) + 'px');
+      drag.tr.add(0, e.clientY);
+      var raw = drag.y0 + (e.clientY - drag.start);
+      setY(raw < 0 ? rubberband(raw, H) : raw);
     }
     function dragEnd() {
       if (!drag) return;
-      var dt = Math.max(1, performance.now() - drag.t);
-      var v = drag.dy / dt;
-      var far = drag.dy > el.offsetHeight * 0.3;
-      el.classList.remove('dragging');
+      var v = drag.tr.velocity().y;
       drag = null;
-      if (far || v > 0.45) close();
-      else el.style.setProperty('--drag', '0px');
+      // закрыть: либо жест «докатился» бы ниже середины, либо это явный смах вниз
+      if (y + project(v) > H * 0.45 || (v > 500 && y > 30)) close(v);
+      else anim = spring({ from: y, to: 0, velocity: v, damping: 0.8, response: 0.34, onUpdate: setY });
     }
     [layer.querySelector('.sheet-grab'), layer.querySelector('.sheet-head')].forEach(function (h) {
       if (!h) return;
@@ -546,6 +833,35 @@ window.App = (function () {
     window.addEventListener('resize', function () { if (active.offsetWidth) place(active, false); });
   }
 
+  /* Подсветка вкладки едет к нажатой сразу, в момент касания, —
+     не дожидаясь, пока загрузится новая страница. */
+  function preNavigate() {
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest('.tabbar a[href], .nav a[href]');
+      if (!a || e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey) return;
+      var href = a.getAttribute('href');
+      if (href === currentPage()) { e.preventDefault(); window.scrollTo({ top: 0, behavior: reduceMotion.matches ? 'auto' : 'smooth' }); return; }
+      try { sessionStorage.setItem(LS_LAST_TAB, href); } catch (err) {}
+
+      var bar = a.closest('.tabbar, .nav');
+      [].forEach.call(bar.querySelectorAll('a'), function (x) {
+        if (x === a) x.setAttribute('aria-current', 'page'); else x.removeAttribute('aria-current');
+      });
+      if (bar.classList.contains('tabbar')) {
+        var pill = bar.querySelector('.tab-pill');
+        var idx = [].indexOf.call(bar.querySelectorAll('a'), a);
+        if (pill && idx >= 0) { pill.style.opacity = ''; pill.classList.add('glide'); pill.style.setProperty('--i', idx); }
+      } else {
+        var np = bar.querySelector('.nav-pill');
+        if (np) {
+          np.classList.add('glide', 'on');
+          np.style.setProperty('--pill-x', a.offsetLeft + 'px');
+          np.style.setProperty('--pill-w', a.offsetWidth + 'px');
+        }
+      }
+    }, true);
+  }
+
   /* Плавная смена страниц там, где нет View Transitions:
      уходящая гаснет, новая проявляется. */
   function pageTransitions() {
@@ -601,6 +917,7 @@ window.App = (function () {
     var chip = document.getElementById('who-chip');
     if (chip) chip.addEventListener('click', function () { askWhoAmI(true); });
 
+    preNavigate();
     pageTransitions();
     largeTitle();
     if (opts.requireIdentity !== false) askWhoAmI(false);
@@ -617,6 +934,8 @@ window.App = (function () {
     plural: plural, daysBetween: daysBetween, clockIn: clockIn, hourIn: hourIn, dateIn: dateIn,
     dayKey: dayKey, tzOffsetHours: tzOffsetHours, formatWhen: formatWhen,
     escapeHtml: escapeHtml, pickDifferent: pickDifferent,
+    spring: spring, rubberband: rubberband, project: project, tracker: tracker,
+    haptic: haptic, roll: roll,
     reduceMotion: function () { return reduceMotion.matches; }
   };
 })();

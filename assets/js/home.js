@@ -1,6 +1,6 @@
 /* Главная: талон до встречи, два города, настроение, вопрос дня, обнимашки */
 
-import { cloud, renderCloudBadge, trackUnread } from './cloud.js';
+import { cloud, renderCloudBadge, trackUnread, watchTrip, normalizeTrip } from './cloud.js';
 
 const CFG = window.SITE_CONFIG;
 const $ = (id) => document.getElementById(id);
@@ -53,33 +53,33 @@ greeting();
 })();
 
 /* ============================================================
-   Посадочный талон: самолётик стоит там, где мы сейчас на пути
+   Посадочный талон: самолётик стоит там, где мы сейчас на пути.
+   Нажать на талон — поменять дату и время прилёта; у второго
+   талон обновится сразу же.
    ============================================================ */
 
-const traveler = CFG.traveler === 'b' ? 'b' : 'a';
-const FROM = App.person(traveler);
-const TO = App.person(traveler === 'a' ? 'b' : 'a');
-const meetAt = CFG.meetingDate ? new Date(CFG.meetingDate) : null;
 const startAt = CFG.startDate ? new Date(CFG.startDate + 'T00:00:00') : null;
-
-$('pass-from').textContent = FROM.airport || FROM.city.slice(0, 3).toUpperCase();
-$('pass-to').textContent = TO.airport || TO.city.slice(0, 3).toUpperCase();
-$('pass-from').style.color = 'var(--' + (traveler === 'a' ? 'dima' : 'ragim') + ')';
-$('pass-to').style.color = 'var(--' + (traveler === 'a' ? 'ragim' : 'dima') + ')';
-$('pass-from-city').textContent = FROM.city;
-$('pass-to-city').textContent = TO.city;
-$('pass-who').textContent = FROM.name;
-$('pass-seat').textContent = meKey === traveler ? 'рядом с ' + (TO.name === 'Рагим' ? 'Рагимом' : TO.name) : 'рядом с тобой';
-
-if (meetAt && !isNaN(meetAt)) {
-  $('pass-date').textContent = meetAt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
-  const dd = String(meetAt.getDate()).padStart(2, '0') + String(meetAt.getMonth() + 1).padStart(2, '0');
-  $('pass-flight').textContent = 'рейс ' + A.name.charAt(0) + B.name.charAt(0) + ' ' + dd;
-}
+let trip = normalizeTrip(null);
 
 const pass = $('pass');
 const plane = $('pass-plane');
 const path = $('pass-path');
+
+// «с Рагимом», «с Димой» — творительный падеж для двух имён сайта
+function instrumental(name) {
+  if (/а$/.test(name)) return name.slice(0, -1) + 'ой';
+  if (/я$/.test(name)) return name.slice(0, -1) + 'ей';
+  if (/[бвгджзклмнпрстфхцчшщ]$/.test(name)) return name + 'ом';
+  return name;
+}
+
+function swapText(el, text) {
+  if (el.textContent === text) return;
+  el.textContent = text;
+  el.classList.remove('swap-in');
+  void el.offsetWidth;
+  el.classList.add('swap-in');
+}
 
 function layoutPass() {
   const main = pass.querySelector('.pass-main');
@@ -88,43 +88,164 @@ function layoutPass() {
 }
 
 function progress() {
-  if (!meetAt || !startAt || isNaN(meetAt) || isNaN(startAt)) return 0;
-  const p = (Date.now() - startAt) / (meetAt - startAt);
+  if (!startAt || isNaN(startAt) || isNaN(trip.at)) return 0;
+  const p = (Date.now() - startAt) / (trip.at - startAt);
   return Math.max(0, Math.min(1, p));
 }
 
 const two = (n) => String(n).padStart(2, '0');
 
+function arrivalLabel() {
+  if (isNaN(trip.at)) return '—';
+  const [d, t] = trip.wall.split('T');
+  const date = new Date(d + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+  return t ? date + ', ' + t.slice(0, 5) : date;
+}
+
+function renderTrip(animate) {
+  const FROM = App.person(trip.traveler);
+  const TO = App.person(trip.dest);
+  const code = (P) => P.airport || (P.city || '').slice(0, 3).toUpperCase();
+
+  $('pass-from').textContent = code(FROM);
+  $('pass-to').textContent = code(TO);
+  $('pass-from').style.color = 'var(--' + (trip.traveler === 'a' ? 'dima' : 'ragim') + ')';
+  $('pass-to').style.color = 'var(--' + (trip.traveler === 'a' ? 'ragim' : 'dima') + ')';
+  $('pass-from-city').textContent = FROM.city;
+  $('pass-to-city').textContent = TO.city;
+  $('pass-flight').textContent = trip.flight;
+
+  const set = animate ? swapText : (el, t) => { el.textContent = t; };
+  set($('pass-who'), FROM.name);
+  set($('pass-date'), arrivalLabel());
+  set($('pass-seat'), meKey === trip.traveler ? 'рядом с ' + instrumental(TO.name) : 'рядом с тобой');
+  pass.setAttribute('aria-label', 'Посадочный талон: ' + FROM.city + ' — ' + TO.city + ', прилёт ' + arrivalLabel() + '. Нажмите, чтобы изменить');
+
+  renderCountdown();
+  layoutPass();
+  plane.style.setProperty('--p', progress().toFixed(4));
+}
+
 function renderCountdown() {
-  if (!meetAt || isNaN(meetAt)) {
+  if (isNaN(trip.at)) {
     $('cd-days').textContent = '?';
     $('cd-unit').textContent = 'дата встречи ещё не назначена';
     return;
   }
-  let left = meetAt - Date.now();
+  let left = trip.at - Date.now();
   if (left <= 0) {
     pass.classList.add('done');
-    $('cd-days').textContent = 'Вместе';
+    App.roll($('cd-days'), 'Вместе');
     $('cd-unit').textContent = 'мы встретились';
-    $('cd-clock').textContent = '';
+    $('cd-pre').textContent = 'нажмите, чтобы запланировать следующую встречу';
+    $('cd-hms').textContent = '';
+    $('cd-post').textContent = '';
     return;
   }
+  pass.classList.remove('done');
   const days = Math.floor(left / 86400000);
   left -= days * 86400000;
   const h = Math.floor(left / 3600000);
   const m = Math.floor((left % 3600000) / 60000);
-  const s = Math.floor((left % 60000) / 1000);
-  $('cd-days').textContent = days.toLocaleString('ru-RU');
+  const sec = Math.floor((left % 60000) / 1000);
+  // обратный отсчёт: цифры перекатываются сверху вниз, как в iOS
+  App.roll($('cd-days'), days.toLocaleString('ru-RU'), { down: true, duration: 520 });
   $('cd-unit').innerHTML = esc(App.plural(days, 'день', 'дня', 'дней')) + '<br>' + esc(CFG.meetingLabel || 'до встречи');
-  $('cd-clock').textContent = 'и ещё ' + two(h) + ':' + two(m) + ':' + two(s) + ' · ' +
-    Math.round(progress() * 100) + '% пути позади';
+  $('cd-pre').textContent = 'и ещё ';
+  App.roll($('cd-hms'), two(h) + ':' + two(m) + ':' + two(sec), { down: true });
+  $('cd-post').textContent = ' · ' + Math.round(progress() * 100) + '% пути позади';
 }
 
-layoutPass();
-renderCountdown();
+renderTrip(false);
 // самолётик выезжает с начала маршрута на сегодняшнее место — один раз, при входе
+plane.style.setProperty('--p', '0');
 requestAnimationFrame(() => requestAnimationFrame(() => plane.style.setProperty('--p', progress().toFixed(4))));
 window.addEventListener('resize', layoutPass);
+
+/* ---------- шторка «Когда прилетаю» ---------- */
+
+function openTripSheet() {
+  App.haptic();
+  let who = trip.traveler;
+  const addDays = (wall, n) => {
+    const [d, t] = (wall || '').split('T');
+    if (!d) return wall;
+    const x = new Date(d + 'T12:00:00Z');
+    x.setUTCDate(x.getUTCDate() + n);
+    return x.toISOString().slice(0, 10) + 'T' + (t || '12:00');
+  };
+  const cityName = (k) => App.person(k === 'a' ? 'b' : 'a').city;
+
+  const s = App.sheet({
+    title: 'Когда прилетаю',
+    className: 'trip-sheet',
+    body:
+      '<div class="field">' +
+        '<span class="label">Кто летит</span>' +
+        '<div class="segmented" id="trip-who" role="group" aria-label="Кто летит">' +
+          '<span class="thumb" aria-hidden="true"></span>' +
+          ['a', 'b'].map((k) => '<button type="button" data-k="' + k + '" aria-pressed="' + (k === who) + '">' +
+            esc(App.person(k).name) + ' → ' + esc(cityName(k)) + '</button>').join('') +
+        '</div>' +
+      '</div>' +
+      '<div class="field" style="margin-top:16px">' +
+        '<label for="trip-when">Посадка</label>' +
+        '<input type="datetime-local" id="trip-when" />' +
+        '<div class="quick-dates">' +
+          '<button class="chip" type="button" data-shift="-1">−1 день</button>' +
+          '<button class="chip" type="button" data-shift="1">+1 день</button>' +
+          '<button class="chip" type="button" data-shift="7">+неделя</button>' +
+        '</div>' +
+        '<div class="zone">' + App.icon('clock') + '<span id="trip-zone"></span></div>' +
+      '</div>' +
+      '<div class="field" style="margin-top:16px">' +
+        '<label for="trip-flight">Номер рейса <span class="faint">— если знаете</span></label>' +
+        '<input type="text" id="trip-flight" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="J2 8012" />' +
+      '</div>' +
+      (trip.fromCloud && trip.by ? '<p class="hint" style="margin-top:14px">Последним менял ' + esc(App.person(trip.by).name) +
+        (trip.updatedAt ? ', ' + esc(App.formatWhen(trip.updatedAt)) : '') + '</p>' : ''),
+    foot:
+      '<button class="btn gray" type="button" data-close>Отмена</button>' +
+      '<button class="btn" type="button" id="trip-save">Сохранить</button>'
+  });
+
+  const when = s.$('#trip-when');
+  const flight = s.$('#trip-flight');
+  when.value = (trip.wall || '').slice(0, 16);
+  flight.value = trip.flight || '';
+
+  const zoneText = () => {
+    const dest = App.person(who === 'a' ? 'b' : 'a');
+    s.$('#trip-zone').textContent = 'по местному времени: ' + dest.city + ' — сейчас ' + App.clockIn(dest.timeZone);
+  };
+  zoneText();
+
+  App.segmented(s.$('#trip-who'), (btn) => { who = btn.getAttribute('data-k'); zoneText(); });
+
+  s.$('.quick-dates').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-shift]');
+    if (!b || !when.value) return;
+    when.value = addDays(when.value, +b.getAttribute('data-shift')).slice(0, 16);
+    when.classList.remove('swap-in');
+    void when.offsetWidth;
+    when.classList.add('swap-in');
+  });
+
+  s.$('#trip-save').addEventListener('click', async () => {
+    const wall = when.value;
+    if (!wall) { App.toast('Выберите дату и время посадки'); when.focus(); return; }
+    const data = { wall, traveler: who, flight: flight.value.trim().toUpperCase(), by: meKey, updatedAt: Date.now() };
+    s.close();
+    App.haptic();
+    await cloud.set('trip', data);
+    App.toast('Сохранено — ' + OTHER.name + ' увидит новую дату');
+  });
+}
+
+pass.addEventListener('click', openTripSheet);
+pass.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTripSheet(); }
+});
 
 /* ============================================================
    Два города: время, небо, погода
@@ -182,7 +303,7 @@ function renderCity(key) {
   box.classList.toggle('dusk', sky === 'dusk');
 
   f('city').textContent = P.city;
-  f('time').textContent = App.clockIn(P.timeZone);
+  App.roll(f('time'), App.clockIn(P.timeZone));
 
   const w = weather[key];
   if (w) {
@@ -437,6 +558,7 @@ function openAnswerSheet() {
     const text = field.value.trim();
     if (!text) { App.toast('Ответ получился пустым'); return; }
     s.close();
+    App.haptic();
     await cloud.set('daily/' + today + '/' + meKey, { text, at: Date.now() });
     const partnerDone = Boolean((daily[today] || {})[otherKey]);
     App.toast(partnerDone ? 'Готово — смотрите, что ответил ' + OTHER.name : 'Сохранено — ' + OTHER.name + ' увидит, когда ответит сам');
@@ -484,6 +606,7 @@ document.querySelectorAll('[data-ping]').forEach((btn) => {
     const e = btn.querySelector('.ping-e').getBoundingClientRect();
     App.burst(e.left + e.width / 2, e.top + e.height / 2, [emoji, '✨'], 10);
     btn.classList.add('sent');
+    App.haptic();
     clearTimeout(timer);
     timer = setTimeout(() => btn.classList.remove('sent'), 1600);
     await cloud.push('pings', { by: meKey, kind, at: Date.now() });
@@ -550,6 +673,16 @@ cloud.watch('mood', (data) => {
     box.classList.add('empty');
     box.textContent = 'пока ничего не написал о настроении';
   }
+});
+
+// первые два ответа — дата из config.js и из комнаты — рисуем без анимации;
+// дальше любая смена (своя или второго) проигрывается
+let tripCalls = 0;
+watchTrip((t) => {
+  const changed = t.wall !== trip.wall || t.traveler !== trip.traveler || t.flight !== trip.flight;
+  trip = t;
+  if (changed) renderTrip(tripCalls >= 2);
+  tripCalls++;
 });
 
 cloud.watch('daily', (data) => {

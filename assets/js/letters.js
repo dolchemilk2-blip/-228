@@ -1,6 +1,9 @@
 /* Письма и капсулы времени */
 
-import { cloud, trackUnread } from './cloud.js';
+import { cloud, trackUnread, watchTrip } from './cloud.js';
+
+let trip = null;
+watchTrip((t) => { trip = t; });
 
 const $ = (id) => document.getElementById(id);
 const esc = App.escapeHtml;
@@ -158,7 +161,7 @@ function localInputValue(ts) {
 }
 
 function openComposer() {
-  const meet = window.SITE_CONFIG.meetingDate;
+  const meet = trip && !isNaN(trip.at) && trip.at > Date.now() ? trip.at : null;
   const s = App.sheet({
     title: 'Письмо для ' + (OTHER.name === 'Рагим' ? 'Рагима' : OTHER.name === 'Дима' ? 'Димы' : OTHER.name),
     body:
@@ -198,13 +201,14 @@ function openComposer() {
   const seal = s.$('#l-seal');
   const sealBox = s.$('#l-seal-box');
   seal.addEventListener('click', () => {
+    App.haptic();
     const on = seal.getAttribute('aria-checked') !== 'true';
     seal.setAttribute('aria-checked', String(on));
     sealBox.classList.toggle('open', on);
     if (on && !s.$('#l-open').value) s.$('#l-open').value = localInputValue(Date.now() + 7 * 86400000);
   });
   const meetBtn = s.$('#l-meet');
-  if (meetBtn) meetBtn.addEventListener('click', () => { s.$('#l-open').value = localInputValue(new Date(meet).getTime()); });
+  if (meetBtn) meetBtn.addEventListener('click', () => { s.$('#l-open').value = localInputValue(meet); });
 
   function collect() {
     const title = s.$('#l-title').value.trim();
@@ -311,6 +315,11 @@ function paintShelf(animate) {
     return;
   }
   shelf.innerHTML = list.map((l, i) => envelope(l, i, animate)).join('');
+  // после появления снимаем анимацию: иначе она держит transform,
+  // и нажатие не могло бы сжать конверт
+  if (animate) shelf.querySelectorAll('.env').forEach((el) => {
+    el.addEventListener('animationend', () => { el.style.animation = ''; }, { once: true });
+  });
 }
 
 $('shelf').addEventListener('click', (e) => {

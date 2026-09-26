@@ -270,3 +270,57 @@ export async function trackUnread(onCount) {
     if (onCount) onCount(n);
   });
 }
+
+/* ============================================================
+   Поездка: когда прилетаю. Меняется прямо на главной и живёт
+   в общей комнате — у второго дата обновляется сразу же.
+   Пока в комнате ничего нет, берём дату из config.js.
+   ============================================================ */
+
+// Смещение пояса в миллисекундах в данный момент
+function tzOffsetMs(tz, ts) {
+  const p = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour12: false, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  }).formatToParts(new Date(ts)).reduce((acc, x) => { acc[x.type] = x.value; return acc; }, {});
+  const h = p.hour === '24' ? 0 : +p.hour;
+  return Date.UTC(+p.year, +p.month - 1, +p.day, h, +p.minute, +p.second) - Math.floor(ts / 1000) * 1000;
+}
+
+// «2027-06-01T12:00» по часам города → момент времени.
+// Время посадки считаем по месту прилёта: у обоих отсчёт совпадёт.
+export function zonedToTs(wall, tz) {
+  const [d, t = '00:00'] = String(wall).split('T');
+  const [Y, M, D] = d.split('-').map(Number);
+  const [h, m] = t.split(':').map(Number);
+  const guess = Date.UTC(Y, M - 1, D, h || 0, m || 0);
+  try {
+    let ts = guess - tzOffsetMs(tz, guess);
+    ts = guess - tzOffsetMs(tz, ts);
+    return ts;
+  } catch (e) {
+    return new Date(wall).getTime();
+  }
+}
+
+export function normalizeTrip(raw) {
+  const traveler = raw && (raw.traveler === 'a' || raw.traveler === 'b') ? raw.traveler
+    : (CFG.traveler === 'b' ? 'b' : 'a');
+  const dest = traveler === 'a' ? 'b' : 'a';
+  const people = CFG.people || {};
+  const tz = (people[dest] && people[dest].timeZone) || 'UTC';
+  const wall = (raw && raw.wall) || CFG.meetingDate || '';
+  const at = wall ? zonedToTs(wall, tz) : NaN;
+  return {
+    wall, at, tz, traveler, dest,
+    flight: (raw && raw.flight) || '',
+    by: raw && raw.by, updatedAt: raw && raw.updatedAt,
+    fromCloud: Boolean(raw && raw.wall)
+  };
+}
+
+export async function watchTrip(cb) {
+  cb(normalizeTrip(null));
+  await readyPromise;
+  driver.watch('trip', (data) => cb(normalizeTrip(data && data.wall ? data : null)));
+}

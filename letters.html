@@ -41,9 +41,9 @@
     background: repeating-linear-gradient(135deg,
       var(--air-1) 0 11px, var(--paper) 11px 18px, var(--air-2) 18px 29px, var(--paper) 29px 36px);
     box-shadow: var(--shadow-1);
-    transition: transform var(--d-fast) var(--ease-out), box-shadow var(--d-fast);
+    transition: transform var(--release), box-shadow var(--d-fast);
+    --ps: .975;
   }
-  .env:active { transform: scale(.975); }
   .env-inner {
     position: relative;
     display: block;
@@ -176,6 +176,11 @@
   }
   .switch[aria-checked="true"] { background: var(--ok); }
   .switch[aria-checked="true"]::after { transform: translateX(20px); }
+  /* как в iOS: пока палец на переключателе, бегунок вытягивается */
+  .switch { --ps: 1; }
+  .switch::after { transition: transform 320ms var(--spring-soft), width 260ms var(--ease-out); }
+  .switch.is-pressed::after { width: 33px; }
+  .switch[aria-checked="true"].is-pressed::after { transform: translateX(14px); }
   .seal-date { overflow: hidden; display: grid; grid-template-rows: 0fr; transition: grid-template-rows 320ms var(--ease-out); }
   .seal-date.open { grid-template-rows: 1fr; }
   .seal-date > div { min-height: 0; }

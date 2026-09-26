@@ -157,6 +157,10 @@ $('quick').innerHTML = QUICK.map((e) => '<button type="button" data-e="' + e + '
 $('quick').addEventListener('click', (e) => {
   const b = e.target.closest('[data-e]');
   if (!b) return;
+  b.classList.remove('hop');
+  void b.offsetWidth;
+  b.classList.add('hop');
+  b.addEventListener('animationend', () => b.classList.remove('hop'), { once: true });
   input.value += b.getAttribute('data-e');
   input.focus();
   autoGrow();
@@ -636,7 +640,10 @@ function closeMenu() {
   if (!menuEls) return;
   const { veil, menu, bubble } = menuEls;
   menuEls = null;
+  // пузырь возвращается на место на пружине, а не скачком
+  bubble.classList.add('unpress');
   bubble.classList.remove('menu-open');
+  setTimeout(() => bubble.classList.remove('unpress'), 620);
   // уходит быстрее, чем появлялось
   menu.style.transition = 'opacity 140ms ease, transform 160ms var(--ease-in)';
   menu.classList.remove('in');
@@ -710,6 +717,7 @@ function openMenu(bubble, x, y) {
     const r2 = e.target.closest('[data-react]');
     if (r2) {
       closeMenu();
+      App.haptic();
       toggleReaction(key, r2.getAttribute('data-react'));
       return;
     }
@@ -809,6 +817,22 @@ let pressTimer = null;
 
 function clearPress() { clearTimeout(pressTimer); pressTimer = null; }
 
+/* Пузырь под пальцем медленно «вдавливается», пока держишь, —
+   так видно, что сейчас что-то произойдёт. Отпустил — возвращается
+   на пружине с того места, где был, без скачка. */
+function unpress(el, then) {
+  if (!el || !el.classList.contains('press')) { if (then) then(); return; }
+  const cur = getComputedStyle(el).transform;
+  el.classList.remove('press');
+  el.style.transform = cur === 'none' ? '' : cur;
+  el.classList.add('unpress');
+  requestAnimationFrame(() => {
+    el.style.transform = '';
+    if (then) then();
+    setTimeout(() => el.classList.remove('unpress'), 620);
+  });
+}
+
 log.addEventListener('pointerdown', (e) => {
   if (e.pointerType === 'mouse') return;        // на мыши есть кнопка и правый клик
   const b = e.target.closest('.bubble');
@@ -821,9 +845,9 @@ log.addEventListener('pointerdown', (e) => {
   pressTimer = setTimeout(() => {
     pressTimer = null;
     swipe = null;
-    if (navigator.vibrate) navigator.vibrate(14);
-    b.classList.remove('press');
-    openMenu(b, e.clientX, e.clientY);
+    App.haptic();
+    // из вдавленного состояния пузырь «выпрыгивает» навстречу меню
+    unpress(b, () => openMenu(b, e.clientX, e.clientY));
   }, 460);
 });
 
@@ -835,7 +859,7 @@ log.addEventListener('pointermove', (e) => {
   if (Math.abs(dx) > 10 || Math.abs(dy) > 10) swipe.moved = true;
   if (pressTimer && swipe.moved) {
     clearPress();
-    swipe.el.classList.remove('press');
+    unpress(swipe.el);
   }
 
   if (!swipe.on) {
@@ -858,7 +882,7 @@ let lastTap = null;
 
 function endSwipe(e) {
   clearPress();
-  log.querySelectorAll('.bubble.press').forEach((el) => el.classList.remove('press'));
+  log.querySelectorAll('.bubble.press').forEach((el) => unpress(el));
   if (!swipe) return;
   const { el, d, on } = swipe;
   const moved = swipe.moved;
@@ -873,6 +897,7 @@ function endSwipe(e) {
       const m = visibleMessages().find((x) => keyOf(x) === k);
       if (m && m.id && !m.pending) {
         if ((m.reactions || {})[meKey] !== '❤️') heartPop(el);
+        App.haptic();
         toggleReaction(k, '❤️');
       }
     } else lastTap = { el, t: now };
@@ -886,7 +911,7 @@ function endSwipe(e) {
   setTimeout(() => el.classList.remove('releasing'), 360);
 
   if (d >= SWIPE_TRIGGER) {
-    if (navigator.vibrate) navigator.vibrate(12);
+    App.haptic();
     startReply(el.dataset.key);
   }
 }

@@ -80,9 +80,9 @@
     perspective: 900px;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
-    transition: transform var(--d-fast) var(--ease-out);
+    transition: transform var(--release);
+    --ps: .97;
   }
-  .envelope:active { transform: scale(.97); }
   .env-back, .env-front, .env-flap, .env-letter { position: absolute; }
   .env-back { inset: 0; border-radius: 10px; background: var(--paper-3); box-shadow: var(--shadow-2); }
   .env-letter {
@@ -148,7 +148,7 @@
     animation: key-in 520ms var(--spring) both;
   }
   .key .i { width: 32px; height: 32px; }
-  .key:active { transform: scale(.9); }
+  .key { --ps: .86; }
   @keyframes key-in { from { transform: scale(.3); opacity: 0; } }
   .key.caught { transition: left 560ms var(--ease-in-out), top 560ms var(--ease-in-out), transform 560ms var(--ease-in-out), opacity 300ms ease 400ms; transform: scale(.5) rotate(-40deg); opacity: 0; }
 

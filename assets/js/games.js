@@ -37,29 +37,95 @@ $('reason-count').textContent = reasons.length
   ? reasons.length + ' ' + App.plural(reasons.length, 'причина', 'причины', 'причин')
   : 'список пуст';
 
-$('reason-btn').addEventListener('click', () => {
-  if (!reasons.length) { App.toast('Добавьте причины в config.js'); return; }
+/* Верхнюю карточку можно смахнуть пальцем в любую сторону: она идёт
+   за пальцем 1:1 и чуть поворачивается; отпустил — решает скорость
+   и то, куда жест «докатился» бы. Не докинул — пружиной на место. */
+
+const deck = $('deck');
+const card = $('reason-card');
+let cardAnim = null;
+let cardX = 0;
+let flying = false;
+
+function placeCard(x) {
+  cardX = x;
+  const w = deck.clientWidth || 300;
+  const rot = (x / w) * 12;
+  card.style.transform = 'translateX(' + x.toFixed(1) + 'px) rotate(' + rot.toFixed(2) + 'deg)';
+  card.style.opacity = String(Math.max(0, 1 - Math.max(0, Math.abs(x) - w * 0.6) / (w * 0.6)));
+}
+
+function showNextReason() {
   lastReason = App.pickDifferent(reasons, lastReason);
   shareable.reason = lastReason;
+  $('reason').textContent = lastReason;
+  $('reason-num').textContent = '№ ' + (reasons.indexOf(lastReason) + 1);
+}
 
-  const card = $('reason-card');
-  if (!calm()) {
-    const ghost = card.cloneNode(true);
-    ghost.removeAttribute('id');
-    ghost.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id'));
-    ghost.setAttribute('aria-hidden', 'true');
-    ghost.style.zIndex = 4;
-    ghost.classList.add('leaving');
-    $('deck').appendChild(ghost);
-    setTimeout(() => ghost.remove(), 460);
-
+// карточка улетает в сторону с той скоростью, с какой её бросили
+function flyOut(dir, velocity) {
+  if (flying) return;
+  if (!reasons.length) { App.toast('Добавьте причины в config.js'); return; }
+  flying = true;
+  App.haptic();
+  const w = deck.clientWidth || 300;
+  if (cardAnim) cardAnim.stop();
+  const done = () => {
+    showNextReason();
+    card.style.transform = '';
+    card.style.opacity = '';
+    cardX = 0;
     card.classList.remove('arriving');
     void card.offsetWidth;
     card.classList.add('arriving');
-  }
-  $('reason').textContent = lastReason;
-  $('reason-num').textContent = '№ ' + (reasons.indexOf(lastReason) + 1);
+    flying = false;
+  };
+  if (calm()) { done(); return; }
+  cardAnim = App.spring({
+    from: cardX, to: dir * w * 1.5, velocity: velocity || dir * 900,
+    damping: 1, response: 0.34, onUpdate: placeCard, onDone: done
+  });
+}
+
+$('reason-btn').addEventListener('click', () => flyOut(-1, 0));
+
+let grab = null;
+card.addEventListener('pointerdown', (e) => {
+  if (flying || !reasons.length || e.button > 0) return;
+  if (cardAnim) cardAnim.stop();
+  grab = { x0: e.clientX - cardX, y0: e.clientY, id: e.pointerId, tr: App.tracker(), on: false };
+  grab.tr.add(e.clientX, e.clientY);
 });
+card.addEventListener('pointermove', (e) => {
+  if (!grab || e.pointerId !== grab.id) return;
+  grab.tr.add(e.clientX, e.clientY);
+  const dx = e.clientX - grab.x0;
+  const dy = e.clientY - grab.y0;
+  if (!grab.on) {
+    if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { grab = null; return; }   // это прокрутка
+    if (Math.abs(dx) < 8) return;
+    grab.on = true;
+    card.classList.remove('arriving');
+    try { card.setPointerCapture(e.pointerId); } catch (err) {}
+  }
+  placeCard(dx);
+});
+const release = () => {
+  if (!grab) return;
+  const g = grab;
+  grab = null;
+  if (!g.on) return;
+  const v = g.tr.velocity().x;
+  const w = deck.clientWidth || 300;
+  const landing = cardX + App.project(v, 0.99);
+  if (Math.abs(landing) > w * 0.45) flyOut(Math.sign(landing), v);
+  else cardAnim = App.spring({
+    from: cardX, to: 0, velocity: v, damping: 0.72, response: 0.42, onUpdate: placeCard,
+    onDone: () => { card.style.transform = ''; card.style.opacity = ''; }
+  });
+};
+card.addEventListener('pointerup', release);
+card.addEventListener('pointercancel', release);
 
 /* ============================================================
    2. Вопросы — карточка переворачивается рубашкой вниз
@@ -199,6 +265,7 @@ function maybeReveal() {
   canvas.style.transition = 'opacity 500ms ease';
   canvas.style.opacity = '0';
   canvas.style.pointerEvents = 'none';
+  App.haptic();
   const r = wrap.getBoundingClientRect();
   App.burst(r.left + r.width / 2, r.top + r.height / 2, ['💖', '✨', '💜'], 12);
 }
@@ -299,6 +366,7 @@ $('wheel-btn').addEventListener('click', () => {
     res.textContent = ideas[index];
     void res.offsetWidth;
     res.classList.add('show');
+    App.haptic();
     const r = res.getBoundingClientRect();
     App.burst(r.left + r.width / 2, r.top + r.height / 2, ['🎉', '✨', '💜', '💙'], 14);
   };

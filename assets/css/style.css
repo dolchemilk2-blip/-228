@@ -80,6 +80,8 @@
   --d-fast:  180ms;
   --d-base:  260ms;
   --d-sheet: 460ms;
+  /* отпускание после нажатия: мягкая пружина обратно */
+  --release: 560ms var(--spring-soft);
 
   --accent:      var(--dima);
   --accent-fill: var(--dima-fill);
@@ -261,9 +263,9 @@ p { text-wrap: pretty; }
   color: var(--accent); font-size: var(--t-callout); font-weight: 600;
   padding: 10px 6px; margin: -10px -6px;       /* зона касания больше, чем текст */
   border-radius: 10px;
-  transition: opacity var(--d-fast);
+  transition: opacity 320ms ease;
 }
-.link:active { opacity: .5; }
+
 
 /* ============================================================
    Шапка
@@ -282,7 +284,10 @@ p { text-wrap: pretty; }
   background: var(--bar-bg);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   backdrop-filter: saturate(180%) blur(20px);
-  border-bottom: .5px solid var(--sep);
+  /* не жёсткая линия под шапкой, а мягкий край материала */
+  bottom: -12px;
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 12px), transparent);
+  mask-image: linear-gradient(#000 calc(100% - 12px), transparent);
   opacity: 0;
   transition: opacity var(--d-base) ease;
   pointer-events: none;
@@ -335,9 +340,9 @@ p { text-wrap: pretty; }
   border-radius: 999px;
   font-size: var(--t-sub);
   font-weight: 600;
-  transition: transform var(--d-press) var(--ease-out), background var(--d-fast);
+  transition: transform var(--release), background-color var(--d-fast);
+  --ps: .94;
 }
-.who-chip:active { transform: scale(.94); }
 .who-chip .who-name { display: none; }
 
 .ava {
@@ -403,10 +408,10 @@ p { text-wrap: pretty; }
   font-size: .62rem;
   font-weight: 600;
   letter-spacing: 0;
-  transition: color var(--d-fast) ease, transform var(--d-press) var(--ease-out);
+  transition: color var(--d-fast) ease, transform var(--release);
+  --ps: .88;
 }
 .tabbar a .i { width: 25px; height: 25px; }
-.tabbar a:active { transform: scale(.9); }
 .tabbar a[aria-current="page"] { color: var(--accent); }
 /* значок активной вкладки делает маленький упругий «вдох» */
 .tabbar a[aria-current="page"] .i { animation: tab-bounce 520ms var(--spring) both; }
@@ -472,8 +477,7 @@ p { text-wrap: pretty; }
   height: .5px;
   background: var(--sep);
 }
-a.row-item, button.row-item { transition: background var(--d-fast) ease; }
-a.row-item:active, button.row-item:active { background: var(--fill); transition-duration: 0s; }
+a.row-item, button.row-item { transition: background-color 380ms ease; }
 .row-item .grow { flex: 1; min-width: 0; }
 .row-item .title { font-weight: 600; }
 .row-item .sub { color: var(--text-2); font-size: var(--t-sub); margin-top: 1px; }
@@ -509,14 +513,13 @@ a.row-item:active, button.row-item:active { background: var(--fill); transition-
   letter-spacing: -.01em;
   white-space: nowrap;
   transition:
-    transform var(--d-fast) var(--ease-out),
+    transform var(--release),
     background-color var(--d-fast) ease,
+    color var(--d-fast) ease,
     opacity var(--d-fast) ease,
     filter var(--d-fast) ease;
 }
 .btn .i { width: 1.15em; height: 1.15em; }
-/* палец коснулся — кнопка сразу отвечает */
-.btn:active { transform: scale(.97); }
 .btn:disabled { opacity: .4; cursor: default; transform: none; }
 
 .btn.tinted { --b-bg: var(--accent-soft); --b-fg: var(--accent); }
@@ -533,9 +536,9 @@ a.row-item:active, button.row-item:active { background: var(--fill); transition-
   flex: none;
   color: var(--accent);
   background: var(--fill);
-  transition: transform var(--d-press) var(--ease-out), background var(--d-fast);
+  transition: transform var(--release), background-color var(--d-fast);
+  --ps: .88;
 }
-.icon-btn:active { transform: scale(.9); }
 .icon-btn.clear { background: transparent; }
 .icon-btn .i { width: 22px; height: 22px; }
 
@@ -613,8 +616,11 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
   background: var(--raised);
   box-shadow: 0 2px 8px rgba(0, 0, 0, .12), 0 0 0 .5px rgba(0, 0, 0, .04);
   transform: translateX(calc(var(--i, 0) * 100%));
-  transition: transform 380ms var(--spring-soft);
+  transition: transform 420ms var(--spring-soft), scale 420ms var(--spring-soft);
 }
+/* как в iOS 17: держишь выбранный сегмент — «бегунок» чуть сжимается */
+.segmented:has(button[aria-pressed="true"].is-pressed) .thumb { scale: .95; transition-duration: 420ms, 140ms; }
+.segmented button { transition: color var(--d-fast) ease, transform var(--release); --ps: .96; }
 
 /* ============================================================
    Статусы
@@ -714,6 +720,19 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 
 html.sheet-open, html.sheet-open body { overflow: hidden; }
 
+/* на телефоне шторку ведёт пружина из скрипта */
+.sheet-layer.physics .sheet { transition: none; will-change: transform; }
+.sheet-layer.physics .sheet-scrim { transition: none; opacity: 0; }
+/* «юбка» под шторкой: при лёгком перелёте вверх снизу не видно щели */
+.sheet-layer.physics .sheet::after {
+  content: ''; position: absolute; left: 0; right: 0; top: calc(100% - 1px); height: 160px;
+  background: inherit;
+}
+
+/* цифры, которые перекатываются */
+.rl { display: inline-block; position: relative; white-space: pre; }
+.rl-out { position: absolute; left: 0; top: 0; }
+
 /* ============================================================
    Уведомления снизу — с кнопкой «Вернуть», если что-то удалили
    ============================================================ */
@@ -744,6 +763,8 @@ body[data-page="quest"] #toasts { bottom: calc(96px + env(safe-area-inset-bottom
   font-size: var(--t-callout);
   font-weight: 600;
   pointer-events: auto;
+  touch-action: none;
+  cursor: default;
   /* переход, а не анимация: новые уведомления приходят пачкой,
      и переход продолжит движение с того места, где был */
   opacity: 0;
@@ -771,9 +792,9 @@ body[data-page="quest"] #toasts { bottom: calc(96px + env(safe-area-inset-bottom
   color: var(--accent);
   font-weight: 700;
   font-size: var(--t-sub);
-  transition: transform var(--d-press) var(--ease-out);
+  transition: transform var(--release);
+  --ps: .92;
 }
-.toast .t-action:active { transform: scale(.94); }
 
 /* ============================================================
    Праздник: вспышка и дождь из сердечек
@@ -832,6 +853,26 @@ body[data-page="quest"] #toasts { bottom: calc(96px + env(safe-area-inset-bottom
 html.no-vt .shell { animation: page-in 320ms var(--ease-out) both; }
 @keyframes page-in { from { opacity: 0; transform: translateY(8px); } }
 html.no-vt.leaving .shell { opacity: 0; transition: opacity 150ms var(--ease-in); }
+
+/* ============================================================
+   Нажатия — одна система на весь сайт
+
+   Скрипт ставит .is-pressed в момент касания (а не отпускания),
+   снимает — когда палец ушёл или началась прокрутка. Вдавливание
+   быстрое, а обратно элемент возвращается на пружине: так ведут
+   себя кнопки в iOS. Насколько сжиматься, задаёт --ps: большие
+   карточки сжимаются едва заметно, маленькие кнопки — сильнее.
+   ============================================================ */
+
+.is-pressed {
+  transform: scale(var(--ps, .97));
+  transition-duration: 120ms !important;
+  transition-timing-function: var(--ease-out) !important;
+}
+/* строки списков не сжимаются, а подсвечиваются — как в Настройках */
+.row-item.is-pressed { transform: none; background-color: var(--fill); transition-duration: 0s !important; }
+/* текстовые кнопки гаснут */
+.link.is-pressed { transform: none; opacity: .4; }
 
 /* ============================================================
    Компьютер и планшет
@@ -900,10 +941,11 @@ html.no-vt.leaving .shell { opacity: 0; transition: opacity 150ms var(--ease-in)
     border-radius: 24px;
     transform: scale(.96);
     opacity: 0;
-    transition: transform 280ms var(--ease-out), opacity 200ms ease;
+    filter: blur(6px);
+    transition: transform 320ms var(--ease-out), opacity 220ms ease, filter 260ms var(--ease-out);
     padding-bottom: 0;
   }
-  .sheet-layer.open .sheet { transform: none; opacity: 1; }
+  .sheet-layer.open .sheet { transform: none; opacity: 1; filter: blur(0); }
   .sheet-grab { display: none; }
   .sheet-head { padding-top: 18px; }
 }
