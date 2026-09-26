@@ -21,8 +21,9 @@ function mIn(el, from, spring = [0.86, 0.45], extra = {}) {
   return el.animate([from, to], { duration: sp.duration, easing: sp.easing, fill: 'backwards', delay: extra.delay || 0 });
 }
 function motionInit() {
-  const mq = window.matchMedia('(prefers-reduced-motion: reduce)'); MOTION.reduce = mq.matches;
-  mq.addEventListener('change', () => { MOTION.reduce = mq.matches; });
+  const mq = window.matchMedia('(prefers-reduced-motion: reduce)'), forced = () => document.documentElement.dataset.motion === 'reduce';   // «Меньше» в «Оформлении»
+  MOTION.reduce = mq.matches || forced();
+  mq.addEventListener('change', () => { MOTION.reduce = mq.matches || forced(); });
   // пружины для CSS: переходы галочек, тумблеров, раскрывашки, значков
   const root = document.documentElement.style;
   for (const [name, d, r] of [['snappy', 0.72, 0.32], ['smooth', 1, 0.38], ['bouncy', 0.6, 0.42], ['pane', 0.9, 0.5]]) { const sp = springEase(d, r); root.setProperty(`--spring-${name}`, sp.easing); root.setProperty(`--spring-${name}-dur`, sp.duration + 'ms'); }
@@ -504,26 +505,135 @@ function motionShake(el) {
   if (!mOK() || !el) return;
   el.animate([{ transform: 'none' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(5px)' }, { transform: 'translateX(-3px)' }, { transform: 'translateX(2px)' }, { transform: 'none' }], { duration: 360, easing: EASE });
 }
-// ------------------------------------------------------------------ тема: авто → светлая → тёмная, новая расходится кругом из кнопки
+// ------------------------------------------------------------------ оформление: тема, палитра, контраст, движение
+// Кнопка в деке открывает панель «Оформление». Всё применяется сразу и запоминается; до первой отрисовки его
+// ставит маленький скрипт в <head>, дальше — themeApply. Смена темы или палитры расходится кругом от нажатой кнопки.
 const THEME_KEY = 'montage:theme', THEME_NAMES = { auto: 'авто', light: 'светлая', dark: 'тёмная' };
-function themeMode() { try { return localStorage.getItem(THEME_KEY) || 'auto'; } catch { return 'auto'; } }
-function themeApply(mode) {
-  if (mode === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = mode;
-  const b = document.getElementById('theme-b'); if (b) { b.dataset.mode = mode; b.querySelector('.theme-l').textContent = THEME_NAMES[mode]; b.setAttribute('aria-label', `Тема: ${THEME_NAMES[mode]} — сменить`); }
+/** Палитры: имя и цвета для превью (сами токены — в page.html, из одного описания). */
+const PALETTES = {"amber": {"name": "Монтажная", "hint": "алюминий, янтарь", "light": {"bg": "#E4E6E1", "surface": "#F8F8F6", "deck": "#1A1613", "accent": "#EBA51C"}, "dark": {"bg": "#14110F", "surface": "#1D1916", "deck": "#0E0C0B", "accent": "#F2B233"}}, "studio": {"name": "Студия", "hint": "холодный графит, синий", "light": {"bg": "#E3E6EB", "surface": "#F7F8FA", "deck": "#11151B", "accent": "#2F6FEB"}, "dark": {"bg": "#0F1217", "surface": "#171B21", "deck": "#0A0D11", "accent": "#5B92F5"}}, "onair": {"name": "Эфир", "hint": "тёплый крем, красный", "light": {"bg": "#E9E4DE", "surface": "#FBF8F4", "deck": "#1C1211", "accent": "#CC3B26"}, "dark": {"bg": "#150F0E", "surface": "#1E1715", "deck": "#0F0A09", "accent": "#F0674F"}}, "garden": {"name": "Сад", "hint": "шалфей, зелёный", "light": {"bg": "#E2E7E1", "surface": "#F7F9F6", "deck": "#121712", "accent": "#2A7F4F"}, "dark": {"bg": "#0F130F", "surface": "#171C17", "deck": "#0A0D0A", "accent": "#4CC282"}}, "lilac": {"name": "Сирень", "hint": "лаванда, фиолетовый", "light": {"bg": "#E6E3EB", "surface": "#F9F8FB", "deck": "#16121C", "accent": "#7B4FD6"}, "dark": {"bg": "#121016", "surface": "#1A171F", "deck": "#0C0A0F", "accent": "#A585F0"}}};
+const TH = {
+  get: k => { try { return localStorage.getItem('montage:' + k); } catch { return null; } },
+  set: (k, v) => { try { if (v == null) localStorage.removeItem('montage:' + k); else localStorage.setItem('montage:' + k, v); } catch {} },
+  mq: q => !!(window.matchMedia && matchMedia(q).matches),
+};
+function themeMode() { return TH.get('theme') || 'auto'; }
+function themeState() {
+  const p = TH.get('palette');
+  return { mode: themeMode(), palette: PALETTES[p] ? p : 'amber', contrast: TH.get('contrast') || (TH.mq('(prefers-contrast: more)') ? 'more' : 'normal'), motion: TH.get('motion') === 'reduce' ? 'reduce' : 'system' };
+}
+function themeApply() {
+  const d = document.documentElement, st = themeState();
+  if (st.mode === 'auto') d.removeAttribute('data-theme'); else d.dataset.theme = st.mode;
+  if (st.palette === 'amber') d.removeAttribute('data-palette'); else d.dataset.palette = st.palette;
+  if (st.contrast === 'more') d.dataset.contrast = 'more'; else d.removeAttribute('data-contrast');
+  if (st.motion === 'reduce') d.dataset.motion = 'reduce'; else d.removeAttribute('data-motion');
+  const dark = st.mode === 'dark' || (st.mode !== 'light' && TH.mq('(prefers-color-scheme: dark)'));
+  d.dataset.scheme = dark ? 'dark' : 'light';
+  MOTION.reduce = TH.mq('(prefers-reduced-motion: reduce)') || st.motion === 'reduce';
+  const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = PALETTES[st.palette][dark ? 'dark' : 'light'].deck;
+  const b = document.getElementById('theme-b');
+  if (b) {
+    b.dataset.mode = st.mode; const l = b.querySelector('.theme-l'); if (l) l.textContent = THEME_NAMES[st.mode];
+    b.setAttribute('aria-label', `Оформление: тема ${THEME_NAMES[st.mode]}, палитра «${PALETTES[st.palette].name}» — настроить`);
+  }
+  return st;
+}
+/** Сменить настройку. Тема, палитра и контраст расходятся кругом от нажатой кнопки; с клавиатуры и при «меньше
+ *  движения» — сразу. Холсты (таймлайн, спектры, эквалайзер) перерисовываются в новых цветах. */
+function themeSet(k, v, origin = null, ev = null) { TH.set(k === 'mode' ? 'theme' : k, v); themeSwap(origin, ev, k === 'motion'); }
+function themeSwap(origin, ev, instant = false) {
+  const swap = () => { themeApply(); if (typeof render === 'function') render(); if (typeof drawTimeline === 'function') drawTimeline(); themePanelSync(); };
+  const kbd = ev && (ev.detail === 0 || ev.type === 'keydown');
+  if (instant || kbd || !origin || !document.startViewTransition || MOTION.reduce) { swap(); return; }
+  const r = origin.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, R = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+  const sp = springEase(1, 0.6), vt = document.startViewTransition(swap);
+  vt.ready.then(() => document.documentElement.animate({ clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${R}px at ${x}px ${y}px)`] }, { duration: sp.duration, easing: sp.easing, pseudoElement: '::view-transition-new(root)' })).catch(() => {});
+}
+// ---- панель «Оформление»
+const TPOP = { el: null, open: false };
+const TP_ICON = {
+  auto: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2.4a5.6 5.6 0 0 1 0 11.2z" fill="currentColor"/></svg>',
+  light: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="currentColor"/><g stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6M3.5 3.5l1.1 1.1M11.4 11.4l1.1 1.1M3.5 12.5l1.1-1.1M11.4 4.6l1.1-1.1"/></g></svg>',
+  dark: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.2 10.1A5.6 5.6 0 0 1 5.9 2.8a5.6 5.6 0 1 0 7.3 7.3z" fill="currentColor"/></svg>',
+  check: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.4 8.4l3 3 6.2-6.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+function themePanelHtml() {
+  const st = themeState(), dark = document.documentElement.dataset.scheme === 'dark';
+  const seg = (k, label, opts) => `<div class="tp-sec"><div class="tp-h" id="tp-h-${k}">${label}</div><div class="tp-seg" role="radiogroup" aria-labelledby="tp-h-${k}" data-k="${k}">${opts.map(([v, t, icon]) => `<button type="button" role="radio" data-v="${v}" aria-checked="${st[k] === v}" tabindex="${st[k] === v ? 0 : -1}" class="${st[k] === v ? 'on' : ''}">${icon || ''}${t}</button>`).join('')}</div></div>`;
+  const sw = Object.entries(PALETTES).map(([k, p]) => { const c = p[dark ? 'dark' : 'light'], on = st.palette === k;
+    return `<button type="button" class="tp-sw" role="radio" data-v="${k}" aria-checked="${on}" tabindex="${on ? 0 : -1}" title="${p.hint}" style="--pv-bg:${c.bg};--pv-surface:${c.surface};--pv-deck:${c.deck};--pv-accent:${c.accent};--pv-ink:${dark ? '#EEE' : '#111'}"><span class="tp-mini" aria-hidden="true"><b></b><em></em><i></i></span><span class="tp-n">${p.name}${TP_ICON.check}</span></button>`; }).join('');
+  return `<h2>Оформление <small>сохраняется в этом браузере</small></h2>
+    ${seg('mode', 'Тема', [['auto', 'Авто', TP_ICON.auto], ['light', 'Светлая', TP_ICON.light], ['dark', 'Тёмная', TP_ICON.dark]])}
+    <div class="tp-sec"><div class="tp-h" id="tp-h-palette">Палитра</div><div class="tp-pal" role="radiogroup" aria-labelledby="tp-h-palette" data-k="palette">${sw}</div></div>
+    ${seg('contrast', 'Контраст', [['normal', 'Обычный'], ['more', 'Высокий']])}
+    ${seg('motion', 'Движение', [['system', 'Как в системе'], ['reduce', 'Меньше']])}
+    <div class="tp-foot"><span class="muted">Авто — как в системе: день и ночь сами.</span><button type="button" class="ghost-b tiny" data-tp="reset">Сбросить</button></div>`;
+}
+/** Перерисовать содержимое открытой панели после смены (превью палитр зависят от светлой/тёмной). Фокус — на том же. */
+function themePanelSync() {
+  const el = TPOP.el; if (!el || el.hidden) return;
+  const ae = document.activeElement, key = ae && el.contains(ae) ? (ae.closest('[data-k]') ? ae.closest('[data-k]').dataset.k + '|' + (ae.dataset.v || '') : ae.dataset.tp || '') : null;
+  el.innerHTML = themePanelHtml();
+  el.querySelectorAll('.tp-seg').forEach(g => { if (typeof segInd === 'function') segInd(g, 'tp-' + g.dataset.k); });
+  if (key) { const [k, v] = key.split('|'); const n = v != null && k ? el.querySelector(`[data-k="${k}"] [data-v="${CSS.escape(v)}"]`) : el.querySelector(`[data-tp="${k}"]`); if (n) n.focus({ preventScroll: true }); }
+}
+function themePanelPlace() {
+  const el = TPOP.el, b = document.getElementById('theme-b'); if (!el || !b) return;
+  const r = b.getBoundingClientRect(), w = el.offsetWidth, right = Math.max(8, innerWidth - r.right), left = innerWidth - right - w;
+  el.style.top = Math.round(r.bottom + 8) + 'px'; el.style.right = right + 'px';
+  el.style.setProperty('--tp-origin', `${Math.round(Math.min(w, Math.max(0, r.left + r.width / 2 - left)))}px -8px`);
+}
+function themePanelOpen(fromKey) {
+  let el = TPOP.el;
+  if (!el) {
+    el = TPOP.el = document.createElement('div'); el.className = 'theme-pop'; el.id = 'theme-pop'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Оформление'); el.hidden = true;
+    document.body.appendChild(el); themePanelBind(el);
+  }
+  el.getAnimations().forEach(a => a.cancel());
+  el.innerHTML = themePanelHtml(); el.hidden = false; TPOP.open = true;
+  const b = document.getElementById('theme-b'); if (b) b.setAttribute('aria-expanded', 'true');
+  themePanelPlace();
+  el.querySelectorAll('.tp-seg').forEach(g => { if (typeof segInd === 'function') segInd(g, 'tp-' + g.dataset.k); });
+  if (!fromKey && mOK() && MOTION.ready) mIn(el, { opacity: 0, transform: 'translateY(-6px) scale(0.96)' }, [0.86, 0.3]);
+  const first = el.querySelector('[data-k="mode"] [aria-checked="true"]'); if (first) first.focus({ preventScroll: true });
+}
+function themePanelClose(fromKey, refocus = false) {
+  const el = TPOP.el; if (!el || el.hidden) return; TPOP.open = false;
+  const b = document.getElementById('theme-b'); if (b) b.setAttribute('aria-expanded', 'false');
+  if (refocus && b) b.focus({ preventScroll: true });
+  if (fromKey || !mOK()) { el.hidden = true; return; }
+  const a = el.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(-4px) scale(0.98)' }], { duration: 150, easing: EASE, fill: 'forwards' });   // уход быстрее входа
+  a.onfinish = () => { if (!TPOP.open) el.hidden = true; a.cancel(); };
+}
+function themePanelBind(el) {
+  el.addEventListener('click', e => {
+    const r = e.target.closest('[role="radio"]');
+    if (r) { const k = r.closest('[data-k]').dataset.k, v = r.dataset.v; if (themeState()[k] !== v) themeSet(k, v, r, e); return; }
+    if (e.target.closest('[data-tp="reset"]')) { for (const k of ['theme', 'palette', 'contrast', 'motion']) TH.set(k, null); themeSwap(e.target.closest('button'), e); }
+  });
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.preventDefault(); themePanelClose(true, true); return; }
+    const r = e.target.closest('[role="radio"]'); if (!r || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
+    e.preventDefault();
+    const g = r.closest('[data-k]'), all = [...g.querySelectorAll('[role="radio"]')], i = all.indexOf(r);
+    const j = e.key === 'Home' ? 0 : e.key === 'End' ? all.length - 1 : (i + (e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1) + all.length) % all.length;
+    const n = all[j]; themeSet(g.dataset.k, n.dataset.v, n, e);                      // стрелки — выбор сразу (как у радиокнопок)
+    const again = TPOP.el.querySelector(`[data-k="${g.dataset.k}"] [data-v="${CSS.escape(n.dataset.v)}"]`); if (again) again.focus({ preventScroll: true });
+  });
 }
 function initTheme() {
-  const b = document.getElementById('theme-b'); themeApply(themeMode()); if (!b) return;
+  const b = document.getElementById('theme-b'); themeApply(); if (!b) return;
+  b.setAttribute('aria-haspopup', 'dialog'); b.setAttribute('aria-expanded', 'false'); b.setAttribute('aria-controls', 'theme-pop');
+  if (!b.querySelector('.theme-dot')) { const dot = document.createElement('span'); dot.className = 'theme-dot'; dot.setAttribute('aria-hidden', 'true'); b.appendChild(dot); }
   // подпись «авто» / «светлая» / «тёмная» разной ширины: без запаса по самой длинной стрелка уровня рядом дёргается
   const fit = () => { const l = b.querySelector('.theme-l'); if (!l || !l.offsetParent) return; const cur = l.textContent; l.style.minWidth = ''; let w = 0; for (const t of Object.values(THEME_NAMES)) { l.textContent = t; w = Math.max(w, l.getBoundingClientRect().width); } l.textContent = cur; l.style.minWidth = Math.ceil(w) + 'px'; };
   fit(); if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
-  b.addEventListener('click', e => {
-    const order = ['auto', 'light', 'dark'], next = order[(order.indexOf(themeMode()) + 1) % 3];
-    try { localStorage.setItem(THEME_KEY, next); } catch {}
-    const swap = () => { themeApply(next); render(); if (typeof drawTimeline === 'function') drawTimeline(); };
-    if (!document.startViewTransition || MOTION.reduce || e.detail === 0) { swap(); return; }   // с клавиатуры — сразу
-    const r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, R = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
-    const sp = springEase(1, 0.6);
-    const vt = document.startViewTransition(swap);
-    vt.ready.then(() => document.documentElement.animate({ clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${R}px at ${x}px ${y}px)`] }, { duration: sp.duration, easing: sp.easing, pseudoElement: '::view-transition-new(root)' })).catch(() => {});
-  });
+  b.addEventListener('click', e => { if (TPOP.open) themePanelClose(e.detail === 0); else themePanelOpen(e.detail === 0); });
+  document.addEventListener('pointerdown', e => { if (TPOP.open && !e.target.closest('#theme-pop, #theme-b')) themePanelClose(false); }, true);
+  addEventListener('resize', () => { if (TPOP.open) themePanelPlace(); });
+  // система сменила день/ночь, контраст или движение — при «авто» подстраиваемся сразу, холсты перерисовываются
+  for (const q of ['(prefers-color-scheme: dark)', '(prefers-contrast: more)', '(prefers-reduced-motion: reduce)']) {
+    if (!window.matchMedia) break;
+    matchMedia(q).addEventListener('change', () => { themeApply(); if (typeof render === 'function') render(); if (typeof drawTimeline === 'function') drawTimeline(); themePanelSync(); });
+  }
 }

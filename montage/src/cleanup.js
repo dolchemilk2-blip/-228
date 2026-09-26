@@ -265,7 +265,7 @@ const SPEC_IMG = new WeakMap();
 // getComputedStyle может заставить браузер пересчитать стили. Сбрасывается при смене темы.
 const CSSV = { map: new Map(), key: '', mq: window.matchMedia('(prefers-color-scheme: dark)') };
 const cssVar = n => {
-  const k = (document.documentElement.dataset.theme || '') + (CSSV.mq.matches ? 'd' : 'l'); if (k !== CSSV.key) { CSSV.map.clear(); CSSV.key = k; }
+  const ds = document.documentElement.dataset, k = (ds.theme || '') + (CSSV.mq.matches ? 'd' : 'l') + (ds.palette || '') + (ds.contrast || ''); if (k !== CSSV.key) { CSSV.map.clear(); CSSV.key = k; }   // палитра и контраст — тоже другие цвета
   let v = CSSV.map.get(n); if (v == null) { v = getComputedStyle(document.documentElement).getPropertyValue(n).trim(); CSSV.map.set(n, v); } return v;
 };
 function drawWave(canvas, f) {
