@@ -58,7 +58,7 @@ function tlX(st, t) { return TL.HEAD + (t - st.scroll) * st.zoom; }
 function tlT(st, x) { return st.scroll + (x - TL.HEAD) / st.zoom; }
 const tlColor = tr => tr.cls === 'ghost' ? [cssVar('--none'), cssVar('--none-soft')] : [cssVar('--' + tr.cls), cssVar('--' + tr.cls + 's')];
 function drawTimeline() {
-  const cv = $('#tl-cv'), r = S.result; if (!cv || !r || !r.lay) return;
+  const cv = $('#tl-cv'), r = S.result; if (!cv || !r || !r.lay || !cv.getClientRects().length) return;   // вкладка «Таймлайн» закрыта — рисовать некуда
   const st = tlState(), tracks = S.tlTracks || (S.tlTracks = tlTracks(r));
   // высота дорожки: обычно 40; на весь экран — чтобы дорожки заполнили экран (34…96)
   if (st.full) { const area = cv.parentElement.clientHeight || 600; st.row = Math.max(34, Math.min(96, Math.floor((area - TL.RULER - TL.PAD) / Math.max(1, tracks.length)))); } else st.row = 40;
@@ -268,7 +268,7 @@ function tlRefreshInfo() {
 }
 /** Панель таймлайна: перестраивается, только если правда поменялась; фокус с клавиатуры остаётся на той же кнопке. */
 function tlRefreshBar() {
-  const el = $('.tl-bar'); if (!el) return histUi();
+  const el = $('#mix-tl .tl-bar'); if (!el) return histUi();
   const ae = document.activeElement, fk = ae && el.contains(ae) && typeof focusKey === 'function' ? focusKey(ae) : null;
   if (setHtml(el, tlBarHtml()) && fk) { const n = el.querySelector(fk); if (n) n.focus({ preventScroll: true }); }
   histUi();
@@ -276,7 +276,7 @@ function tlRefreshBar() {
 function tlSelect(ids, add = false) { const st = tlState(), was = new Set(st.sel); if (!add) st.sel.clear(); for (const id of ids) st.sel.add(id); tlPulse(new Set([...st.sel].filter(id => !was.has(id)))); tlRefreshInfo(); }
 /** Курсор плеера — отдельный слой поверх холста: двигается каждый кадр, холст не перерисовывается. */
 function tlHeadUpdate() {
-  const el = $('#mix-out .tl-head'), st = tlState(); if (!el || !S.result || !S.result.out) return;
+  const el = $('#mix-tl .tl-head'), st = tlState(); if (!el || !S.result || !S.result.out) return;
   const x = tlX(st, tpTime()), W = st.W || 800, show = x >= TL.HEAD - 1 && x <= W + 1;
   el.style.transform = `translate3d(${(x - 1).toFixed(2)}px, 0, 0)`; el.style.opacity = show ? '' : '0';
 }
@@ -306,7 +306,7 @@ function tlFollow() {                                  // курсор плее�
  *  так же сворачивается; на его месте в странице стоит заглушка той же высоты — страница за ним не прыгает.
  *  С клавиатуры (F, Esc) и при «меньше движения» — сразу. */
 function tlSetFull(on) {
-  const st = tlState(), el = $('#mix-out .tl'); if (!el || !!st.full === on && el.classList.contains('full') === on) return;
+  const st = tlState(), el = $('#mix-tl .tl'); if (!el || !!st.full === on && el.classList.contains('full') === on) return;
   const anim = typeof mOK === 'function' && mOK() && typeof MOTION !== 'undefined' && MOTION.ready && tlLastInput !== 'key';
   const vw = innerWidth, vh = innerHeight, ins = (r, rad) => `inset(${Math.max(0, r.top).toFixed(1)}px ${Math.max(0, vw - r.right).toFixed(1)}px ${Math.max(0, vh - r.bottom).toFixed(1)}px ${Math.max(0, r.left).toFixed(1)}px round ${rad}px)`;
   const done = () => { requestAnimationFrame(() => { drawTimeline(); $('#tl-cv').focus({ preventScroll: true }); }); };
@@ -428,7 +428,7 @@ function tlZoom(k, cx = null, smooth = false) {
 }
 function tlFit(smooth = true) { const st = tlState(), W = st.W || 800, z = (W - TL.HEAD) / S.result.lay.total; if (!smooth) { st.zoom = z; st.scroll = 0; drawTimeline(); return; } if (typeof motionView === 'function') motionView(st, z, 0, drawTimeline); else { st.zoom = 0; st.scroll = 0; drawTimeline(); } }
 function bindTimeline() {
-  const host = $('#mix-out');
+  const host = $('#tlp-show');                                  // таймлайн спектакля живёт во вкладке «Таймлайн»
   host.addEventListener('contextmenu', e => {
     if (e.target.id !== 'tl-cv') return; e.preventDefault();
     const st = tlState(), hit = tlHit(e); if (!hit) return;
@@ -572,6 +572,7 @@ function bindTimeline() {
   host.addEventListener('click', e => {
     const mb = e.target.closest('#tl-menu button'); if (mb) { tlMenuAct(mb); return; }
     const b = e.target.closest('button'); if (!b || !b.dataset.act) return; const st = tlState(), a = b.dataset.act;
+    if (a === 'tp-play') { if (S.result && S.result.out) { TP.playing ? tpPause() : tpPlay(); } return; }
     if (a === 'tl-fit') tlFit();
     else if (a === 'tl-zoom+') tlZoom(1.5, null, true);
     else if (a === 'tl-zoom-') tlZoom(1 / 1.5, null, true);

@@ -42,7 +42,8 @@ function motionInit() {
     if (prev == null || prev.split('|')[2] !== key.split('|')[2]) staggerList([...el.children].slice(0, 10)); else fadeList(el); });
   watch('#cl-body', el => { const key = (S.cleanFile && S.cleanFile.name) || ''; if (MOTION.lastKeys.get('cl') === key || !el.querySelector('.mods')) return; MOTION.lastKeys.set('cl', key); staggerList([el.querySelector('.cl-head'), ...el.querySelectorAll('.mod')].filter(Boolean).slice(0, 10)); });
   watch('#sfx-body', el => { if (MOTION.lastKeys.get('sfx') || !el.querySelector('.srow, .arow')) return; MOTION.lastKeys.set('sfx', 1); staggerList([...el.querySelectorAll('.ambbox, .dbbox, .srow')].slice(0, 10)); });
-  watch('#mix-out', el => { const tl = el.querySelector('.tl'); if (!tl || tl.dataset.m) return; tl.dataset.m = '1'; splice(tl); staggerList([el.querySelector('#mix-top'), el.querySelector('#mix-rest')].filter(Boolean), 60); });
+  watch('#mix-out', el => { const top = el.querySelector('#mix-top'); if (!top || !top.firstElementChild || top.dataset.m) return; top.dataset.m = '1'; staggerList([top, el.querySelector('#mix-tlcard'), el.querySelector('#mix-rest')].filter(Boolean), 60); });
+  watch('#mix-tl', el => { const tl = el.querySelector('.tl'); if (!tl || tl.dataset.m || !tl.getClientRects().length) return; tl.dataset.m = '1'; splice(tl); });
   requestAnimationFrame(() => requestAnimationFrame(() => { MOTION.ready = true; }));
 }
 const atTop = el => el.getBoundingClientRect().top < innerHeight / 2;
@@ -182,7 +183,7 @@ function initToast() {
   TOAST.m = mv(0, 0.05, owner);
   TOAST.fade = y => { const dir = atTop(el) ? -1 : 1, out = y * dir; return out > 0 ? String(Math.max(0.2, 1 - out / 120)) : ''; };
   el.addEventListener('pointerdown', e => {
-    if (MOTION.reduce || e.button !== 0) return;
+    if (MOTION.reduce || e.button !== 0 || e.target.closest('button')) return;   // кнопка в сообщении нажимается, а не тянет его
     el.setPointerCapture(e.pointerId);
     TOAST.drag = { y0: e.clientY - TOAST.m.v, dir: atTop(el) ? -1 : 1, hist: [{ t: performance.now(), x: e.clientX, y: e.clientY }] };
   });
@@ -213,7 +214,7 @@ function fadeList(el) { if (typeof el.animate === 'function') el.animate([{ opac
 let paneDir = 1;
 function paneIn(pane) { if (MOTION.ready) mIn(pane, { opacity: 0, transform: `translateX(${12 * paneDir}px)` }, [0.92, 0.36]); }
 function motionTab(prev, next) {
-  const order = ['build', 'clean', 'sfx'], a = order.indexOf(prev), b = order.indexOf(next); paneDir = b >= a ? 1 : -1;
+  const order = ['home', 'build', 'tl', 'clean', 'sfx'], a = order.indexOf(prev), b = order.indexOf(next); paneDir = b >= a ? 1 : -1;
   tabIndicator(false);
 }
 /** Смена вкладки через View Transitions: старая уезжает в сторону, новая приезжает с другой. */
@@ -243,7 +244,7 @@ function tabsClipSync() {
   const list = [...tabs.querySelectorAll('button[data-tab]')]; if (!list.length) return;
   let clip = tabs.querySelector('.tabs-clip');
   if (!clip) { clip = document.createElement('div'); clip.className = 'tabs-clip'; clip.setAttribute('aria-hidden', 'true'); tabs.appendChild(clip); tabs.classList.add('clipped'); }
-  clip.innerHTML = list.map(b => `<span style="width:${b.offsetWidth}px">${b.textContent}</span>`).join('');
+  clip.innerHTML = list.map(b => `<span style="width:${b.offsetWidth}px">${b.innerHTML}</span>`).join('');   // с разметкой: на телефоне часть подписи прячется
   clip.style.left = list[0].offsetLeft + 'px'; clip.style.top = list[0].offsetTop + 'px';
   PILL.cx = list[0].offsetLeft; PILL.cw = clip.scrollWidth;
 }

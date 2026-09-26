@@ -24,8 +24,12 @@ const S = {
   scriptText: '', P: null, files: [], matches: new Map(),
   edits: {}, gains: {}, voiced: {}, voiceGains: {}, timing: {}, tempo: 1, fxVoice: {}, fxLine: {}, takePick: {}, amb: null, uploads: new Map(),
   preset: 'normal', result: null, busy: false, filter: 'all', showDirs: false,
-  tab: location.hash === '#clean' ? 'clean' : 'build', cleanFile: null,
+  tab: 'home', tlMode: null, cleanFile: null,
 };
+// вкладки и их адреса: #clean, #timeline… — по ссылке открывается нужная; без адреса — та, что была открыта последней
+const TAB_HASH = { home: '#home', build: '#build', tl: '#timeline', clean: '#clean', sfx: '#sounds' };
+S.tab = (Object.entries(TAB_HASH).find(([, h]) => h === location.hash) || [store.get('montage:tab')])[0] || 'home';
+if (!TAB_HASH[S.tab]) S.tab = 'home';
 const PALETTE = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8'];
 const colorOf = key => { const i = S.P ? S.P.chars.findIndex(c => c.key === key) : -1; return PALETTE[(i < 0 ? 0 : i) % PALETTE.length]; };
 const charName = key => (S.P && S.P.chars.find(c => c.key === key) || { name: key }).name;
@@ -47,7 +51,7 @@ function audioOut() {
   return outNode;
 }
 function audioLevel() {
-  if (!analyser || (!playing && !TP.playing && !(typeof ab !== 'undefined' && ab))) return 0;
+  if (!analyser || (!playing && !TP.playing && !(typeof ab !== 'undefined' && ab) && !(typeof ED !== 'undefined' && ED.play))) return 0;
   analyser.getFloatTimeDomainData(levelBuf); let s = 0; for (const v of levelBuf) s += v * v; return Math.sqrt(s / levelBuf.length);
 }
 function play(samples, btn) {
@@ -58,7 +62,7 @@ function play(samples, btn) {
   playing = { src, btn }; if (btn) btn.classList.add('on');
   src.onended = () => { if (playing && playing.src === src) stop(); };
 }
-function stop() { if (playing) { try { playing.src.stop(); } catch {} playing.btn?.classList.remove('on'); playing = null; } if (typeof abStop === 'function') abStop(); if (typeof tpPause === 'function') tpPause(); }
+function stop() { if (playing) { try { playing.src.stop(); } catch {} playing.btn?.classList.remove('on'); playing = null; } if (typeof abStop === 'function') abStop(); if (typeof tpPause === 'function') tpPause(); if (typeof edStop === 'function') edStop(); }
 
 async function decodeFile(file) {
   const buf = await file.arrayBuffer();
@@ -365,6 +369,8 @@ async function mixdown() {
     if (typeof fxPool === 'function') fxPool();          // потоки эффектов прогреваются заранее
     await remix('full');
     progress('', 0);
+    // таймлайн живёт в своей вкладке — после сведения показываем, что он есть
+    if (typeof notifyAct === 'function' && S.result && S.result.out) notifyAct('Спектакль сведён. Подвинуть паузу, поменять громкость или эффект отдельной реплики — на таймлайне.', 'Открыть таймлайн', () => goTab('tl', { mode: 'show', top: true }));
   } catch (err) { console.error(err); notify('Свести не получилось: ' + err.message); }
   finally { S.busy = false; render(); }
 }
@@ -550,7 +556,7 @@ function mixStatHtml(r) {
 }
 /** После быстрого пересчёта — только то, что поменялось: таймлайн, сводка, плеер. Выделение и фокус остаются. */
 function refreshMix() {
-  const r = S.result, out = $('#mix-out'); if (!r || !r.out || !out.querySelector('#tl-cv')) return renderMix();
+  const r = S.result, out = $('#mix-out'); if (!r || !r.out || !$('#mix-tl #tl-cv') || !out.querySelector('#mix-rest')) { renderMix(); if (S.tab === 'tl') renderTl(); return; }
   S.tlTracks = null;
   const st = out.querySelector('.stat'); if (st) st.innerHTML = mixStatHtml(r);
   const ms = $('#mix-status');
@@ -691,20 +697,21 @@ function progress(t, p) {
 let shownTab = null;
 // Перестраивается только открытая вкладка; остальные помечаются и перестраиваются, когда их откроют.
 // Раньше любая перестройка задевала все три сразу: разбор на 337 строк, таймлайн, спектрограммы чистки, звуки.
-const DIRTY = { build: true, clean: true, sfx: true };
+const DIRTY = { home: true, build: true, tl: true, clean: true, sfx: true };
 // шаги «Сборки»: если что-то выше поменяло высоту (ушло приветствие, выросла сводка, убрали файл), секции ниже
 // доезжают до новых мест на пружине, а не прыгают
 const PAGE_FLIP = '#s1, #s2, #s3, #review, #mix';
 function render(opt = {}) {
   const flipBefore = S.tab === 'build' && !opt.tab && typeof flipRecord === 'function' && typeof MOTION !== 'undefined' && MOTION.ready && !MOTION.reduce && !(typeof scrolling === 'function' && scrolling()) ? flipRecord(PAGE_FLIP, el => el.id) : null;
-  if (!opt.tab) DIRTY.build = DIRTY.clean = DIRTY.sfx = true;
+  if (!opt.tab) for (const k in DIRTY) DIRTY[k] = true;
   if (shownTab && shownTab !== S.tab && typeof motionTab === 'function') motionTab(shownTab, S.tab);
   document.querySelectorAll('.tabs button').forEach(b => { b.classList.toggle('on', b.dataset.tab === S.tab); b.setAttribute('aria-selected', b.dataset.tab === S.tab); });
   if (shownTab !== S.tab && typeof tabIndicator === 'function') tabIndicator(!shownTab);
+  const tlb = document.querySelector('.tabs [data-tab="tl"]'); if (tlb) tlb.classList.toggle('new', S.tab !== 'tl' && !store.get('montage:tl-seen'));
   document.querySelectorAll('[data-tabpane]').forEach(el => { el.hidden = el.dataset.tabpane !== S.tab; });
   shownTab = S.tab;
   if (!opt.tab && typeof sfxAuto === 'function') sfxAuto();   // автоподбор звуков к ремаркам — всегда, а не только когда открыта вкладка «Звуки»
-  if (DIRTY[S.tab] !== false) { DIRTY[S.tab] = false; if (S.tab === 'clean') renderCleanup(); else if (S.tab === 'sfx') renderSounds(); else { renderScript(); renderFiles(); renderRun(); renderReview(); renderMix(); } }
+  if (DIRTY[S.tab] !== false) { DIRTY[S.tab] = false; if (S.tab === 'clean') renderCleanup(); else if (S.tab === 'sfx') renderSounds(); else if (S.tab === 'home') renderHome(); else if (S.tab === 'tl') renderTl(); else { renderScript(); renderFiles(); renderRun(); renderReview(); renderMix(); } }
   if (typeof motionSteps === 'function') motionSteps();
   if (flipBefore) flipPlay(flipBefore, PAGE_FLIP, el => el.id, { damping: 0.9, response: 0.4 });
 }
@@ -949,10 +956,10 @@ function renderMix() {
   $('#lvl-v').textContent = (+$('#lvl').value).toFixed(2).replace(/0$/, '');
   if ($('#tempo')) { $('#tempo').value = S.tempo || 1; $('#tempo-v').textContent = (S.tempo || 1).toFixed(2).replace(/0$/, '') + '×'; }
   const r = S.result, out = $('#mix-out');
-  if (!r || !r.out) { if (tlState().full) tlSetFull(false); out.innerHTML = ''; if (typeof tpPause === 'function') tpPause(); return; }
+  if (!r || !r.out) { out.innerHTML = ''; renderMixTl(); if (typeof tpPause === 'function') tpPause(); return; }
   // плеер и нижний блок перестраиваются — фокус с клавиатуры возвращается на тот же элемент, а не теряется
   const ae = document.activeElement, fk = ae && ae !== document.body && out.contains(ae) && !ae.closest('.tl') ? focusKey(ae) : null;
-  if (!out.querySelector('#mix-tl')) out.innerHTML = '<div id="mix-top"></div><div id="mix-read"></div><div id="mix-tl"></div><div id="mix-rest"></div>';
+  if (!out.querySelector('#mix-rest')) out.innerHTML = '<div id="mix-top"></div><div id="mix-read"></div><div id="mix-tlcard"></div><div id="mix-rest"></div>';
   const voices = new Map();
   for (const it of r.items) { if (!voices.has(it.voice)) voices.set(it.voice, []); voices.get(it.voice).push(it); }
   const spread = list => { const a = list.map(x => x.levelAfter).sort((x, y) => x - y), b = list.map(x => x.level).sort((x, y) => x - y); const p = (arr, q) => arr[Math.min(arr.length - 1, Math.floor(q * (arr.length - 1)))]; return [p(b, 0.9) - p(b, 0.1), p(a, 0.9) - p(a, 0.1)]; };
@@ -962,14 +969,8 @@ function renderMix() {
       <button class="ghost-b tp-read${S.readOpen ? ' on' : ''}" data-act="read" aria-pressed="${!!S.readOpen}" title="Сценарий идёт за плеером">${ic('lines')}Читка</button>
       <span id="mix-status">${mixStatusHtml(r)}</span></div>
 `;
-  if (!$('#mix-tl .tl')) $('#mix-tl').innerHTML = `<div class="tl ${tlState().full ? 'full' : ''}" role="region" aria-label="Таймлайн сведения">
-      <div class="tl-bar">${tlBarHtml()}</div>
-      <div class="tl-canvas"><canvas id="tl-cv" tabindex="0" aria-label="Таймлайн: стрелки двигают выбранное, клавиша меню — действия, F — на весь экран"></canvas><div class="tl-head" aria-hidden="true"></div></div>
-      <canvas id="tl-ov" aria-label="Весь спектакль: щелчок — перейти"></canvas>
-      <div class="tl-info" id="tl-info">${tlInfoHtml()}</div>
-      <div id="tl-menu" class="tl-menu" role="menu" aria-label="Действия" hidden></div>
-      <div class="tl-flash" role="status" aria-live="polite"></div></div>`;
-  else { tlRefreshBar(); tlRefreshInfo(); }
+  setHtml($('#mix-tlcard'), mixTlCardHtml(r));
+  renderMixTl();
   setHtml($('#mix-rest'), `
     <p class="stat" data-num="mixstat" data-num-flow>${mixStatHtml(r)}</p>
     <div class="levels">${[...voices].map(([v, list]) => { const [b, a] = spread(list); return `<div><span class="chip ${S.P.chars.some(c => c.key === v) ? colorOf(v) : 'ghost'}">${esc(charName(v))}</span> разброс громкости ${b.toFixed(1)} → <b>${a.toFixed(1)} дБ</b></div>`; }).join('')}</div>
@@ -978,7 +979,7 @@ function renderMix() {
       ${[...voices.keys()].map(v => { const g = S.voiceGains[v] || 0; return `<label class="vg"><span class="chip ${S.P.chars.some(c => c.key === v) ? colorOf(v) : 'ghost'}">${esc(charName(v))}</span><input type="range" data-voice="${esc(v)}" min="-12" max="6" step="0.5" value="${g}" aria-label="громкость ${esc(charName(v))}"><b data-num="vg:${esc(v)}">${dbv(g)}</b><button class="icon xs" data-act="vg0" data-voice="${esc(v)}" title="Сбросить в 0" aria-label="Сбросить">0</button>${typeof FX_PRESETS !== 'undefined' ? (() => { const cur = fxOfVoice(v); return `<select data-fxvoice="${esc(v)}" aria-label="эффект ${esc(charName(v))}"><option value="">${cur && !S.fxVoice[v] ? 'сам: ' + FX_PRESETS[cur.key].name : 'без эффекта'}</option>${Object.entries(FX_PRESETS).filter(([k]) => k !== 'none' || (cur && !S.fxVoice[v])).map(([k, p]) => `<option value="${k}" ${S.fxVoice[v] === k ? 'selected' : ''}>${p.name}</option>`).join('')}</select>`; })() : ''}</label>`; }).join('')}
     </div>
     <div class="dl">
-      <button class="primary" data-act="mp3">${ic('download')}Скачать MP3</button>
+      <button class="primary" data-act="mp3">${ic(exportLocked() ? 'lock' : 'download')}Скачать MP3</button>
       <button class="ghost-b" data-act="wav">WAV 24 бит</button>
       <button class="ghost-b" data-act="pauses">Паузы (.txt)</button>
       <button class="ghost-b" data-act="csv">Разметка (.csv)</button>
@@ -994,10 +995,30 @@ function renderMix() {
   requestAnimationFrame(drawTimeline);
 }
 
+/** Таймлайн сведения: собирается во вкладке «Таймлайн» (режим «Спектакль»), даже пока она закрыта. */
+function renderMixTl() {
+  const box = $('#mix-tl'), r = S.result; if (!box) return;
+  if (!r || !r.out) { if (tlState().full) tlSetFull(false); box.innerHTML = ''; return; }
+  if (!box.querySelector('.tl')) box.innerHTML = `<div class="tl ${tlState().full ? 'full' : ''}" role="region" aria-label="Таймлайн сведения">
+      <div class="tl-bar">${tlBarHtml()}</div>
+      <div class="tl-canvas"><canvas id="tl-cv" tabindex="0" aria-label="Таймлайн: стрелки двигают выбранное, клавиша меню — действия, F — на весь экран"></canvas><div class="tl-head" aria-hidden="true"></div></div>
+      <canvas id="tl-ov" aria-label="Весь спектакль: щелчок — перейти"></canvas>
+      <div class="tl-info" id="tl-info">${tlInfoHtml()}</div>
+      <div id="tl-menu" class="tl-menu" role="menu" aria-label="Действия" hidden></div>
+      <div class="tl-flash" role="status" aria-live="polite"></div></div>`;
+  else { tlRefreshBar(); tlRefreshInfo(); }
+  requestAnimationFrame(drawTimeline);
+}
+/** В шаге «Сведение» вместо таймлайна — приглашение во вкладку «Таймлайн»: там он крупно и со всеми правками. */
+function mixTlCardHtml(r) {
+  const moved = Object.keys(S.timing).length, n = r.lay.placed.length;
+  return `<div class="tlcard"><span class="tlcard-ic">${ic('tracks')}</span><div class="tlcard-t"><b>Таймлайн спектакля</b><span class="muted small">${n} реплик и звуков по дорожкам персонажей: подвиньте паузу, поменяйте громкость или эффект отдельной реплики${moved ? ` · сдвигов: ${moved}` : ''}</span></div><button class="primary" data-go="tl" data-mode="show">${ic('tracks')}Открыть таймлайн</button></div>`;
+}
+
 // ------------------------------------------------------------------ события
 function bind() {
   $('.tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
-    const go = () => { S.tab = b.dataset.tab; stop(); history.replaceState(null, '', S.tab === 'clean' ? '#clean' : location.pathname); render({ tab: true }); };
+    const go = () => goTab(b.dataset.tab);
     if (typeof motionTabSwitch === 'function' && e.detail !== 0) motionTabSwitch(b.dataset.tab, go); else go(); });
   bindCleanup(); bindSounds(); if (typeof bindVideo === 'function') bindVideo();
   const drop = (zone, fn) => {
@@ -1077,13 +1098,13 @@ function bind() {
     if (x.dataset.voice == null) return; const v = +x.value; if (v === (S.voiceGains[x.dataset.voice] || 0)) return; histPush(`громкость персонажа ${charName(x.dataset.voice)} ${dbv(v)}`); if (v) S.voiceGains[x.dataset.voice] = v; else delete S.voiceGains[x.dataset.voice]; saveEdits(); remixSoon('lines', voiceIds(x.dataset.voice)); if (typeof tlPulse === 'function') tlPulse(new Set(voiceIds(x.dataset.voice)), 1000); });
   $('#mix-out').addEventListener('input', e => { if (e.target.id === 'tp-seek') { TP.offset = +e.target.value; if (TP.playing) tpPlay(+e.target.value); else { tpUi(); if (typeof tlGrain === 'function') tlGrain(+e.target.value); } } });
   document.addEventListener('keydown', e => {                 // Ctrl+Z — отменить, Ctrl+Shift+Z или Ctrl+Y — повторить (в текстовых полях — их собственная отмена)
-    if (!(e.ctrlKey || e.metaKey) || e.altKey || !S.result || S.tab !== 'build') return;
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || !S.result || !(S.tab === 'build' || (S.tab === 'tl' && S.tlMode === 'show'))) return;
     if (/TEXTAREA/.test(e.target.tagName) || (e.target.tagName === 'INPUT' && /text|search|number/.test(e.target.type))) return;
     if (e.code === 'KeyZ' && !e.shiftKey) { e.preventDefault(); histUndo(); }
     else if ((e.code === 'KeyZ' && e.shiftKey) || e.code === 'KeyY') { e.preventDefault(); histRedo(); }
   });
   document.addEventListener('keydown', e => {                 // пробел — играть / пауза, если не пишем в поле
-    if (e.code !== 'Space' || e.repeat || !S.result || !S.result.out || S.tab !== 'build' || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    if (e.code !== 'Space' || e.repeat || !S.result || !S.result.out || !(S.tab === 'build' || (S.tab === 'tl' && S.tlMode === 'show')) || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
     e.preventDefault(); TP.playing ? tpPause() : tpPlay();
   });
   $('#mix-out').addEventListener('click', async e => {
@@ -1104,16 +1125,20 @@ function bind() {
         return;
       }
       if (a === 'vg0') { histPush(`громкость персонажа ${charName(b.dataset.voice)} 0 дБ`); delete S.voiceGains[b.dataset.voice]; saveEdits(); const sl = $('#mix-out').querySelector(`input[data-voice="${CSS.escape(b.dataset.voice)}"]`); if (sl) { sl.value = 0; sl.closest('.vg').querySelector('b').textContent = '0 дБ'; } remixSoon('lines', voiceIds(b.dataset.voice)); return; }
+      // пробный период: скачивания решает страница входа (здесь — вопрос и счёт), проект .json — всегда
+      const GATED = { mp3: 'MP3', wav: 'WAV', stems: 'стемы', chapters: 'главы', pauses: 'паузы', csv: 'разметку', srt: 'субтитры', vtt: 'субтитры' };
+      let ex = null; if (GATED[a]) { ex = await exportBegin(GATED[a]); if (!ex) return; }
+      const pass = async () => !ex || await ex.commit();
       if (['mp3', 'wav', 'stems', 'video'].includes(a)) await mixSettled();          // правка ещё считается — дождаться её
       if (['mp3', 'wav', 'stems'].includes(a) && S.result.approx) { b.disabled = true; await exactResult(); b.disabled = false; }
-      if (a === 'mp3') { b.disabled = true; const blob = await encodeMp3(S.result.out, +$('#kbps').value); progress('', 0); const tag = typeof id3Chapters === 'function' ? id3Chapters((S.P.title || 'Радиоспектакль')) : null; download(tag && tag.length ? new Blob([tag, blob], { type: 'audio/mpeg' }) : blob, `сведение-${stamp}.mp3`); b.disabled = false; }
-      if (a === 'stems') { b.disabled = true; try { const z = await exportStems(); if (z) download(z, `стемы-${stamp}.zip`); } catch (err) { progress('', 0); notify('Стемы не получились: ' + err.message); } b.disabled = false; }
-      if (a === 'chapters') download(new Blob([chaptersText()], { type: 'text/plain;charset=utf-8' }), `главы-${stamp}.txt`);
-      if (a === 'wav') download(new Blob([C.wav24(S.result.out)], { type: 'audio/wav' }), `сведение-${stamp}.wav`);
-      if (a === 'pauses') download(new Blob([reportPauses()], { type: 'text/plain;charset=utf-8' }), `паузы-${stamp}.txt`);
-      if (a === 'csv') download(new Blob([reportCsv()], { type: 'text/csv;charset=utf-8' }), `разметка-${stamp}.csv`);
-      if (a === 'srt') download(new Blob([srtText()], { type: 'text/plain;charset=utf-8' }), `субтитры-${stamp}.srt`);
-      if (a === 'vtt') download(new Blob([vttText()], { type: 'text/vtt;charset=utf-8' }), `субтитры-${stamp}.vtt`);
+      if (a === 'mp3') { b.disabled = true; const blob = await encodeMp3(S.result.out, +$('#kbps').value); progress('', 0); const tag = typeof id3Chapters === 'function' ? id3Chapters((S.P.title || 'Радиоспектакль')) : null; if (!(await pass())) { b.disabled = false; return; } download(tag && tag.length ? new Blob([tag, blob], { type: 'audio/mpeg' }) : blob, `сведение-${stamp}.mp3`); b.disabled = false; }
+      if (a === 'stems') { b.disabled = true; try { const z = await exportStems(); if (z && await pass()) download(z, `стемы-${stamp}.zip`); } catch (err) { progress('', 0); notify('Стемы не получились: ' + err.message); } b.disabled = false; }
+      if (a === 'chapters' && await pass()) download(new Blob([chaptersText()], { type: 'text/plain;charset=utf-8' }), `главы-${stamp}.txt`);
+      if (a === 'wav' && await pass()) download(new Blob([C.wav24(S.result.out)], { type: 'audio/wav' }), `сведение-${stamp}.wav`);
+      if (a === 'pauses' && await pass()) download(new Blob([reportPauses()], { type: 'text/plain;charset=utf-8' }), `паузы-${stamp}.txt`);
+      if (a === 'csv' && await pass()) download(new Blob([reportCsv()], { type: 'text/csv;charset=utf-8' }), `разметка-${stamp}.csv`);
+      if (a === 'srt' && await pass()) download(new Blob([srtText()], { type: 'text/plain;charset=utf-8' }), `субтитры-${stamp}.srt`);
+      if (a === 'vtt' && await pass()) download(new Blob([vttText()], { type: 'text/vtt;charset=utf-8' }), `субтитры-${stamp}.vtt`);
       if (a === 'video') { await exportVideo(); return; }
       if (a === 'proj') download(new Blob([projectJson()], { type: 'application/json' }), `проект-${stamp}.json`);
     } catch (err) { b.disabled = false; progress('', 0); notify('Не получилось: ' + err.message); }
@@ -1121,7 +1146,7 @@ function bind() {
 }
 
 // для проверки из консоли и автотестов
-window.montage = { tlFx: () => ({ lift: +TLFX.lift.v.toFixed(3), liftIds: TLFX.liftIds && [...TLFX.liftIds], hoverId: TLFX.hoverId, hover: +TLFX.hover.v.toFixed(3), pulse: TLFX.pulse ? +TLFX.pulse.m.v.toFixed(3) : null, band: !!TLFX.band, snap: tlState().drag ? tlState().drag.snapT : undefined, delta: tlState().drag ? tlState().drag.delta : undefined }), S, C, PRESETS, play: (y, btn) => play(y, btn), stop: () => stop(), progress: (t, p) => progress(t, p), notify: t => notify(t), DECK: typeof DECK !== 'undefined' ? DECK : null, MOTION: typeof MOTION !== 'undefined' ? MOTION : null, audioLevel: () => audioLevel(), projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses, recOpenFor: k => recOpenFor(k), recOpen: l => recOpen(l), REC: typeof REC !== 'undefined' ? REC : null, srtText: () => srtText(), vttText: () => vttText(), subCues: () => subCues(), buildVideo: o => buildVideo(o), videoFormat: () => videoFormat(1280, 720, 24), slipDiff: (a, b) => slipDiff(a, b), slipOf: c => slipOf(c) };
+window.montage = { tlFx: () => ({ lift: +TLFX.lift.v.toFixed(3), liftIds: TLFX.liftIds && [...TLFX.liftIds], hoverId: TLFX.hoverId, hover: +TLFX.hover.v.toFixed(3), pulse: TLFX.pulse ? +TLFX.pulse.m.v.toFixed(3) : null, band: !!TLFX.band, snap: tlState().drag ? tlState().drag.snapT : undefined, delta: tlState().drag ? tlState().drag.delta : undefined }), S, C, PRESETS, play: (y, btn) => play(y, btn), stop: () => stop(), progress: (t, p) => progress(t, p), notify: t => notify(t), DECK: typeof DECK !== 'undefined' ? DECK : null, MOTION: typeof MOTION !== 'undefined' ? MOTION : null, audioLevel: () => audioLevel(), projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses, recOpenFor: k => recOpenFor(k), recOpen: l => recOpen(l), REC: typeof REC !== 'undefined' ? REC : null, srtText: () => srtText(), vttText: () => vttText(), subCues: () => subCues(), buildVideo: o => buildVideo(o), videoFormat: () => videoFormat(1280, 720, 24), slipDiff: (a, b) => slipDiff(a, b), slipOf: c => slipOf(c) , ED: typeof ED !== 'undefined' ? ED : null, EDK: typeof EDK !== 'undefined' ? EDK : null, edTime: () => edTime(), edBarUi: () => edBarUi(), edDraw: () => edDraw(), goTab: (t, o) => goTab(t, o) };
 if (typeof fdrInit === 'function') fdrInit();
 if (typeof numInit === 'function') numInit();
 bind(); render();
