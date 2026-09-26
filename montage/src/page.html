@@ -150,7 +150,7 @@ b, strong { font-weight: 600; }
 .tabs { touch-action: pan-y; flex: none; }
 .tabs button.on { cursor: grab; }
 .tabs-clip { position: absolute; z-index: 2; top: 3px; left: 3px; display: flex; gap: 2px; pointer-events: none; color: var(--accent-ink); font-weight: 600; font-size: 14px; white-space: nowrap; }
-.tabs-clip span { display: inline-flex; align-items: center; justify-content: center; height: 32px; }
+.tabs-clip > span { display: inline-flex; align-items: center; justify-content: center; height: 32px; }
 .tabs.clipped button { color: var(--deck-muted); }
 .monitor { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 .vu { width: 96px; height: 40px; display: block; flex: none; }
@@ -561,7 +561,7 @@ button.pill:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px
 .tl-group { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line2); border-radius: var(--r-m); background: var(--surface); }
 .tl-group .ghost-b.tiny { border-color: transparent; background: transparent; }
 .tl-group .ghost-b.tiny.on { background: var(--deck); color: var(--deck-ink); }
-.tl-tp { display: none; gap: 8px; padding: 2px 10px 2px 2px; }
+.tl-tp { display: inline-flex; gap: 8px; padding: 2px 10px 2px 2px; }   /* во вкладке «Таймлайн» свой плеер — всегда виден */
 .tl-tp .play { width: 32px; height: 28px; border: 0; background: var(--accent); color: var(--accent-ink); }
 .tp-time-txt { font: 12.5px var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
 .tl-fullbtn { margin-left: auto; }
@@ -592,6 +592,14 @@ button.pill:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px
    меняла высоту холста, и реплики на нём сдвигались */
 .tl.full .tl-info { display: none; }
 .tl:fullscreen { background: var(--bg); }
+/* «Свои файлы» на весь экран — так же, как таймлайн спектакля */
+.ed.full { position: fixed; inset: 0; z-index: 60; border: 0; border-radius: 0; padding: 12px 16px 10px; grid-template-rows: auto minmax(0, 1fr) auto; background: var(--bg); }
+.ed.full .tl-bar { font-size: 13px; }
+.ed.full .ed-canvas { overflow-y: auto; overflow-x: hidden; background: var(--surface); }
+.ed.full .ed-foot, .ed.full .ed-empty { display: none !important; }
+.ed.full #ed-info { flex-wrap: nowrap; min-height: 34px; overflow-x: auto; white-space: nowrap; }
+.ed.full #ed-info .muted { overflow: hidden; text-overflow: ellipsis; }
+.ed:fullscreen { background: var(--bg); }
 body.tl-full-open { overflow: hidden; }
 /* контекстное меню: растёт из точки щелчка (transitions.dev: menu dropdown) */
 /* ------------------------------------------------------------------ панель «Оформление» (кнопка темы в деке) */
@@ -916,6 +924,95 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
 :root[data-motion="reduce"] .t-digit-group .t-digit { animation: none !important; }
 :root[data-motion="reduce"] .rail a.done.just .n::after, :root[data-motion="reduce"] .step b.done.just::after { animation-name: t-fade-in; }
 @keyframes t-fade-in { from { opacity: 0; } }
+
+/* ------------------------------------------------------------------ пять вкладок: на узком экране — своей строкой */
+@media (max-width: 1080px) {
+  .deck-in { flex-wrap: wrap; gap: 8px 12px; padding: 8px 16px 10px; }
+  .tabs { order: 3; width: 100%; }
+  .tabs button { flex: 1 1 auto; padding: 0 8px; }
+}
+@media (max-width: 560px) { .tabs button { padding: 0 3px; font-size: 13px; } .tabs-clip { font-size: 13px; } .tab-lg { display: none; } }
+.tabs button.new::after { content: ""; position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--deck-2); }
+.tabs button.new.on::after { display: none; }
+.linkish { padding: 0; border: 0; background: none; color: var(--accent-text); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.intro-tl { display: block; margin-top: 6px; font-size: 14px; }
+#msg .msg-act { margin-left: 10px; min-height: 28px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font: 600 13px var(--sans); cursor: pointer; vertical-align: middle; }
+
+/* ------------------------------------------------------------------ главная */
+#home { display: grid; gap: 18px; min-width: 0; }
+#home section.card { gap: 0; }
+.home-hero { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: center; column-gap: 32px !important; row-gap: 20px !important; padding: 30px 32px; }
+.home-kicker { margin: 0; font: 600 12px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--accent-text); }
+.home-h { margin: 10px 0 0; font: 700 clamp(25px, 3.1vw, 38px)/1.1 var(--display); font-stretch: 92%; letter-spacing: -0.01em; text-wrap: balance; }
+.home-lead { margin: 14px 0 0; max-width: 56ch; color: var(--muted); font-size: 15.5px; text-wrap: pretty; }
+.home-cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.home-cta .primary, .home-cta .ghost-b { min-height: 42px; padding: 0 18px; font-size: 14.5px; gap: 8px; }
+.home-art { position: relative; display: grid; gap: 6px; align-content: center; min-height: 196px; padding: 30px 12px 14px; border-radius: var(--r-l); background: var(--deck); border: 1px solid var(--deck-line); overflow: hidden; }
+.ha-ruler { position: absolute; left: 12px; right: 12px; top: 12px; height: 8px; background: repeating-linear-gradient(90deg, var(--deck-line) 0 1px, transparent 1px 28px); }
+.ha-lane { position: relative; height: 30px; border-radius: 6px; background: var(--deck-2); }
+.ha-lane i { position: absolute; top: 4px; bottom: 4px; border-radius: 4px; background-image: repeating-linear-gradient(90deg, rgb(255 255 255 / 22%) 0 1px, transparent 1px 3px); }
+.ha-lane i.c1 { background-color: color-mix(in srgb, var(--c1) 70%, var(--deck-2)); }
+.ha-lane i.c2 { background-color: color-mix(in srgb, var(--c2) 70%, var(--deck-2)); }
+.ha-lane i.c3 { background-color: color-mix(in srgb, var(--c3) 70%, var(--deck-2)); }
+.ha-amb { height: 18px; } .ha-amb i { background-color: color-mix(in srgb, var(--deck-muted) 30%, var(--deck-2)); }
+.ha-head { position: absolute; top: 8px; bottom: 8px; left: 12px; width: calc(100% - 26px); pointer-events: none; animation: ha-play 9s linear infinite; }
+.ha-head::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 2px; background: var(--onair); box-shadow: 0 0 8px var(--onair); }
+@keyframes ha-play { from { transform: translateX(0); } to { transform: translateX(100%); } }
+.home-cont { display: flex !important; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px !important; }
+.home-cont > div:first-child { display: grid; gap: 2px; }
+.home-cont-b { display: flex; flex-wrap: wrap; gap: 8px; }
+.home-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.hcard { display: grid; grid-template-rows: auto auto 1fr auto; justify-items: start; gap: 8px; padding: 18px; text-align: left; font: inherit; color: inherit; cursor: pointer; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--sh-1); transition: border-color var(--duration-quick) var(--ease-smooth-out), box-shadow var(--duration-quick) var(--ease-smooth-out); -webkit-tap-highlight-color: transparent; }
+.hcard-ic { display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: var(--r-m); background: var(--deck); color: var(--deck-accent); }
+.hcard-ic .ic { width: 20px; height: 20px; }
+.hcard-t { font: 600 17px/1.2 var(--display); font-stretch: 95%; }
+.hcard-d { color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+.hcard-go { display: inline-flex; align-items: center; gap: 6px; color: var(--accent-text); font-weight: 600; font-size: 13.5px; }
+.hcard-go .ic { transition: transform var(--duration-quick) var(--ease-smooth-out); }
+.hcard:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) { .hcard:hover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), var(--sh-1); } .hcard:hover .hcard-go .ic { transform: translateX(3px); } }
+.home-how { gap: 12px !important; }
+.home-how h3 { margin: 0; font: 600 17px/1.2 var(--display); }
+.home-how ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.home-how li button { display: flex; gap: 10px; align-items: flex-start; width: 100%; height: 100%; padding: 10px; text-align: left; border: 1px solid var(--line2); border-radius: var(--r-m); background: var(--well); color: inherit; font: inherit; cursor: pointer; }
+.home-how li button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) { .home-how li button:hover { border-color: var(--accent); } }
+.home-how b { flex: none; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: var(--r-s); background: var(--deck); color: var(--deck-accent); font: 700 13px/1 var(--mono); }
+.home-how strong { display: block; font-weight: 600; font-size: 14px; }
+.home-how small { display: block; color: var(--muted); font-size: 12.5px; line-height: 1.35; }
+@media (max-width: 1100px) { .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .home-how ol { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 860px) { .home-hero { grid-template-columns: minmax(0, 1fr); padding: 22px 18px; } .home-art { min-height: 150px; } }
+@media (max-width: 560px) { .home-grid, .home-how ol { grid-template-columns: minmax(0, 1fr); } .home-cta > * { flex: 1 1 100%; } }
+
+/* ------------------------------------------------------------------ вкладка «Таймлайн» */
+.tlp-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.tlp-top .step { flex: 1 1 320px; }
+#tlp-mode button { min-height: 32px; font-size: 13.5px; }
+.tlp-empty, .ed-empty { display: grid; justify-items: center; gap: 10px; padding: 34px 16px; text-align: center; border: 1.5px dashed var(--line); border-radius: var(--r-l); background: var(--well); transition: border-color var(--duration-quick), box-shadow var(--duration-quick); }
+.tlp-empty > .muted, .ed-empty .muted { max-width: 62ch; }
+.tlp-empty b, .ed-drop b { font: 600 18px/1.2 var(--display); }
+.tlp-empty .home-cta { margin-top: 6px; justify-content: center; }
+.ed-drop { display: grid; justify-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--r-m); cursor: pointer; }
+.ed-drop:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ed-drop-ic, .tlcard-ic { display: inline-grid; place-items: center; width: 52px; height: 52px; border-radius: 14px; background: var(--deck); color: var(--deck-accent); }
+.ed-drop-ic .ic { width: 26px; height: 26px; }
+.ed-can { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; color: var(--muted); font-size: 13.5px; }
+.ed-can li::before { content: "·"; margin-right: 8px; color: var(--accent-text); font-weight: 700; }
+#tlp-files.over .ed-empty, #tlp-files.over .ed-canvas { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.ed { position: relative; display: grid; gap: 8px; padding: 8px; border: 1px solid var(--line2); border-radius: var(--r-l); background: var(--well); }
+.ed .ed-canvas { position: relative; border: 1px solid var(--line2); border-radius: var(--r-m); overflow: hidden; }
+#ed-cv { width: 100%; display: block; touch-action: none; outline: none; }
+#ed-cv:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
+.ed-dl { margin-left: auto; }
+.ed-dl .primary.small { min-height: 26px; padding: 0 10px; font-size: 12.5px; gap: 5px; }
+.ed-foot { display: flex; justify-content: flex-end; }
+.tlcard { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 14px 16px; border: 1px solid var(--line2); border-radius: var(--r-l); background: var(--well); margin: 4px 0; }
+.tlcard-ic { width: 42px; height: 42px; border-radius: 12px; }
+.tlcard-ic .ic { width: 22px; height: 22px; }
+.tlcard-t { flex: 1 1 260px; display: grid; gap: 2px; }
+.tlcard .primary { gap: 8px; }
+@media (prefers-reduced-motion: reduce) { .ha-head { animation: none; transform: translateX(38%); } }
+:root[data-motion="reduce"] .ha-head { animation: none; transform: translateX(38%); }
 </style>
 </head>
 <body>
@@ -932,8 +1029,10 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
     </div>
     <nav class="tabs" role="tablist" aria-label="Разделы">
       <span class="tab-ind" aria-hidden="true"></span>
-      <button data-tab="build" role="tab" class="on">Сборка</button>
-      <button data-tab="clean" role="tab">Чистка звука</button>
+      <button data-tab="home" role="tab">Главная</button>
+      <button data-tab="build" role="tab">Сборка</button>
+      <button data-tab="tl" role="tab">Таймлайн</button>
+      <button data-tab="clean" role="tab">Чистка<span class="tab-lg"> звука</span></button>
       <button data-tab="sfx" role="tab">Звуки</button>
     </nav>
     <div id="prog" role="status" hidden><div class="in"><div id="prog-t" data-num="prog" data-num-flow data-num-shape></div><div class="bar"><div id="prog-b"></div></div></div></div>
@@ -954,6 +1053,7 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
   </div>
 </header>
 <main class="wrap" id="main">
+  <div data-tabpane="home" class="pane" hidden><div id="home"></div></div>
   <div data-tabpane="build" class="pane pane-build">
     <nav class="rail" aria-label="Шаги сборки">
       <ol>
@@ -967,7 +1067,7 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
       <p class="rail-note">Всё считается в этом браузере. Записи и сценарий никуда не отправляются.</p>
     </nav>
     <div class="flow">
-      <p class="intro" id="intro"><b>Сценарий и записи актёров — на входе, готовая дорожка — на выходе.</b> Реплики находятся в записях сами, громкость выравнивается, паузы расставляются по ремаркам.</p>
+      <p class="intro" id="intro"><b>Сценарий и записи актёров — на входе, готовая дорожка — на выходе.</b> Реплики находятся в записях сами, громкость выравнивается, паузы расставляются по ремаркам. <span class="intro-tl">Сценария нет, нужно просто смонтировать записи? — <button class="linkish" type="button" data-go="tl" data-mode="files">таймлайн «Свои файлы»</button>.</span></p>
       <div class="grid2">
         <section class="card" id="s1">
           <h2 class="step"><b>1</b> Сценарий <small><label class="ghost-b tiny file-b"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h4.8L12 5.7v7.8H4z"/><path d="M8.6 2.6v3.3H12"/></svg>Открыть .txt<input type="file" id="script-file" accept=".txt,.md,text/plain" hidden></label></small></h2>
@@ -1035,6 +1135,16 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
         <div id="mix-out"></div>
       </section>
     </div>
+  </div>
+  <div data-tabpane="tl" class="pane" hidden>
+    <section class="card tlp" id="tlp">
+      <div class="tlp-top">
+        <h2 class="step">Таймлайн <small id="tlp-sub"></small></h2>
+        <div class="filters" id="tlp-mode" role="group" aria-label="Что на таймлайне"><button type="button" data-m="show" aria-pressed="false">Спектакль</button><button type="button" data-m="files" aria-pressed="false">Свои файлы</button></div>
+      </div>
+      <div id="tlp-show"><div id="tlp-show-empty"></div><div id="mix-tl"></div></div>
+      <div id="tlp-files" hidden></div>
+    </section>
   </div>
   <div data-tabpane="clean" class="pane" hidden>
     <section class="card" id="cl">

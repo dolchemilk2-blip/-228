@@ -485,7 +485,7 @@ function renderCleanup() {
     <div class="cl-actions">
       <button class="primary" data-act="apply" ${c.busy ? 'disabled' : ''}>${f.raw48 ? 'Применить заново ко всему файлу' : 'Применить ко всему файлу'}</button>
       ${files.length > 1 ? `<button class="ghost-b" data-act="apply-all" ${c.busy ? 'disabled' : ''}>Ко всем файлам с этими настройками</button><button class="ghost-b" data-act="match-all" ${c.busy ? 'disabled' : ''} title="Та же чистка всем записям и тембр, подогнанный под эту">Все записи — как эта</button>` : ''}
-      ${f.raw48 ? '<button class="ghost-b" data-act="revert">Вернуть оригинал</button><button class="ghost-b" data-act="wav">Скачать WAV</button>' : ''}
+      ${f.raw48 ? `<button class="ghost-b" data-act="revert">Вернуть оригинал</button><button class="ghost-b" data-act="wav">${exportLocked() ? ic('lock') : ''}Скачать WAV</button><button class="ghost-b" data-act="to-tl" title="Положить очищенную запись на таймлайн своих записей">${ic('tracks')}В таймлайн</button>` : ''}
       <span class="muted small" id="cl-applied">${f.raw48 ? 'В сведение идёт обработанная версия. ' + (c.log ? c.log.join(' · ') : '') : 'Пока в сведение идёт оригинал.'}</span>
     </div>`;
   if (typeof segInd === 'function') { segInd(pane.querySelector('.presets'), 'cl-presets'); segInd(pane.querySelector('.cl-files'), 'cl-files'); }
@@ -583,7 +583,7 @@ function eqRerender(fresh) {
 function eqNewBand(b) { EQV.fresh.add(b); return b; }
 function bindCleanup() {
   const pane = $('#cl-body');
-  pane.addEventListener('click', e => {
+  pane.addEventListener('click', async e => {
     const card = e.target.closest('.bcard');
     if (card && !e.target.closest('button, select, .scrub, label')) { const c = cl(S.cleanFile); c.eqSel = +card.dataset.b; eqSelCards(c); drawEq($('#eq-canvas'), S.cleanFile); return; }
     const b = e.target.closest('button'); if (!b) return;
@@ -597,7 +597,8 @@ function bindCleanup() {
     if (a === 'apply-all') return applyAll(f);
     if (a === 'match-all') return matchAllTo(f);
     if (a === 'revert') return revertFile(f);
-    if (a === 'wav') return download(new Blob([C.wav24(f.y48)], { type: 'audio/wav' }), f.name.replace(/\.[^.]+$/, '') + '_чисто.wav');
+    if (a === 'wav') { const ex = await exportBegin('очищенную запись'); if (ex && await ex.commit()) download(new Blob([C.wav24(f.y48)], { type: 'audio/wav' }), f.name.replace(/\.[^.]+$/, '') + '_чисто.wav'); return; }
+    if (a === 'to-tl') return toTimeline(f.name.replace(/\.[^.]+$/, '') + ' (чисто).wav', f.y48.slice());
     if (a === 'noise-here') { c.noiseOverride = C.noiseProfile(c.before); c.noiseFrom = c.at; if (!c.noiseOverride) return notify('В этом отрывке нет тихих мест, откуда взять профиль.'); renderCleanup(); markDirty(f); clNoiseSwap(); return; }
     if (a === 'noise-reset') { c.noiseOverride = null; renderCleanup(); markDirty(f); clNoiseSwap(); return; }
     if (a === 'band-add') { if (c.chain.eq.bands.length >= 10) return; eqMorph(f); const nb = eqNewBand({ type: 'peak', f: 1000, q: 1, gain: 0 }); c.chain.eq.bands.push(nb); c.chain.eq.on = true; c.eqSel = c.chain.eq.bands.length - 1; eqRerender(new Set([eqBandKey(nb)])); markDirty(f); return; }

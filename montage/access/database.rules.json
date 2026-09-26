@@ -1,7 +1,7 @@
 {
   "rules": {
     "app": {
-      ".read": "auth != null && ((auth.token.email === 'ADMIN_EMAIL' && auth.token.email_verified === true) || (root.child('users').child(auth.uid).child('paid').val() === true && root.child('users').child(auth.uid).child('blocked').val() !== true))",
+      ".read": "auth != null && ((auth.token.email === 'ADMIN_EMAIL' && auth.token.email_verified === true) || (root.child('users').child(auth.uid).child('blocked').val() !== true && (root.child('users').child(auth.uid).child('paid').val() === true || (root.child('users').child(auth.uid).child('trial').child('start').isNumber() && now < root.child('users').child(auth.uid).child('trial').child('start').val() + 432000000))))",
       ".write": "auth != null && auth.token.email === 'ADMIN_EMAIL' && auth.token.email_verified === true"
     },
     "codes": {
@@ -49,6 +49,27 @@
         },
         "code": {
           ".write": "auth != null && auth.uid === $uid && !data.exists() && newData.isString() && newData.val().length === 16 && root.child('codes').child(newData.val()).child('used').child('by').val() === auth.uid"
+        },
+        "trial": {
+          ".write": "auth != null && auth.uid === $uid && !data.exists()",
+          ".validate": "newData.child('start').val() === now && (!newData.child('ref').exists() || (newData.child('ref').isString() && newData.child('ref').val() !== $uid && newData.child('ref').val().matches(/^[A-Za-z0-9_-]{6,128}$/)))",
+          "start": { ".validate": true },
+          "ref": { ".validate": true },
+          "$other": { ".validate": false }
+        },
+        "invited": {
+          "$b": {
+            ".write": "auth != null && auth.uid === $b && $b !== $uid && !data.exists() && root.child('users').child($b).child('trial').child('ref').val() === $uid",
+            ".validate": "newData.val() === true"
+          }
+        },
+        "bonus": {
+          ".write": "auth != null && auth.uid !== $uid && newData.parent().child('invited').child(auth.uid).exists() && !data.parent().child('invited').child(auth.uid).exists()",
+          ".validate": "newData.isNumber() && newData.val() === (data.exists() ? data.val() : 0) + 1 && newData.val() <= 10"
+        },
+        "exports": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.isNumber() && newData.val() === (data.exists() ? data.val() : 0) + 1 && newData.val() <= 3 * (data.parent().child('bonus').exists() ? data.parent().child('bonus').val() : 0)"
         },
         "paid": {
           ".write": "auth != null && auth.uid === $uid && newData.val() === true && data.parent().child('blocked').val() !== true && newData.parent().child('code').isString() && root.child('codes').child(newData.parent().child('code').val()).child('used').child('by').val() === auth.uid"

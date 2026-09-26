@@ -26,6 +26,12 @@ const IC = {
   mic: '<rect x="6" y="2.2" width="4" height="7.6" rx="2"/><path d="M3.8 7.6a4.2 4.2 0 0 0 8.4 0M8 11.8v2"/>',
   grip: '<circle class="f" cx="5.8" cy="4" r="1.15"/><circle class="f" cx="10.2" cy="4" r="1.15"/><circle class="f" cx="5.8" cy="8" r="1.15"/><circle class="f" cx="10.2" cy="8" r="1.15"/><circle class="f" cx="5.8" cy="12" r="1.15"/><circle class="f" cx="10.2" cy="12" r="1.15"/>',
   wave: '<path d="M2 8h1.4M4.6 5.5v5M7 3.2v9.6M9.4 5v6M11.8 6.5v3M14 8h.1"/>',
+  cut: '<circle cx="4.6" cy="11.6" r="1.9"/><circle cx="11.4" cy="11.6" r="1.9"/><path d="M6 10.2L12.2 2.6M10 10.2L3.8 2.6"/>',
+  trash: '<path d="M3 4.6h10M6.3 4.6V3h3.4v1.6M4.6 4.6l.6 8.5h5.6l.6-8.5"/>',
+  lock: '<rect x="3.6" y="7.2" width="8.8" height="6.2" rx="1.4"/><path d="M5.6 7.2V5.4a2.4 2.4 0 0 1 4.8 0v1.8"/>',
+  share: '<path d="M8 2.8v7.2M5.2 5.4L8 2.6l2.8 2.8M3.4 8.6v4.6h9.2V8.6"/>',
+  tracks: '<path d="M2.6 4.4h6.2M5.4 8h8M2.6 11.6h4.8"/>',
+  home: '<path d="M2.8 7.4L8 3l5.2 4.4M4.4 6.2v7h7.2v-7"/>',
 };
 const ic = (n, cls = '') => `<svg class="ic${cls ? ' ' + cls : ''}" viewBox="0 0 16 16" aria-hidden="true">${IC[n] || ''}</svg>`;
 const tpIcon = on => `<span class="swap" data-state="${on ? 'b' : 'a'}"><svg class="ic" data-icon="a" viewBox="0 0 16 16" aria-hidden="true">${IC.play}</svg><svg class="ic" data-icon="b" viewBox="0 0 16 16" aria-hidden="true">${IC.pause}</svg></span>`;

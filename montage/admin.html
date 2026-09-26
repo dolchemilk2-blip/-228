@@ -100,9 +100,14 @@ details > :not(summary) + :not(summary) { margin-top: 12px; }
 <main class="wrap" id="app"><section class="card"><p class="note">Загружаю…</p></section></main>
 <script type="module">
 import * as F from './access/fb.js';
+import CFG from './access/config.js';
 
 const $ = s => document.querySelector(s), E = F.esc, app = $('#app');
 const when = t => t ? new Date(t).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+// адрес сайта для ссылок из магазина: папка, где лежит admin.html (или siteUrl из config.js)
+const SITE = (CFG.siteUrl || location.origin + location.pathname.replace(/[^/]*$/, '')).replace(/\/?$/, '/');
+const shopLink = k => SITE + '?code=' + F.fmtCode(k);
+const TRIAL_MS = 5 * 86400000, trialOn = u => !!(u.trial && u.trial.start && u.trial.start + TRIAL_MS > Date.now());
 const kb = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' МБ' : Math.round(n / 1024) + ' КБ';
 function device(ua = '') {
   const b = /Edg\//.test(ua) ? 'Edge' : /YaBrowser/.test(ua) ? 'Яндекс' : /OPR\//.test(ua) ? 'Opera' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'браузер';
@@ -151,26 +156,35 @@ function render() {
     return;
   }
   const users = Object.entries(S.users).map(([uid, v]) => ({ uid, ...v })), codes = Object.entries(S.codes).map(([k, v]) => ({ k, ...v }));
-  const paid = users.filter(u => u.paid && !u.blocked).length, free = codes.filter(c => !c.used && !c.off).length;
+  const shopAll = codes.filter(c => c.shop).length, shopSold = codes.filter(c => c.shop && c.used).length, shopLeft = codes.filter(c => c.shop && !c.used && !c.off).length;
+  const paid = users.filter(u => u.paid && !u.blocked).length, free = codes.filter(c => !c.used && !c.off && !c.shop).length, trial = users.filter(u => !u.paid && !u.blocked && trialOn(u)).length;
   app.innerHTML = `
-  <section class="card"><p class="stat"><span>С доступом: <b>${paid}</b></span><span>Всего входили: <b>${users.length}</b></span><span>Свободных кодов: <b>${free}</b></span><span>Сборка: <b>${S.meta ? when(S.meta.t) : 'не загружена'}</b></span></p></section>
+  <section class="card"><p class="stat"><span>С доступом: <b>${paid}</b></span><span>На пробе: <b>${trial}</b></span><span>Всего входили: <b>${users.length}</b></span><span>Свободных кодов: <b>${free}</b></span><span>Сборка: <b>${S.meta ? when(S.meta.t) : 'не загружена'}</b></span></p></section>
   <section class="card" id="build">
     <h2>Сборка Монтажки</h2>
     <p class="note">${S.meta ? `Сейчас загружена сборка от ${when(S.meta.t)} · ${kb(S.meta.size || 0)} · <span class="mono">${E(String(S.meta.v).slice(0, 10))}</span>. Покупатели получат новую при следующем открытии.` : 'Сборка ещё не загружена — покупатели увидят «Монтажка ещё не загружена».'}</p>
     <label class="drop" id="drop"><input type="file" id="file" accept=".html,text/html"><b>${S.file ? E(S.file.name) + ' · ' + kb(S.file.text.length) : 'Выберите файл montage.html'}</b><span class="note">${S.file ? 'Готово к загрузке' : 'или перетащите его сюда — это собранная Монтажка (dist/montage.html)'}</span></label>
     <div class="row"><button class="btn" type="button" data-act="upload" ${S.file ? '' : 'disabled'}>Загрузить сборку</button><span class="msg" id="up-msg"></span></div>
   </section>
+  <section class="card" id="shop">
+    <h2>Продажа через магазин</h2>
+    <p class="note">Магазин продаёт ссылки: каждому покупателю — одна строка из списка, сразу после оплаты на экране и на почту. Покупатель открывает ссылку, входит через Google — покупка активируется сама. Выгрузите ссылки и добавьте их в товар магазина («уникальный товар», «serials»). Кнопка «Купить» на сайте ведёт на этот товар (<code>buyUrl</code> в <code>access/config.js</code>${CFG.buyUrl ? ': ' + E(CFG.buyUrl) : ' — пока не задан'}).</p>
+    <p class="stat"><span>В магазине осталось: <b>${shopLeft}</b></span><span>Продано: <b>${shopSold}</b></span><span>Выгружено всего: <b>${shopAll}</b></span></p>
+    ${shopAll && shopLeft < 10 ? `<p class="msg bad">Ссылок в магазине осталось мало — выгрузите ещё и добавьте в товар, иначе магазин перестанет продавать.</p>` : ''}
+    <form class="row" data-form="shop"><label>Сколько ссылок <input type="number" name="n" min="1" max="500" value="50"></label><button class="btn" type="submit">Выгрузить ссылки для магазина</button></form>
+    <p class="note">Ссылки ведут на <span class="mono">${E(SITE)}</span>. Каждая ссылка — отдельный новый код: выгруженные не смешиваются с кодами, которые вы раздаёте сами.</p>
+  </section>
   <section class="card" id="codes">
     <h2>Коды активации</h2>
     <p class="note">Один код — один аккаунт. Отдайте код покупателю (магазин, Telegram, письмо); он входит через Google и вводит код — доступ откроется сразу.</p>
     <form class="row" data-form="make"><label>Сколько <input type="number" name="n" min="1" max="200" value="5"></label><input type="text" name="note" placeholder="пометка, например: продажа в Boosty" maxlength="80" style="flex:1"><button class="btn" type="submit">Создать коды</button></form>
     ${S.fresh.length ? `<div class="card" style="box-shadow:none;background:var(--well)"><p class="codes-new">${S.fresh.map(F.fmtCode).join('<br>')}</p><div class="row"><button class="btn ghost small" type="button" data-act="copy-fresh">Скопировать новые (${S.fresh.length})</button></div></div>` : ''}
-    <div class="row"><span class="seg" role="group" aria-label="Какие коды показать">${[['free', 'Свободные'], ['used', 'Активированные'], ['off', 'Отключённые'], ['all', 'Все']].map(([k, t]) => `<button type="button" data-filter="${k}" aria-pressed="${S.codeFilter === k}">${t}</button>`).join('')}</span>${S.codeFilter === 'free' && free ? `<button class="btn ghost small" type="button" data-act="copy-free">Скопировать свободные</button>` : ''}</div>
+    <div class="row"><span class="seg" role="group" aria-label="Какие коды показать">${[['free', 'Свободные'], ['shop', 'В магазине'], ['used', 'Активированные'], ['off', 'Отключённые'], ['all', 'Все']].map(([k, t]) => `<button type="button" data-filter="${k}" aria-pressed="${S.codeFilter === k}">${t}</button>`).join('')}</span>${S.codeFilter === 'free' && free ? `<button class="btn ghost small" type="button" data-act="copy-free">Скопировать свободные</button>` : ''}</div>
     <div class="list">${codeRows(codes) || '<p class="empty">Здесь пока пусто.</p>'}</div>
   </section>
   <section class="card" id="users">
     <h2>Покупатели</h2>
-    <p class="note">Все, кто входил. Оплатил переводом без кода — нажмите «Выдать доступ». «Отключить» закрывает доступ сразу, даже в открытой вкладке (в течение минуты).</p>
+    <p class="note">Все, кто входил. Оплатил переводом без кода — нажмите «Выдать доступ». «Отключить» закрывает доступ сразу, даже в открытой вкладке (в течение минуты). Пробный период — 5 дней: всё работает, но скачивать файлы можно только за приглашения (3 за каждого друга, начавшего пробу по ссылке, до 10 друзей).</p>
     <input type="search" id="q" placeholder="Поиск по почте или имени" value="${E(S.q)}" aria-label="Поиск покупателей">
     <div class="list" id="ulist">${userRows(users) || '<p class="empty">Пока никто не входил.</p>'}</div>
   </section>
@@ -178,19 +192,22 @@ function render() {
 }
 
 function codeRows(codes) {
-  const f = S.codeFilter, st = c => c.used ? 'used' : c.off ? 'off' : 'free';
-  return codes.filter(c => f === 'all' || st(c) === f).sort((a, b) => (b.t || 0) - (a.t || 0)).map(c => `<div class="it"><div class="main"><b class="mono">${F.fmtCode(c.k)}${c.used ? '<span class="chip ok">активирован</span>' : c.off ? '<span class="chip bad">отключён</span>' : '<span class="chip acc">свободен</span>'}</b>
+  const f = S.codeFilter, st = c => c.used ? 'used' : c.off ? 'off' : c.shop ? 'shop' : 'free';
+  return codes.filter(c => f === 'all' || st(c) === f).sort((a, b) => (b.t || 0) - (a.t || 0)).map(c => `<div class="it"><div class="main"><b class="mono">${F.fmtCode(c.k)}${c.used ? `<span class="chip ok">${c.shop ? 'продан' : 'активирован'}</span>` : c.off ? '<span class="chip bad">отключён</span>' : c.shop ? '<span class="chip acc">в магазине</span>' : '<span class="chip acc">свободен</span>'}</b>
     <span class="sub">${c.used ? `${E(c.used.email || '')} · ${when(c.used.at)}` : `создан ${when(c.t)}`}${c.note ? ' · ' + E(c.note) : ''}</span></div>
-    <div class="acts">${c.used ? '' : `<button class="btn ghost small" type="button" data-copy="${c.k}">Копировать</button><button class="btn ghost small" type="button" data-code-off="${c.k}">${c.off ? 'Включить' : 'Отключить'}</button>`}</div></div>`).join('');
+    <div class="acts">${c.used ? '' : `<button class="btn ghost small" type="button" data-copy="${c.k}"${c.shop ? ' data-link="1"' : ''}>${c.shop ? 'Копировать ссылку' : 'Копировать'}</button><button class="btn ghost small" type="button" data-code-off="${c.k}">${c.off ? 'Включить' : 'Отключить'}</button>`}</div></div>`).join('');
 }
 function userRows(users) {
   const q = S.q.trim().toLowerCase();
   return users.filter(u => !q || (u.email || '').toLowerCase().includes(q) || (u.name || '').toLowerCase().includes(q)).sort((a, b) => (b.seen || 0) - (a.seen || 0)).map(u => {
-    const chip = u.blocked ? '<span class="chip bad">отключён</span>' : u.paid ? `<span class="chip ok">${u.code ? 'доступ по коду' : 'доступ выдан'}</span>` : '<span class="chip">без доступа</span>';
+    const tr = u.trial && u.trial.start ? (trialOn(u) ? `<span class="chip acc">проба до ${new Date(u.trial.start + TRIAL_MS).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}</span>` : '<span class="chip">проба закончилась</span>') : '';
+    const chip = u.blocked ? '<span class="chip bad">отключён</span>' : u.paid ? `<span class="chip ok">${u.code ? 'доступ по коду' : 'доступ выдан'}</span>` : tr || '<span class="chip">без доступа</span>';
     const act = u.blocked ? `<button class="btn ghost small" type="button" data-user="${u.uid}" data-do="unblock">Вернуть доступ</button>`
       : u.paid ? `<button class="btn ghost small bad" type="button" data-user="${u.uid}" data-do="block">Отключить</button>`
-      : `<button class="btn small" type="button" data-user="${u.uid}" data-do="grant">Выдать доступ</button>`;
-    return `<div class="it"><div class="main"><b>${E(u.email || u.uid)}${chip}</b><span class="sub">${u.name ? E(u.name) + ' · ' : ''}впервые ${when(u.first)} · был ${when(u.seen)}${u.session ? ' · ' + device(u.session.ua) : ''}${u.code ? ' · код ' + F.fmtCode(u.code).slice(0, 9) + '…' : ''}</span></div><div class="acts">${act}</div></div>`;
+      : `<button class="btn small" type="button" data-user="${u.uid}" data-do="grant">Выдать доступ</button>${u.trial ? `<button class="btn ghost small" type="button" data-user="${u.uid}" data-do="extend" title="Пробный период заново на 5 дней с сегодняшнего дня">Продлить пробу</button>` : ''}`;
+    const inv = u.bonus ? ` · пригласил: ${u.bonus}` : '', exp = !u.paid && (u.bonus || u.exports) ? ` · скачиваний ${u.exports || 0} из ${Math.min(10, u.bonus || 0) * 3}` : '';
+    const from = u.trial && u.trial.ref ? ` · по приглашению ${E((S.users[u.trial.ref] || {}).email || u.trial.ref.slice(0, 8) + '…')}` : '';
+    return `<div class="it"><div class="main"><b>${E(u.email || u.uid)}${chip}</b><span class="sub">${u.name ? E(u.name) + ' · ' : ''}впервые ${when(u.first)} · был ${when(u.seen)}${u.session ? ' · ' + device(u.session.ua) : ''}${u.code ? ' · код ' + F.fmtCode(u.code).slice(0, 9) + '…' : ''}${inv}${exp}${from}</span></div><div class="acts">${act}</div></div>`;
   }).join('');
 }
 
@@ -228,21 +245,36 @@ document.addEventListener('click', async e => {
   if (a === 'copy-rules') return copy(S.rules, b);
   if (a === 'upload') return upload();
   if (a === 'copy-fresh') return copy(S.fresh.map(F.fmtCode).join('\n'), b);
-  if (a === 'copy-free') return copy(Object.entries(S.codes).filter(([, c]) => !c.used && !c.off).map(([k]) => F.fmtCode(k)).join('\n'), b);
+  if (a === 'copy-free') return copy(Object.entries(S.codes).filter(([, c]) => !c.used && !c.off && !c.shop).map(([k]) => F.fmtCode(k)).join('\n'), b);
   if (b.dataset.filter) { S.codeFilter = b.dataset.filter; render(); $(`[data-filter="${S.codeFilter}"]`).focus(); return; }
-  if (b.dataset.copy) return copy(F.fmtCode(b.dataset.copy), b);
+  if (b.dataset.copy) return copy(b.dataset.link ? shopLink(b.dataset.copy) : F.fmtCode(b.dataset.copy), b);
   if (b.dataset.codeOff) { const k = b.dataset.codeOff; b.disabled = true; await F.db(`codes/${k}/off`, { method: 'PUT', body: S.codes[k].off ? null : true }).catch(() => {}); return reload(); }
   if (b.dataset.user) {
     const uid = b.dataset.user, u = S.users[uid] || {}, d = b.dataset.do;
     if (d === 'block' && !confirm(`Отключить доступ для ${u.email || uid}?`)) return;
     b.disabled = true;
-    const body = d === 'grant' ? { paid: true, manual: true, blocked: null } : d === 'block' ? { blocked: true } : { blocked: null, paid: true };
+    const body = d === 'grant' ? { paid: true, manual: true, blocked: null } : d === 'block' ? { blocked: true } : d === 'extend' ? { 'trial/start': F.TS } : { blocked: null, paid: true };
     await F.db('users/' + uid, { method: 'PATCH', body }).catch(() => {});
     return reload();
   }
 });
+/** Ссылки для магазина: новые коды с пометкой «магазин» и файл, где каждая строка — ссылка с кодом. */
+async function shopExport(f) {
+  const n = Math.max(1, Math.min(500, Math.round(+f.n.value || 1))), btn = f.querySelector('button'), batch = {}, keys = [];
+  btn.disabled = true;
+  for (let i = 0; i < n; i++) { const k = F.newCode(); if (S.codes[k] || batch[k]) { i--; continue; } batch[k] = { t: F.TS, shop: F.TS, note: 'магазин' }; keys.push(k); }
+  try {
+    await F.db('codes', { method: 'PATCH', body: batch });
+    const d = new Date(), name = `монтажка-ссылки-${d.toISOString().slice(0, 10)}-${n}.txt`;
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([keys.map(shopLink).join('\n') + '\n'], { type: 'text/plain;charset=utf-8' })); a.download = name;
+    document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+    S.codeFilter = 'shop';
+  } catch { alert('Не получилось выгрузить — проверьте связь.'); }
+  btn.disabled = false; reload();
+}
 document.addEventListener('submit', async e => {
   e.preventDefault();
+  if (e.target.dataset.form === 'shop') return shopExport(e.target);
   const f = e.target, n = Math.max(1, Math.min(200, Math.round(+f.n.value || 1))), note = f.note.value.trim().slice(0, 80), btn = f.querySelector('button');
   btn.disabled = true;
   const batch = {}, fresh = [];

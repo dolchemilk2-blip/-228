@@ -179,12 +179,14 @@ function videoPainter(g, W, H, opt) {
 /** Кнопка «Собрать видео». */
 async function exportVideo(from, to) {
   if (VIDEO.busy) { VIDEO.cancel = true; return; }
+  const ex = await exportBegin('видео'); if (!ex) return;
   VIDEO.busy = true; VIDEO.cancel = false; renderMix();
   try {
     if (S.result.approx && typeof exactResult === 'function') await exactResult();
     const res = await buildVideo({ title: (S.videoTitle || '').trim() || 'Радиоспектакль', cover: S.videoCover || null, from, to });
     progress('', 0);
     const stamp = S.result.at.toISOString().slice(0, 16).replace(/[-:T]/g, '').replace(/^(\d{8})(\d{4})$/, '$1-$2');
+    if (!(await ex.commit())) return res;
     download(res.blob, `видео-${stamp}.${res.ext}`);
     notify(`Видео готово (${(res.blob.size / 1e6).toFixed(0)} МБ, ${res.ext.toUpperCase()}). Для YouTube: загрузите видео, субтитры (.srt) и главы из кнопки «Главы».`);
     return res;

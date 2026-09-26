@@ -144,7 +144,8 @@ async function recMatch(y, spk) {
   return C.fade(r.y);
 }
 /** Записи одним архивом: «004 Кэфи.wav» — режиссёр перетаскивает архив в «Записи». */
-function recZip() {
+async function recZip() {
+  const ex = await exportBegin('записи с микрофона'); if (!ex || !(await ex.commit())) return;
   const files = [...REC.taken].map(([id, y]) => { const c = S.P.cues.find(q => q.id === id); return { name: `${id} ${c ? charName(c.spk) : ''}.wav`.trim(), data: new Uint8Array(C.wav24(y)) }; });
   download(zipStore(files), `дозапись-${new Date().toISOString().slice(0, 10)}.zip`);
 }
