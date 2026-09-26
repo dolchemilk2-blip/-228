@@ -8,7 +8,7 @@
 const EDK = { HEAD: 132, RULER: 24, ROW: 58, NEW: 34, BIN: 120, EDGE: 8, MAXZ: 800 };
 const ED = { tracks: [], clips: [], srcs: new Map(), sel: new Set(), seq: 1, zoom: 0, scroll: 0, W: 0, t: 0,
   play: null, undo: [], redo: [], drag: null, loaded: false, cursor: '' };
-const edRow = () => (innerWidth < 640 ? 50 : EDK.ROW);
+const edRow = () => (ED.full && ED.fullRow ? ED.fullRow : innerWidth < 640 ? 50 : EDK.ROW);   // на весь экран дорожки растут до высоты экрана
 const edLin = db => Math.pow(10, db / 20);
 const edX = t => EDK.HEAD + (t - ED.scroll) * ED.zoom;
 const edT = x => ED.scroll + (x - EDK.HEAD) / ED.zoom;
@@ -162,6 +162,7 @@ function edStopNodes() { if (!ED.play) return; for (const s of ED.play.nodes) { 
 function edPause() { if (!ED.play) return; ED.t = Math.min(edTime(), ED.play.end); edStopNodes(); ED.play = null; edBarUi(); edHead(); edSave(); }
 // когда заиграло что-то другое в Монтажке (app.js зовёт stop()) — таймлайн замолкает
 function edStop() { if (ED.play) edPause(); }
+function edLeave() { if (ED.full) { const t = typeof tlLastInput !== 'undefined' ? tlLastInput : null; if (t) tlLastInput = 'key'; edSetFull(false); if (t) tlLastInput = t; } }
 function edToggle() { if (ED.play) edPause(); else edPlay(); }
 function edSeek(t) { t = Math.max(0, Math.min(t, Math.max(edEnd(), 0))); if (ED.play) edPlay(t); else { ED.t = t; edHead(); edBarUi(); edSave(); } }
 let edRaf = 0;
@@ -228,6 +229,7 @@ function edBarHtml() {
     <div class="tl-group"><button class="icon-b" data-ed="undo" aria-label="Отменить" title="Отменить (Ctrl+Z)" ${ED.undo.length ? '' : 'disabled'}>${ic('undo')}</button><button class="icon-b" data-ed="redo" aria-label="Повторить" title="Повторить (Ctrl+Shift+Z)" ${ED.redo.length ? '' : 'disabled'}>${ic('redo')}</button></div>
     <div class="tl-group"><button class="ghost-b tiny" data-ed="split" title="Разрезать на курсоре (S)" ${has ? '' : 'disabled'}>${ic('cut')}Разрезать</button><button class="ghost-b tiny" data-ed="del" title="Удалить выбранное (Delete)" ${ED.sel.size ? '' : 'disabled'}>${ic('trash')}Удалить</button></div>
     <div class="tl-group"><button class="icon-b" data-ed="zoom-" title="Мельче (−)" aria-label="Уменьшить масштаб" ${has ? '' : 'disabled'}>${ic('minus')}</button><button class="ghost-b tiny" data-ed="fit" title="Всё целиком (0)" ${has ? '' : 'disabled'}>всё</button><button class="icon-b" data-ed="zoom+" title="Крупнее (+)" aria-label="Увеличить масштаб" ${has ? '' : 'disabled'}>${ic('plus')}</button></div>
+    <button class="ghost-b tl-fullbtn" data-ed="full" title="${ED.full ? 'Свернуть (Esc)' : 'Таймлайн на весь экран (F)'}" ${has ? '' : 'disabled'}>${ED.full ? ic('collapse') + 'Свернуть' : ic('expand') + 'На весь экран'}</button>
     <div class="tl-group ed-dl"><button class="primary small" data-ed="dl-mp3" ${has ? '' : 'disabled'}>${ic(lock ? 'lock' : 'download')}MP3</button><button class="ghost-b tiny" data-ed="dl-wav" ${has ? '' : 'disabled'}>${lock ? ic('lock') : ''}WAV</button></div>`;
 }
 function edInfoHtml() {
@@ -274,6 +276,7 @@ function edClamp() {
 }
 function edDraw() {
   const cv = $('#ed-cv'); if (!cv || !cv.getClientRects().length) return;
+  if (ED.full) { const area = cv.parentElement.clientHeight || 600; ED.fullRow = Math.max(50, Math.min(240, Math.floor((area - EDK.RULER - EDK.NEW - 6) / Math.max(1, ED.tracks.length)))); }
   const dpr = devicePixelRatio || 1, W = Math.max(320, Math.floor(cv.clientWidth)), ROW = edRow(), n = ED.tracks.length, H = EDK.RULER + n * ROW + EDK.NEW + 4;
   if (cv.width !== W * dpr || cv.height !== H * dpr) { cv.width = W * dpr; cv.height = H * dpr; cv.style.height = H + 'px'; }
   ED.W = W; if (!ED.zoom) edFit(); edClamp();
@@ -360,6 +363,37 @@ function edDraw() {
   edHead();
 }
 function edHeadBtns(y, ROW) { const by = y + ROW - 25; return [['m', { x: 12, y: by, w: 24, h: 18 }], ['s', { x: 40, y: by, w: 24, h: 18 }], ['x', { x: EDK.HEAD - 34, y: by, w: 22, h: 18 }]]; }
+
+// ------------------------------------------------------------------ на весь экран
+/** Как у таймлайна спектакля: мышью — раскрывается из своего места (маска от его прямоугольника до экрана) и так же
+ *  сворачивается, на его месте в странице — заглушка той же высоты; с клавиатуры (F, Esc) и при «меньше движения» — сразу. */
+function edSetFull(on) {
+  const el = $('#ed'); if (!el || (!!ED.full === on && el.classList.contains('full') === on)) return;
+  const anim = typeof mOK === 'function' && mOK() && typeof MOTION !== 'undefined' && MOTION.ready && typeof tlLastInput !== 'undefined' && tlLastInput !== 'key';
+  const vw = innerWidth, vh = innerHeight, ins = (r, rad) => `inset(${Math.max(0, r.top).toFixed(1)}px ${Math.max(0, vw - r.right).toFixed(1)}px ${Math.max(0, vh - r.bottom).toFixed(1)}px ${Math.max(0, r.left).toFixed(1)}px round ${rad}px)`;
+  const done = () => requestAnimationFrame(() => { edDraw(); const cv = $('#ed-cv'); if (cv) cv.focus({ preventScroll: true }); });
+  if (el._fullAnim) { el._fullAnim.cancel(); el._fullAnim = null; }
+  if (on) {
+    const r0 = el.getBoundingClientRect();
+    let ph = el.previousElementSibling; if (!ph || !ph.classList.contains('tl-ph')) { ph = document.createElement('div'); ph.className = 'tl-ph'; el.before(ph); }
+    ph.style.height = r0.height + 'px';
+    ED.full = true; el.classList.add('full'); document.body.classList.add('tl-full-open');
+    if (el.requestFullscreen && !document.fullscreenElement) el.requestFullscreen().catch(() => {});
+    edBarUi();
+    if (anim) { const sp = springEase(0.9, 0.42); el._fullAnim = el.animate([{ clipPath: ins(r0, 14) }, { clipPath: 'inset(0px 0px 0px 0px round 0px)' }], { duration: sp.duration, easing: sp.easing }); el._fullAnim.onfinish = () => { el._fullAnim = null; }; }
+    done(); return;
+  }
+  ED.full = false;
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  const ph = el.previousElementSibling && el.previousElementSibling.classList.contains('tl-ph') ? el.previousElementSibling : null;
+  const finish = () => { el._fullAnim = null; el.classList.remove('full'); document.body.classList.remove('tl-full-open'); if (ph) ph.remove(); edBarUi(); done(); };
+  if (!anim || !ph) { finish(); return; }
+  const r1 = ph.getBoundingClientRect();
+  edBarUi();
+  el._fullAnim = el.animate([{ clipPath: 'inset(0px 0px 0px 0px round 0px)' }, { clipPath: ins(r1, 14) }], { duration: 300, easing: EASE, fill: 'forwards' });
+  el._fullAnim.onfinish = () => { const a = el._fullAnim; finish(); if (a) a.cancel(); };
+}
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && ED.full) edSetFull(false); else if (ED.full) edDraw(); });
 
 // ------------------------------------------------------------------ мышь, палец, клавиши
 function edPos(e) { const r = $('#ed-cv').getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
@@ -487,6 +521,7 @@ function bindEditor() {
     else if (a === 'nofade') { edPush('без плавности'); for (const c of ED.clips) if (ED.sel.has(c.id)) { c.fin = 0; c.fout = 0; } edChanged(); }
     else if (a === 'zoom+' || a === 'zoom-') { const mid = edT(EDK.HEAD + (ED.W - EDK.HEAD) / 2); ED.zoom *= a === 'zoom+' ? 1.6 : 1 / 1.6; edClamp(); ED.scroll = Math.max(0, mid - (ED.W - EDK.HEAD) / 2 / ED.zoom); edDraw(); }
     else if (a === 'fit') { edFit(); edDraw(); }
+    else if (a === 'full') edSetFull(!ED.full);
     else if (a === 'dl-mp3') edExport('mp3'); else if (a === 'dl-wav') edExport('wav');
   });
   host.addEventListener('change', e => { if (e.target.id === 'ed-add' || e.target.id === 'ed-pick') { const f = e.target.files; if (f && f.length) edAddFiles(f); e.target.value = ''; } });
@@ -515,7 +550,8 @@ function bindEditor() {
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); edNudge((e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 1 : 0.1)); }
     else if (e.key === 'Home') { e.preventDefault(); edSeek(0); ED.scroll = 0; edDraw(); }
     else if (e.key === 'End') { e.preventDefault(); edSeek(edEnd()); }
-    else if (e.key === 'Escape') { ED.sel.clear(); edBarUi(); edDraw(); }
+    else if (e.key === 'Escape') { if (ED.sel.size) { ED.sel.clear(); edBarUi(); edDraw(); } else if (ED.full) edSetFull(false); }
+    else if (e.code === 'KeyF') { e.preventDefault(); edSetFull(!ED.full); }
     else if (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '0') { e.preventDefault(); const b = $(`#ed [data-ed="${e.key === '0' ? 'fit' : e.key === '-' ? 'zoom-' : 'zoom+'}"]`); if (b) b.click(); }
   });
   addEventListener('resize', () => { if (S.tab === 'tl') edDraw(); });

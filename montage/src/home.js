@@ -9,6 +9,7 @@ function goTab(tab, o = {}) {
   if (!TAB_HASH[tab]) return;
   if (o.mode) S.tlMode = o.mode;
   const same = S.tab === tab;
+  if (!same && typeof edLeave === 'function') edLeave();      // таймлайн на весь экран не остаётся висеть над другой вкладкой
   S.tab = tab; if (!same) stop();
   try { history.replaceState(null, '', TAB_HASH[tab]); } catch {}
   store.set('montage:tab', tab);
@@ -102,6 +103,7 @@ function renderTl() {
 }
 document.addEventListener('click', e => {
   const b = e.target.closest && e.target.closest('#tlp-mode button, [data-mode-go]'); if (!b) return;
+  if (typeof edLeave === 'function') edLeave();
   S.tlMode = b.dataset.m || b.dataset.modeGo; if (S.tlMode === 'files' && typeof edStop === 'function') { /* свои записи молчат, пока не нажмут «играть» */ }
   if (typeof tpPause === 'function') tpPause(); if (typeof edStop === 'function') edStop();
   renderTl();
