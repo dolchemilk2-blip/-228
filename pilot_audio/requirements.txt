@@ -1,0 +1,12 @@
+numpy
+soundfile
+pyloudnorm
+scipy            # K-фильтр для громкости реплик и фильтры clean.py (ставится и с pyloudnorm)
+
+# чистка голоса (clean.py), ставится отдельно — тянет torch, около 3 ГБ:
+# pip install "audio-separator[cpu]"   # движки deecho / deecho+ / dereverb / denoise
+# pip install clearvoice               # движок speech (MossFormer2_SE_48K)
+# pip install resemble-enhance         # движок restore
+
+# для tools/recognize.py (по желанию):
+# sherpa-onnx

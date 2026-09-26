@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Монтажка — вход</title>
+<meta name="description" content="Сборка радиоспектакля из сценария и записей актёров: находит реплики в записях, выравнивает громкость, сводит дорожку.">
+<meta name="theme-color" content="#1A1613">
+<!-- Страница входа. Сама Монтажка лежит в базе Firebase и приходит сюда только после входа
+     аккаунтом, у которого есть доступ (код активации или выдан вручную). Как всё устроено — ACCESS.md. -->
+<script>
+/* оформление — как в самой Монтажке, чтобы при входе не мелькала другая тема */
+(function () { try {
+  var d = document.documentElement, g = function (k) { try { return localStorage.getItem('montage:' + k); } catch (e) { return null; } };
+  var t = g('theme') || 'auto', p = g('palette'), c = g('contrast'), m = g('motion'), mm = function (q) { return window.matchMedia && matchMedia(q).matches; };
+  if (t !== 'auto') d.setAttribute('data-theme', t);
+  if (p && p !== 'amber') d.setAttribute('data-palette', p);
+  if (c === 'more' || (!c && mm('(prefers-contrast: more)'))) d.setAttribute('data-contrast', 'more');
+  if (m === 'reduce') d.setAttribute('data-motion', 'reduce');
+  d.setAttribute('data-scheme', t === 'dark' || (t !== 'light' && mm('(prefers-color-scheme: dark)')) ? 'dark' : 'light');
+} catch (e) {} })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Tektur:wdth,wght@85..100,500..800&display=swap" rel="stylesheet">
+<style id="g-css">
+/* только для страницы входа: убирается, когда загружается Монтажка */
+:root {
+  color-scheme: light;
+  --bg: #E4E6E1; --surface: #F8F8F6; --well: #EEEFEB; --ink: #15171A; --muted: #565D61; --line: #C6CAC3;
+  --accent: #EBA51C; --accent-ink: #1B1400; --accent-text: #875600; --focus: #875600; --bad: #B3261E; --ok: #1E6C42;
+  --deck: #1A1613; --deck-2: #27211C; --deck-line: #3D342D; --deck-ink: #F0EAE2; --deck-muted: #ADA398;
+  --sh-2: 0 14px 34px -10px rgb(24 18 12 / 34%), 0 2px 6px rgb(24 18 12 / 12%);
+  --sans: "Golos Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --display: "Tektur", "Golos Text", system-ui, sans-serif;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+:root[data-scheme="dark"] {
+  color-scheme: dark;
+  --bg: #14110F; --surface: #1D1916; --well: #171412; --ink: #EFE9E2; --muted: #ABA197; --line: #3B332C;
+  --accent: #F2B233; --accent-text: #F2B233; --focus: #F2B233; --bad: #F07B6C; --ok: #6CC592;
+  --deck: #0E0C0B; --deck-2: #1F1A16; --deck-line: #342C26;
+  --sh-2: 0 16px 40px -10px rgb(0 0 0 / 60%), 0 2px 6px rgb(0 0 0 / 35%);
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+button, input { font: inherit; color: inherit; }
+.g-wrap { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; align-content: center; gap: 14px; padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
+.g-card { width: min(440px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--sh-2); overflow: hidden; }
+.g-head { display: flex; align-items: center; gap: 12px; padding: 18px 22px; background: var(--deck); color: var(--deck-ink); border-bottom: 1px solid var(--deck-line); }
+.g-reels { width: 40px; height: 24px; flex: none; overflow: visible; }
+.g-reels .reel { transform-box: fill-box; transform-origin: center; }
+.g-reels .hub { fill: var(--accent); }
+.g-busy .g-reels .reel { animation: g-spin 1.6s linear infinite; }
+.g-mark { margin: 0; font: 700 23px/1 var(--display); font-stretch: 92%; letter-spacing: 0.01em; }
+.g-sub { margin: 3px 0 0; color: var(--deck-muted); font-size: 12.5px; }
+.g-body { padding: 22px; display: grid; gap: 14px; }
+.g-body > * { margin: 0; }
+.g-lead { font-size: 15px; }
+.g-note { color: var(--muted); font-size: 13.5px; }
+.g-warn { padding: 10px 12px; border-radius: 8px; background: var(--well); border: 1px solid var(--line); }
+.g-btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; padding: 0 20px; border: 1px solid color-mix(in srgb, var(--accent) 70%, #000); border-radius: 8px; background: var(--accent); color: var(--accent-ink); font-weight: 600; cursor: pointer; box-shadow: 0 1px 0 rgb(255 255 255 / 40%) inset, 0 1px 2px rgb(60 40 0 / 25%); white-space: nowrap; transition: transform 160ms var(--ease), opacity 160ms; -webkit-tap-highlight-color: transparent; }
+.g-btn:active:not(:disabled) { transform: scale(0.97); }
+.g-btn:disabled { opacity: .5; cursor: default; }
+.g-btn.g-google { width: 100%; background: var(--surface); color: var(--ink); border-color: var(--line); box-shadow: 0 1px 2px rgb(0 0 0 / 8%); }
+.g-btn svg { flex: none; }
+.g-link { justify-self: start; padding: 2px 0; border: 0; background: none; color: var(--accent-text); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; font-size: 13.5px; }
+a { color: var(--accent-text); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.g-field { display: grid; gap: 6px; }
+.g-field label { font-weight: 600; font-size: 13.5px; }
+.g-row { display: flex; gap: 8px; }
+.g-row input { flex: 1 1 auto; min-width: 0; height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--well); font: 500 15px var(--mono); letter-spacing: 0.04em; text-transform: uppercase; }
+.g-row input::placeholder { color: var(--muted); opacity: .6; }
+.g-row input:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; border-color: transparent; }
+.g-err { min-height: 1.5em; color: var(--bad); font-size: 13.5px; }
+.g-err:empty { min-height: 0; }
+.g-state { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+.g-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: g-pulse 1s ease-in-out infinite alternate; }
+.g-bar { height: 6px; border-radius: 3px; background: var(--well); border: 1px solid var(--line); overflow: hidden; }
+.g-bar i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left; transform: scaleX(var(--p, 0)); transition: transform 200ms linear; }
+.g-foot { color: var(--muted); font-size: 12.5px; text-align: center; }
+.g-foot:empty { display: none; }
+.g-out { transition: opacity 180ms ease-out, transform 180ms ease-out; opacity: 0; transform: translateY(-4px) scale(0.99); }
+@keyframes g-spin { to { transform: rotate(360deg); } }
+@keyframes g-pulse { from { opacity: .35; } to { opacity: 1; } }
+@media (max-width: 420px) { .g-row { flex-direction: column; } .g-row .g-btn { width: 100%; } }
+@media (prefers-reduced-motion: reduce) { .g-busy .g-reels .reel, .g-dot { animation: none; } .g-out, .g-btn { transition: none; } }
+:root[data-motion="reduce"] .g-busy .g-reels .reel, :root[data-motion="reduce"] .g-dot { animation: none; }
+:root[data-motion="reduce"] .g-out, :root[data-motion="reduce"] .g-btn { transition: none; }
+</style>
+<style id="g-keep">
+/* остаётся и после загрузки Монтажки: строка аккаунта в подвале и экран «открыта на другом устройстве» */
+footer .g-acct { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: baseline; }
+footer .g-acct-out { all: unset; cursor: pointer; color: var(--accent-text); text-decoration: underline; text-underline-offset: 3px; }
+footer .g-acct-out:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.g-lock { position: fixed; inset: 0; z-index: 2147483000; display: grid; place-items: center; padding: 16px; background: rgb(14 12 11 / 55%); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); animation: g-lock-in 250ms cubic-bezier(0.22, 1, 0.36, 1); }
+.g-lock-card { width: min(420px, 100%); padding: 22px; border: 1px solid var(--line, #C6CAC3); border-radius: 14px; background: var(--surface, #F8F8F6); color: var(--ink, #15171A); box-shadow: 0 20px 50px -10px rgb(0 0 0 / 45%); font: 15px/1.5 var(--sans, system-ui, sans-serif); animation: g-lock-card 300ms cubic-bezier(0.22, 1, 0.36, 1); }
+.g-lock-card h2 { margin: 0 0 8px; font: 700 20px/1.25 var(--display, system-ui, sans-serif); }
+.g-lock-card p { margin: 0 0 16px; color: var(--muted, #565D61); font-size: 14.5px; }
+.g-lock-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.g-lock-row button { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; }
+.g-lock-row .g-lock-go { background: var(--accent, #EBA51C); color: var(--accent-ink, #1B1400); }
+.g-lock-row .g-lock-alt { border: 1px solid var(--line, #C6CAC3); }
+.g-lock-row button:focus-visible { outline: 2px solid var(--focus, #875600); outline-offset: 2px; }
+.g-lock-row button[disabled] { opacity: .5; cursor: default; }
+@keyframes g-lock-in { from { opacity: 0; } }
+@keyframes g-lock-card { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
+@media (prefers-reduced-motion: reduce) { .g-lock, .g-lock-card { animation: none; } }
+:root[data-motion="reduce"] .g-lock, :root[data-motion="reduce"] .g-lock-card { animation: none; }
+</style>
+</head>
+<body>
+<div class="g-wrap">
+  <main class="g-card" id="g-card">
+    <div class="g-head">
+      <svg class="g-reels" viewBox="0 0 40 24" aria-hidden="true">
+        <path d="M9 22.4h22" stroke="currentColor" stroke-width="1.4" opacity=".55"/>
+        <g class="reel"><circle cx="9" cy="12" r="8.4" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="6.7" r="1.7" fill="currentColor" opacity=".7"/><circle cx="4.4" cy="14.6" r="1.7" fill="currentColor" opacity=".7"/><circle cx="13.6" cy="14.6" r="1.7" fill="currentColor" opacity=".7"/><circle class="hub" cx="9" cy="12" r="2.2"/></g>
+        <g class="reel"><circle cx="31" cy="12" r="8.4" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="31" cy="6.7" r="1.7" fill="currentColor" opacity=".7"/><circle cx="26.4" cy="14.6" r="1.7" fill="currentColor" opacity=".7"/><circle cx="35.6" cy="14.6" r="1.7" fill="currentColor" opacity=".7"/><circle class="hub" cx="31" cy="12" r="2.2"/></g>
+      </svg>
+      <div>
+        <h1 class="g-mark">Монтажка</h1>
+        <p class="g-sub">сборка радиоспектакля</p>
+      </div>
+    </div>
+    <div class="g-body" id="g-view" aria-live="polite">
+      <p class="g-state"><span class="g-dot"></span>Загружаю…</p>
+      <noscript><p class="g-err">Для Монтажки нужен включённый JavaScript.</p></noscript>
+    </div>
+  </main>
+  <p class="g-foot" id="g-foot"></p>
+</div>
+<script type="module">
+import * as F from './access/fb.js';
+import CFG from './access/config.js';
+
+const $ = s => document.querySelector(s), E = F.esc;
+const view = $('#g-view'), card = $('#g-card');
+const reduced = () => document.documentElement.dataset.motion === 'reduce' || matchMedia('(prefers-reduced-motion: reduce)').matches;
+const contact = CFG.contact ? `Вопросы и помощь: ${/^@|^https?:/.test(CFG.contact) ? `<a href="${E(/^@/.test(CFG.contact) ? 'https://t.me/' + CFG.contact.slice(1) : CFG.contact)}" target="_blank" rel="noopener">${E(CFG.contact)}</a>` : /@/.test(CFG.contact) ? `<a href="mailto:${E(CFG.contact)}">${E(CFG.contact)}</a>` : E(CFG.contact)}` : '';
+$('#g-foot').innerHTML = contact;
+const buy = CFG.buyUrl ? `<a href="${E(CFG.buyUrl)}" target="_blank" rel="noopener">Купить Монтажку</a>` : '';
+// встроенные браузеры приложений (Instagram, TikTok…) часто не пускают во вход Google
+const inApp = /Instagram|FBAN|FBAV|TikTok|musical_ly|Line\/|; wv\)/i.test(navigator.userAgent);
+
+const T = {
+  wait: t => `<p class="g-state"><span class="g-dot"></span>${t}</p>`,
+  setup: () => `<p class="g-lead">Сайт ещё не подключён к Firebase.</p><p class="g-note">Владельцу: заполните <code>access/config.js</code> по инструкции <code>montage/ACCESS.md</code>.</p>`,
+  out: () => `<p class="g-lead">Монтажка находит реплики в записях актёров, выравнивает громкость и сводит радиоспектакль — прямо в браузере.</p>
+    <button class="g-btn g-google" type="button" data-act="in"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>Войти через Google</button>
+    <p class="g-err" role="alert"></p>
+    ${inApp ? `<p class="g-note g-warn">Похоже, ссылка открыта внутри приложения. Вход через Google там может не сработать — откройте её в обычном браузере: меню ⋯ → «Открыть в браузере».</p>` : ''}
+    <p class="g-note">Монтажка открывается после покупки. Уже купили — войдите тем же аккаунтом Google, на который активировали код.${buy ? ` Ещё нет? ${buy}.` : ''}</p>`,
+  nopay: u => `<p>Вы вошли как <b>${E(u.email)}</b>. Доступа к Монтажке у этого аккаунта пока нет.</p>
+    <form class="g-field" data-form="code" novalidate>
+      <label for="g-code">Код активации</label>
+      <div class="g-row"><input id="g-code" name="code" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX" aria-describedby="g-code-err"><button class="g-btn" type="submit">Активировать</button></div>
+      <p class="g-err" id="g-code-err" role="alert"></p>
+    </form>
+    ${buy ? `<p class="g-note">Кода ещё нет? ${buy}.</p>` : ''}
+    <button class="g-link" type="button" data-act="switch">Войти в другой аккаунт</button>`,
+  blocked: u => `<p>Доступ к Монтажке для <b>${E(u.email)}</b> отключён.</p><p class="g-note">${contact ? 'Если это ошибка — напишите нам. ' + contact : 'Если это ошибка — напишите владельцу Монтажки.'}</p>
+    <button class="g-link" type="button" data-act="switch">Войти в другой аккаунт</button>`,
+  nobuild: () => `<p>Доступ есть, но сама Монтажка ещё не загружена на сервер.</p><p class="g-note">Владельцу: откройте <a href="admin.html">admin.html</a> и загрузите сборку.</p>`,
+  closed: () => `<p>База закрыта: правила доступа ещё не опубликованы.</p><p class="g-note">Владельцу: откройте <a href="admin.html">admin.html</a> и опубликуйте правила по инструкции.</p>`,
+  load: () => `<p class="g-state"><span class="g-dot"></span>Загружаю Монтажку…</p><div class="g-bar" role="progressbar" aria-label="Загрузка" aria-valuemin="0" aria-valuemax="100"><i></i></div>`,
+  err: t => `<p>${t}</p><button class="g-btn" type="button" data-act="retry">Повторить</button>`,
+};
+
+function show(html) {
+  const hadFocus = view.contains(document.activeElement);
+  view.innerHTML = html;
+  card.classList.toggle('g-busy', /g-dot/.test(html));
+  if (!reduced()) view.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 250, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
+  const f = view.querySelector('input, button');
+  if (f && (hadFocus || f.tagName === 'INPUT')) f.focus({ preventScroll: true });
+}
+const setErr = t => { const e = view.querySelector('.g-err'); if (e) e.textContent = t; };
+
+// ---------------------------------------------------------------- устройство
+// Работать можно на одном устройстве за раз: у каждого браузера свой номер сессии, в базе — последний вошедший.
+const rnd = () => [...crypto.getRandomValues(new Uint8Array(12))].map(b => b.toString(16).padStart(2, '0')).join('');
+let memSid = '';
+function sidOf(uid) {
+  try { let s = localStorage.getItem('montage-access:sid:' + uid); if (!s) { s = rnd(); localStorage.setItem('montage-access:sid:' + uid, s); } return s; }
+  catch { return memSid || (memSid = rnd()); }
+}
+const claim = (user, sid) => F.db(`users/${user.uid}/session`, { method: 'PUT', body: { id: sid, t: F.TS, ua: navigator.userAgent.slice(0, 200) }, user });
+
+// ---------------------------------------------------------------- сохранённая сборка (чтобы не качать заново каждый раз)
+function idb() { return new Promise((res, rej) => { const r = indexedDB.open('montage-access', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+async function cache(op, val) {
+  try {
+    const d = await idb();
+    return await new Promise(res => {
+      const tx = d.transaction('kv', op === 'get' ? 'readonly' : 'readwrite'), st = tx.objectStore('kv');
+      const q = op === 'get' ? st.get('app') : op === 'put' ? st.put(val, 'app') : st.delete('app');
+      tx.oncomplete = () => res(op === 'get' ? q.result || null : true);
+      tx.onerror = tx.onabort = () => res(null);
+    });
+  } catch { return null; }
+}
+
+// ---------------------------------------------------------------- вход и проверка доступа
+async function start() {
+  if (!F.configured) return show(T.setup());
+  show(T.wait('Проверяю вход…'));
+  let user;
+  try { user = await F.currentUser(); } catch { return show(T.err('Не получилось связаться с сервером входа. Проверьте интернет.')); }
+  if (!user) return show(T.out());
+  enter(user);
+}
+
+async function enter(user) {
+  show(T.wait('Проверяю доступ…'));
+  const [me, meta] = await Promise.allSettled([F.db('users/' + user.uid, { user }), F.db('app/meta', { user })]);
+  if (me.status === 'rejected') return show(me.reason.code === 'denied' ? T.closed() : T.err('Нет связи с сервером. Проверьте интернет.'));
+  const m = me.value || {};
+  // почта, имя и время захода — чтобы владелец видел покупателя в admin.html
+  F.db('users/' + user.uid, { method: 'PATCH', body: { email: user.email, name: (user.displayName || '').slice(0, 100), seen: F.TS, ...(m.first ? {} : { first: F.TS }) }, user }).catch(() => {});
+  if (meta.status === 'rejected') {
+    if (meta.reason.code !== 'denied') return show(T.err('Нет связи с сервером. Проверьте интернет.'));
+    return show(m.blocked ? T.blocked(user) : T.nopay(user));
+  }
+  if (!meta.value) return show(T.nobuild());
+  const sid = sidOf(user.uid);
+  try { await claim(user, sid); } catch { /* не страшно: проверим при следующем опросе */ }
+  load(user, meta.value, sid);
+}
+
+async function activate(user, form) {
+  const inp = form.code, btn = form.querySelector('button'), k = F.normCode(inp.value);
+  if (!F.okCode(k)) { setErr('В коде 16 букв и цифр, например ABCD-EFGH-JKLM-NPQR.'); inp.focus(); return; }
+  btn.disabled = true; btn.textContent = 'Проверяю…'; setErr('');
+  const back = t => { btn.disabled = false; btn.textContent = 'Активировать'; setErr(t); inp.focus(); };
+  try {
+    // 1) закрепить код за этим аккаунтом (если он уже наш — база откажет, это нормально), 2) открыть доступ
+    try { await F.db(`codes/${k}/used`, { method: 'PUT', body: { by: user.uid, at: F.TS, email: user.email }, user }); }
+    catch (e) { if (e.code !== 'denied') throw e; }
+    try { await F.db('users/' + user.uid, { method: 'PATCH', body: { code: k, paid: true }, user }); }
+    catch (e) { if (e.code === 'denied') return back('Код не подошёл: проверьте, нет ли опечатки. Каждый код работает только для одного аккаунта.'); throw e; }
+    enter(user);
+  } catch (e) { back(F.authError(e)); }
+}
+
+async function load(user, meta, sid) {
+  show(T.load());
+  const bar = view.querySelector('.g-bar'), set = p => { bar.style.setProperty('--p', p); bar.setAttribute('aria-valuenow', Math.round(p * 100)); };
+  let html = null;
+  const c = await cache('get');
+  if (c && c.v === meta.v) { html = c.html; set(1); }
+  else {
+    let parts;
+    try { parts = await F.db('app/parts', { user, onProgress: got => set(Math.min(0.98, got / (meta.bytes || 1e6))) }); }
+    catch (e) { return show(e.code === 'denied' ? T.nopay(user) : T.err('Загрузка прервалась. Проверьте интернет.')); }
+    html = (Array.isArray(parts) ? parts : Object.keys(parts || {}).sort((a, b) => a - b).map(k => parts[k])).join('');
+    if (await F.sha256(html) !== meta.v) return show(T.err('Монтажка пришла повреждённой. Попробуйте ещё раз.'));
+    set(1);
+    cache('put', { v: meta.v, html });
+  }
+  if (!reduced()) { card.classList.add('g-out'); await new Promise(r => setTimeout(r, 180)); }
+  inject(html, user);
+  watch(user, sid);
+}
+
+// ---------------------------------------------------------------- запуск Монтажки на этой же странице
+function inject(html, user) {
+  const d = new DOMParser().parseFromString(html, 'text/html'), H = document.head;
+  // скрипты, пришедшие через DOMParser, сами не запускаются — пересоздаём их
+  const fresh = old => { const s = document.createElement('script'); for (const a of old.attributes) s.setAttribute(a.name, a.value); s.textContent = old.textContent; return s; };
+  document.title = d.title || 'Монтажка';
+  const lang = d.documentElement.getAttribute('lang'); if (lang) document.documentElement.lang = lang;
+  $('#g-css').remove();
+  for (const n of [...d.head.children]) {
+    if (n.matches('title, meta[charset], meta[name=viewport]')) continue;
+    if (n.matches('meta[name]')) H.querySelector(`meta[name="${n.getAttribute('name')}"]`)?.remove();
+    if (n.matches('link[href]') && [...H.querySelectorAll('link[href]')].some(l => l.getAttribute('href') === n.getAttribute('href'))) continue;
+    H.append(n.tagName === 'SCRIPT' ? fresh(n) : document.importNode(n, true));
+  }
+  const lic = document.createElement('meta'); lic.name = 'montage-license'; lic.content = `${user.email} · ${user.uid}`; H.append(lic);
+  for (const a of [...document.body.attributes]) document.body.removeAttribute(a.name);
+  for (const a of d.body.attributes) document.body.setAttribute(a.name, a.value);
+  document.body.replaceChildren(...[...d.body.childNodes].map(n => document.importNode(n, true)));
+  for (const old of [...document.body.querySelectorAll('script')]) old.replaceWith(fresh(old));
+  const foot = document.querySelector('#main > footer') || document.querySelector('footer');
+  if (foot) {
+    const s = document.createElement('span'); s.className = 'g-acct';
+    s.innerHTML = `Вход: ${E(user.email)} · <button type="button" class="g-acct-out">Выйти</button>`;
+    s.querySelector('button').onclick = () => { if (confirm('Выйти из аккаунта? Несохранённая работа в этой вкладке пропадёт.')) leave(); };
+    foot.append(s);
+  }
+}
+
+async function leave() {
+  try { await F.signOut(); } catch {}
+  await cache('drop');
+  location.reload();
+}
+
+// ---------------------------------------------------------------- пока Монтажка открыта: доступ не отключён? не вошли ли с другого устройства?
+function watch(user, sid) {
+  let busy = false, last = Date.now(), lockEl = null;
+  async function check(force) {
+    if (busy || lockEl || document.hidden || (!force && Date.now() - last < 15000)) return;
+    busy = true; last = Date.now();
+    try {
+      const [s, ok] = await Promise.all([
+        F.db(`users/${user.uid}/session/id`, { user }),
+        F.db('app/meta/v', { user }).then(() => true, e => { if (e.code === 'denied') return false; throw e; }),
+      ]);
+      if (!ok) lock('revoked');
+      else if (s && s !== sid) lock('other');
+      else if (!s) await claim(user, sid);           // владелец сбросил устройство — занимаем снова
+    } catch { /* нет связи — работать не мешаем */ }
+    busy = false;
+  }
+  function lock(kind) {
+    const prev = document.activeElement;
+    lockEl = document.createElement('div');
+    lockEl.className = 'g-lock';
+    lockEl.setAttribute('role', 'alertdialog'); lockEl.setAttribute('aria-modal', 'true'); lockEl.setAttribute('aria-labelledby', 'g-lock-h');
+    lockEl.innerHTML = kind === 'other'
+      ? `<div class="g-lock-card"><h2 id="g-lock-h">Монтажка открыта на другом устройстве</h2><p>Работать можно на одном устройстве за раз. Всё, что вы сделали здесь, на месте: продолжите — и на том устройстве Монтажка встанет на паузу.</p><div class="g-lock-row"><button type="button" class="g-lock-go" data-a="here">Продолжить здесь</button><button type="button" class="g-lock-alt" data-a="out">Выйти</button></div></div>`
+      : `<div class="g-lock-card"><h2 id="g-lock-h">Доступ к Монтажке отключён</h2><p>${contact ? 'Если это ошибка — напишите нам. ' + contact : 'Если это ошибка — напишите владельцу Монтажки.'}</p><div class="g-lock-row"><button type="button" class="g-lock-alt" data-a="out">Выйти</button></div></div>`;
+    const off = [...document.body.children].filter(c => !c.inert);
+    off.forEach(c => { c.inert = true; });
+    document.body.append(lockEl);
+    document.querySelectorAll('audio, video').forEach(m => m.pause());
+    lockEl.querySelector('button').focus();
+    lockEl.onclick = async e => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.a === 'out') return leave();
+      b.disabled = true;
+      try { await claim(user, sid); } catch { b.disabled = false; return; }
+      off.forEach(c => { c.inert = false; });
+      lockEl.remove(); lockEl = null; last = Date.now();
+      if (prev && prev.isConnected) prev.focus({ preventScroll: true });
+    };
+  }
+  setInterval(() => check(), 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+  addEventListener('focus', () => check());
+  if (F.EMU) window.__montageAccessCheck = () => check(true);
+}
+
+// ---------------------------------------------------------------- кнопки
+view.addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const a = b.dataset.act;
+  if (a === 'retry') return start();
+  if (a === 'switch') { try { await F.signOut(); } catch {} return show(T.out()); }
+  if (a === 'in') {
+    b.disabled = true; setErr('');
+    try { enter(await F.signIn()); }
+    catch (err) { b.disabled = false; setErr(F.authError(err)); }
+  }
+});
+view.addEventListener('submit', async e => {
+  e.preventDefault();
+  const user = await F.currentUser();
+  if (user) activate(user, e.target); else show(T.out());
+});
+view.addEventListener('input', e => {
+  if (e.target.id !== 'g-code') return;
+  const k = F.normCode(e.target.value).slice(0, 16), f = k ? F.fmtCode(k) : '';
+  if (f !== e.target.value) e.target.value = f;
+  setErr('');
+});
+if (F.EMU) window.__montageAccess = { signIn: async email => enter(await F.emuSignIn(email)) };
+start();
+</script>
+</body>
+</html>
