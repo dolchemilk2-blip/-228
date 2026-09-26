@@ -1,5 +1,6 @@
-// Собирает montage/index.html из src/: страница + ядро + обработка звука + интерфейс в одном
-// файле, чтобы его можно было открыть и с GitHub Pages, и просто с диска.
+// Собирает Монтажку из src/ в один файл dist/montage.html: страница + ядро + обработка звука +
+// интерфейс. Этот файл не публикуется: его загружают в базу через admin.html, и покупатели
+// получают его после входа (montage/index.html — страница входа). Подробно — ACCESS.md.
 import fs from 'fs';
 const dir = new URL('./src/', import.meta.url);
 const read = f => fs.readFileSync(new URL(f, dir), 'utf8');
@@ -28,5 +29,6 @@ const app = strip(read('app.js')), cleanup = strip(read('cleanup.js')), sounds =
 const icons = strip(read('icons.js')) + '\n' + strip(read('spring.js')) + '\n' + strip(read('fader.js')) + '\n' + strip(read('nums.js'));
 const bundle = `${bundleLib}\nconst DSP_WORKER_SRC = ${JSON.stringify(workerSrc)};\n\n${icons}\n\n${cleanup}\n\n${sounds}\n\n${sfxdb}\n\n${fx}\n\n${amb}\n\n${timeline}\n\n${extras}\n\n${app}`;
 const page = read('page.html').replace('/*BUNDLE*/', () => bundle);
-fs.writeFileSync(new URL('./index.html', import.meta.url), page);
-console.log(`index.html: ${(page.length / 1024).toFixed(0)} КБ, ядро: ${libNames.length} функций`);
+fs.mkdirSync(new URL('./dist/', import.meta.url), { recursive: true });
+fs.writeFileSync(new URL('./dist/montage.html', import.meta.url), page);
+console.log(`dist/montage.html: ${(page.length / 1024).toFixed(0)} КБ, ядро: ${libNames.length} функций`);

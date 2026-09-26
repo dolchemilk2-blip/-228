@@ -1,0 +1,59 @@
+{
+  "rules": {
+    "app": {
+      ".read": "auth != null && ((auth.token.email === 'ADMIN_EMAIL' && auth.token.email_verified === true) || (root.child('users').child(auth.uid).child('paid').val() === true && root.child('users').child(auth.uid).child('blocked').val() !== true))",
+      ".write": "auth != null && auth.token.email === 'ADMIN_EMAIL' && auth.token.email_verified === true"
+    },
+    "codes": {
+      ".read": "auth != null && auth.token.email === 'ADMIN_EMAIL' && auth.token.email_verified === true",
+      ".write": "auth != null && auth.token.email === 'ADMIN_EMAIL' && auth.token.email_verified === true",
+      "$code": {
+        "used": {
+          ".write": "auth != null && !data.exists() && data.parent().child('t').exists() && data.parent().child('off').val() !== true",
+          ".validate": "newData.child('by').val() === auth.uid && newData.child('at').val() === now && newData.child('email').val() === auth.token.email",
+          "by": { ".validate": true },
+          "at": { ".validate": true },
+          "email": { ".validate": true },
+          "$other": { ".validate": false }
+        }
+      }
+    },
+    "users": {
+      ".read": "auth != null && auth.token.email === 'ADMIN_EMAIL' && auth.token.email_verified === true",
+      ".write": "auth != null && auth.token.email === 'ADMIN_EMAIL' && auth.token.email_verified === true",
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "email": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.val() === auth.token.email"
+        },
+        "name": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.isString() && newData.val().length <= 100"
+        },
+        "first": {
+          ".write": "auth != null && auth.uid === $uid && !data.exists()",
+          ".validate": "newData.val() === now"
+        },
+        "seen": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.val() === now"
+        },
+        "session": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.hasChildren(['id', 't'])",
+          "id": { ".validate": "newData.isString() && newData.val().length <= 40" },
+          "t": { ".validate": "newData.val() === now" },
+          "ua": { ".validate": "newData.isString() && newData.val().length <= 200" },
+          "$other": { ".validate": false }
+        },
+        "code": {
+          ".write": "auth != null && auth.uid === $uid && !data.exists() && newData.isString() && newData.val().length === 16 && root.child('codes').child(newData.val()).child('used').child('by').val() === auth.uid"
+        },
+        "paid": {
+          ".write": "auth != null && auth.uid === $uid && newData.val() === true && data.parent().child('blocked').val() !== true && newData.parent().child('code').isString() && root.child('codes').child(newData.parent().child('code').val()).child('used').child('by').val() === auth.uid"
+        }
+      }
+    }
+  }
+}
