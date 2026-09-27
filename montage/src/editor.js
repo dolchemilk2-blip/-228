@@ -260,6 +260,7 @@ function edRender() {
         <p class="muted small" id="ed-status"></p>
       </div>
       <div class="ed-canvas" hidden><canvas id="ed-cv" tabindex="0" aria-label="Таймлайн своих записей: пробел — играть, S — разрезать, Delete — удалить, стрелки — сдвинуть"></canvas><div class="tl-head" id="ed-head" aria-hidden="true"></div></div>
+      <div id="ed-menu" class="tl-menu" role="menu" aria-label="Действия" hidden></div>
       <div class="tl-info" id="ed-info"></div>
       <div class="ed-foot"><button class="ghost-b tiny" data-ed="clear">Очистить таймлайн</button></div>
     </div>`;
@@ -426,10 +427,127 @@ function edSnapT(ts, moving) {
   for (const T of cand) for (const e of ts) { const d = T - e; if (Math.abs(d) < tol && (!best || Math.abs(d) < Math.abs(best.d))) best = { d, t: T }; }
   return best;
 }
+// ------------------------------------------------------------------ меню по правому щелчку (как у таймлайна спектакля)
+const edKbd = t => `<kbd>${t}</kbd>`;
+function edMenuHtml(ctx) {
+  const undo = `<div class="m-sep"></div><button role="menuitem" data-m="undo" ${ED.undo.length ? '' : 'disabled'}><span>${ic('undo')}Отменить</span>${edKbd('Ctrl+Z')}</button><button role="menuitem" data-m="redo" ${ED.redo.length ? '' : 'disabled'}><span>${ic('redo')}Повторить</span>${edKbd('Ctrl+Shift+Z')}</button>`;
+  const gains = `<div class="m-row">${[-3, -1, 1, 3].map(d => `<button role="menuitem" data-m="g" data-v="${d}">${d > 0 ? '+' : '−'}${Math.abs(d)} дБ</button>`).join('')}<button role="menuitem" data-m="g" data-v="0">0</button></div>`;
+  if (ctx.track) {
+    const tr = ctx.track, n = ED.clips.filter(c => c.tr === tr.id).length;
+    return `<div class="m-head"><span class="chip ${tr.color || 'c1'}">${esc(tr.name || 'дорожка')}</span><span>${n} ${n === 1 ? 'клип' : n < 5 ? 'клипа' : 'клипов'}</span></div>
+      <button role="menuitem" data-m="seltrack"><span>Выделить все клипы дорожки</span>${edKbd('щелчок по имени')}</button>
+      <button role="menuitemcheckbox" aria-checked="${!!tr.mute}" data-m="mute"><span>${tr.mute ? 'Вернуть звук' : 'Без звука'}</span>${edKbd('M')}</button>
+      <button role="menuitemcheckbox" aria-checked="${!!tr.solo}" data-m="solo"><span>${tr.solo ? 'Слушать все дорожки' : 'Только эта дорожка'}</span>${edKbd('S')}</button>
+      ${n ? `<div class="m-lbl">Громкость всех клипов дорожки</div>${gains}` : ''}
+      <div class="m-sep"></div><button role="menuitem" data-m="rmtrack"><span>${ic('trash')}Убрать дорожку</span>${edKbd('×')}</button>${undo}`;
+  }
+  const sel = ED.clips.filter(c => ED.sel.has(c.id)), n = sel.length, c = n === 1 ? sel[0] : null, src = c ? ED.srcs.get(c.src) : null;
+  const head = n > 1 ? `<b>Выбрано ${n}</b>` : c ? `<b>${esc(edName(src && src.name))}</b><span class="m-txt">${C.ts(c.at)} · ${c.dur.toFixed(1)} с</span>` : '<b>Свои записи</b>';
+  const inside = ctx.t != null && (n ? sel : ED.clips).some(x => ctx.t > x.at + 0.02 && ctx.t < x.at + x.dur - 0.02);
+  return `<div class="m-head">${head}</div>
+    ${ctx.t != null ? `<button role="menuitem" data-m="play" data-v="${ctx.t}"><span>${ic('play')}Слушать отсюда</span>${edKbd('пробел')}</button>` : ''}
+    ${inside ? `<button role="menuitem" data-m="split" data-v="${ctx.t}"><span>${ic('cut')}Разрезать здесь</span>${edKbd('S')}</button>` : ''}
+    ${n ? `<div class="m-lbl">Громкость${n > 1 ? ' выбранных' : ''}</div>${gains}
+    <div class="m-lbl">Плавность</div><div class="m-row"><button role="menuitem" data-m="fin" data-v="0.5">вход 0,5 с</button><button role="menuitem" data-m="fout" data-v="0.5">выход 0,5 с</button><button role="menuitem" data-m="fade0">без плавности</button></div>
+    <div class="m-lbl">Время</div><div class="m-row"><button role="menuitem" data-m="nudge" data-v="-0.5" aria-label="раньше на 0,5 с">${ic('left')}0,5 с</button><button role="menuitem" data-m="nudge" data-v="-0.1" aria-label="раньше на 0,1 с">${ic('left')}0,1 с</button><button role="menuitem" data-m="nudge" data-v="0.1" aria-label="позже на 0,1 с">0,1 с${ic('right')}</button><button role="menuitem" data-m="nudge" data-v="0.5" aria-label="позже на 0,5 с">0,5 с${ic('right')}</button></div>
+    <button role="menuitem" data-m="dup"><span>Дублировать</span>${edKbd('Ctrl+D')}</button>
+    <button role="menuitem" data-m="del"><span>${ic('trash')}Удалить</span>${edKbd('Delete')}</button>` : ''}
+    <div class="m-sep"></div>
+    <button role="menuitem" data-m="selall"><span>Выделить всё</span>${edKbd('Ctrl+A')}</button>
+    ${n ? `<button role="menuitem" data-m="clear"><span>Снять выделение</span>${edKbd('Esc')}</button>` : ''}
+    <button role="menuitem" data-m="full"><span>${ED.full ? 'Свернуть таймлайн' : 'Таймлайн на весь экран'}</span>${edKbd(ED.full ? 'Esc' : 'F')}</button>${undo}`;
+}
+function edMenuOpen(cx, cy, ctx) {
+  const m = $('#ed-menu'); if (!m) return;
+  const was = !m.hidden && m.dataset.open === 'true';
+  ED.menu = ctx; ED.menuAt = { x: cx, y: cy }; clearTimeout(m._hide); m.style.pointerEvents = '';
+  const instant = (typeof tlLastInput !== 'undefined' && tlLastInput === 'key') || (typeof MOTION !== 'undefined' && (MOTION.reduce || performance.now() - MOTION.kbd < 150));
+  m.classList.add('t-morph'); m.classList.toggle('t-instant', instant && !was);
+  if (!was) m.dataset.open = 'false';
+  m.innerHTML = `<div class="t-morph-menu">${edMenuHtml(ctx)}</div><span class="t-morph-plus" aria-hidden="true">${ic('plus')}</span>`;
+  m.hidden = false;
+  const inner = m.firstElementChild, vw = innerWidth, vh = innerHeight, W = Math.min(340, vw - 16);
+  inner.style.width = W + 'px'; inner.style.height = 'auto'; const H = Math.min(inner.scrollHeight, vh - 16); inner.style.width = inner.style.height = '';
+  const toL = cx - 20 + W > vw - 8, toT = cy - 20 + H > vh - 8;
+  const ax = toL ? Math.min(vw - 8, Math.max(W + 8, cx + 20)) : Math.max(8, Math.min(vw - 8 - W, cx - 20)), ay = toT ? Math.min(vh - 8, Math.max(H + 8, cy + 20)) : Math.max(8, Math.min(vh - 8 - H, cy - 20));
+  m.dataset.ax = toL ? 'r' : 'l'; m.dataset.ay = toT ? 'b' : 't';
+  m.style.left = toL ? 'auto' : ax + 'px'; m.style.right = toL ? (vw - ax) + 'px' : 'auto'; m.style.top = toT ? 'auto' : ay + 'px'; m.style.bottom = toT ? (vh - ay) + 'px' : 'auto';
+  m.style.setProperty('--mw', W + 'px'); m.style.setProperty('--mh', H + 'px'); m.dataset.open = 'true';
+  const f = m.querySelector('button:not([disabled])'); if (f) f.focus({ preventScroll: true });
+}
+function edMenuClose(refocus = true) {
+  const m = $('#ed-menu'); if (!m || m.hidden || m.dataset.open !== 'true') return;
+  ED.menu = null;
+  const instant = (typeof tlLastInput !== 'undefined' && tlLastInput === 'key') || (typeof MOTION !== 'undefined' && MOTION.reduce);
+  m.classList.toggle('t-instant', instant); m.dataset.open = 'false'; m.style.pointerEvents = 'none';
+  clearTimeout(m._hide); if (instant) m.hidden = true; else m._hide = setTimeout(() => { if (m.dataset.open !== 'true') { m.hidden = true; m.style.pointerEvents = ''; } }, 270);
+  if (refocus) $('#ed-cv')?.focus({ preventScroll: true });
+}
+/** Меню с клавиатуры (клавиша меню, Shift+F10): у выбранного клипа или у курсора. */
+function edMenuFromKeys() {
+  if (typeof MOTION !== 'undefined') MOTION.kbd = performance.now();
+  const cv = $('#ed-cv'), r = cv.getBoundingClientRect(), c = ED.clips.find(x => ED.sel.has(x.id)), ROW = edRow();
+  if (c) { const ti = ED.tracks.findIndex(t => t.id === c.tr); edMenuOpen(r.left + Math.max(EDK.HEAD, edX(c.at)) + 10, r.top + EDK.RULER + ti * ROW + ROW, { t: ED.t }); }
+  else edMenuOpen(r.left + Math.max(EDK.HEAD, edX(ED.t)) + 10, r.top + EDK.RULER + 10, { t: ED.t });
+}
+function edDup() {
+  const list = ED.clips.filter(c => ED.sel.has(c.id)); if (!list.length) return;
+  edPush('дублировать'); const fresh = [];
+  const end = Math.max(...list.map(c => c.at + c.dur)), start = Math.min(...list.map(c => c.at));
+  for (const c of list) { const b = { ...c, id: 'c' + ED.seq++, at: c.at + (end - start) }; ED.clips.push(b); fresh.push(b.id); }
+  ED.sel = new Set(fresh); edChanged();
+}
+function edFade(kind, v) {
+  const list = ED.clips.filter(c => ED.sel.has(c.id)); if (!list.length) return;
+  edPush(kind === 'none' ? 'без плавности' : kind === 'fin' ? 'плавный вход' : 'плавный выход');
+  for (const c of list) { if (kind === 'none') { c.fin = 0; c.fout = 0; } else c[kind] = Math.min(v, c.dur / 2); }
+  edChanged();
+}
+function edMenuAct(b) {
+  const ctx = ED.menu, a = b.dataset.m, v = b.dataset.v; if (!ctx) return;
+  const keep = ['g', 'nudge', 'mute', 'solo', 'fin', 'fout', 'fade0'].includes(a), tr = ctx.track;
+  if (a === 'play') { edPlay(+v); }
+  else if (a === 'split') { ED.t = +v; edSplit(); }
+  else if (a === 'g' && tr) { const ids = ED.clips.filter(c => c.tr === tr.id).map(c => c.id), was = ED.sel; ED.sel = new Set(ids); edGain(+v); ED.sel = was; }
+  else if (a === 'g') edGain(+v);
+  else if (a === 'fin' || a === 'fout') edFade(a, +v);
+  else if (a === 'fade0') edFade('none');
+  else if (a === 'nudge') edNudge(+v);
+  else if (a === 'dup') edDup();
+  else if (a === 'del') edDelete();
+  else if (a === 'seltrack') { ED.sel = new Set(ED.clips.filter(c => c.tr === tr.id).map(c => c.id)); edBarUi(); edDraw(); }
+  else if (a === 'mute') { edPush(tr.mute ? 'вернуть звук' : 'без звука'); tr.mute = !tr.mute; edChanged(); }
+  else if (a === 'solo') { edPush('только эта дорожка'); tr.solo = !tr.solo; edChanged(); }
+  else if (a === 'rmtrack') edRemoveTrack(tr);
+  else if (a === 'selall') { ED.sel = new Set(ED.clips.map(c => c.id)); edBarUi(); edDraw(); }
+  else if (a === 'clear') { ED.sel.clear(); edBarUi(); edDraw(); }
+  else if (a === 'full') { edMenuClose(false); edSetFull(!ED.full); return; }
+  else if (a === 'undo') edUndoRedo(true);
+  else if (a === 'redo') edUndoRedo(false);
+  if (keep && ED.menu && (!tr || ED.tracks.includes(tr))) { edMenuOpen(ED.menuAt.x, ED.menuAt.y, ED.menu); const again = $('#ed-menu').querySelector(`[data-m="${a}"]${v != null ? `[data-v="${CSS.escape(v)}"]` : ''}`); if (again) again.focus(); }
+  else edMenuClose();
+}
 function bindEditor() {
   const host = $('#tlp-files'); if (!host || host._bound) return; host._bound = true;
   const touches = new Map();
+  host.addEventListener('contextmenu', e => {
+    if (e.target.id !== 'ed-cv') return; e.preventDefault();
+    const p = edPos(e), h = edHit(p.x, p.y); if (!h) return;
+    if (h.head) { edMenuOpen(e.clientX, e.clientY, { track: h.head }); return; }
+    if (h.clip && !ED.sel.has(h.clip.id)) { ED.sel = new Set([h.clip.id]); edBarUi(); edDraw(); }
+    edMenuOpen(e.clientX, e.clientY, { t: h.t != null ? Math.max(0, h.t) : ED.t });
+  });
+  host.addEventListener('click', e => { const mb = e.target.closest('#ed-menu button'); if (mb && !mb.disabled) edMenuAct(mb); });
+  host.addEventListener('keydown', e => {
+    if (!(e.target.closest && e.target.closest('#ed-menu'))) return;      // меню: стрелки, Enter, Esc
+    const items = [...$('#ed-menu').querySelectorAll('button:not([disabled])')], i = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); edMenuClose(); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); items[(i + 1) % items.length]?.focus(); }
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); items[(i - 1 + items.length) % items.length]?.focus(); }
+  });
+  document.addEventListener('pointerdown', e => { const m = $('#ed-menu'); if (m && !m.hidden && !m.contains(e.target) && e.target.id !== 'ed-cv') edMenuClose(false); });
   host.addEventListener('pointerdown', e => {
+    if (e.target.id === 'ed-cv' && ED.menu && e.button !== 2) edMenuClose(false);
     if (e.target.id !== 'ed-cv' || e.button === 2) return;
     const cv = e.target; cv.focus({ preventScroll: true });
     if (e.pointerType === 'touch') { touches.set(e.pointerId, e.clientX); if (touches.size === 2) { const [a, b] = [...touches.values()], mx = (a + b) / 2 - cv.getBoundingClientRect().left; ED.drag = { kind: 'pinch', d0: Math.abs(a - b) || 1, z0: ED.zoom, t: edT(mx), mx }; return; } }
@@ -540,7 +658,10 @@ function bindEditor() {
     const mod = e.ctrlKey || e.metaKey;
     if (mod && e.code === 'KeyZ') { e.preventDefault(); edUndoRedo(!e.shiftKey); return; }
     if (mod && e.code === 'KeyY') { e.preventDefault(); edUndoRedo(false); return; }
+    if (e.target.closest && e.target.closest('#ed-menu')) return;              // в меню клавиши — его
     if (mod && e.code === 'KeyA') { e.preventDefault(); ED.sel = new Set(ED.clips.map(c => c.id)); edBarUi(); edDraw(); return; }
+    if (mod && e.code === 'KeyD') { e.preventDefault(); edDup(); return; }
+    if ((e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) && (e.target.id === 'ed-cv' || e.target === document.body)) { e.preventDefault(); edMenuFromKeys(); return; }
     if (mod || e.altKey) return;
     const onCv = e.target.id === 'ed-cv' || e.target === document.body;
     if (e.code === 'Space' && (onCv || e.target.closest('#tlp-files')) && !e.target.closest('button')) { e.preventDefault(); edToggle(); return; }
