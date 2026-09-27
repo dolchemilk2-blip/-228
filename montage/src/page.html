@@ -1154,9 +1154,9 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
       <section class="card" id="s3">
         <h2 class="step"><b>3</b> Разбор <small>распознавание речи — в браузере, модель скачивается один раз</small></h2>
         <div class="models" role="radiogroup" aria-label="Как распознавать">
-          <label><input type="radio" name="preset" value="draft"><b>Черновик</b><span>пачками, втрое быстрее · 75 МБ</span></label>
-          <label><input type="radio" name="preset" value="normal" checked><b>Обычно</b><span>каждый кусок отдельно · 75 МБ</span></label>
-          <label><input type="radio" name="preset" value="best"><b>Точнее</b><span>большая модель · 250 МБ</span></label>
+          <label><input type="radio" name="preset" value="draft"><b>Быстро</b><span>Whisper, пачками · 75 МБ</span></label>
+          <label><input type="radio" name="preset" value="normal" checked><b>Обычно</b><span>GigaAM — лучше слышит русский · 225 МБ</span></label>
+          <label><input type="radio" name="preset" value="best"><b>Точнее</b><span>GigaAM большая · 590 МБ</span></label>
         </div>
         <div class="row-b"><button class="primary" id="go">Разобрать записи</button>
           <label class="ghost-b file-b"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.6 12.8V3.6h3.6l1.4 1.5h5.8v7.7z"/></svg>Открыть сохранённый проект<input type="file" id="proj-in" accept=".json,application/json" hidden></label></div>
@@ -1215,7 +1215,7 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
       <div id="sfx-body"></div>
     </section>
   </div>
-  <footer><span>Сопоставление: нарезка по паузам, распознавание Whisper, выравнивание текста по порядку сценария. Громкость — по ITU-R BS.1770.</span><span>Всё считается в этом браузере. Записи и сценарий никуда не отправляются.</span></footer>
+  <footer><span>Сопоставление: нарезка по паузам, распознавание GigaAM Multilingual (или Whisper), выравнивание текста по порядку сценария. Громкость — по ITU-R BS.1770.</span><span>Всё считается в этом браузере. Записи и сценарий никуда не отправляются.</span></footer>
 </main>
 <div id="msg" role="status" hidden></div>
 <script type="module">

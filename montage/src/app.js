@@ -5,10 +5,12 @@ const TJS = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0/dist/t
 const LAME = 'https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js';
 // «Обычно» — каждый кусок распознаётся отдельно: текст точно принадлежит своему куску.
 // «Черновик» — кусками по 28 с: втрое быстрее, но изредка путает соседние короткие реплики.
+// «Обычно» и «Точнее» — GigaAM Multilingual (Сбер, MIT): русский, казахский, кыргызский, узбекский — заметно точнее Whisper.
+// «Быстро» — Whisper base пачками: легче всего скачать (75 МБ), для слабых устройств.
 const PRESETS = {
-  draft:  { model: 'onnx-community/whisper-base',  pack: true },
-  normal: { model: 'onnx-community/whisper-base',  pack: false },
-  best:   { model: 'onnx-community/whisper-small', pack: false },
+  draft:  { model: 'onnx-community/whisper-base', pack: true },
+  normal: { model: 'gigaam-multilingual', pack: false },
+  best:   { model: 'gigaam-multilingual-large', pack: false },
 };
 const DEBUG = new URLSearchParams(location.search).has('debug');
 const $ = (s, r = document) => r.querySelector(s);
@@ -90,6 +92,82 @@ const idb = (() => {
   return { get: k => tx('readonly', s => s.get(k)), put: (k, v) => tx('readwrite', s => s.put(v, k)) };
 })();
 
+// ------------------------------------------------------------------ GigaAM Multilingual: ONNX (onnxruntime-web), CTC по буквам
+const ORT_BASE = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/';
+const GIGA_HF = 'https://huggingface.co/istupakov/';
+const GIGA = {
+  'gigaam-multilingual': { onnx: GIGA_HF + 'gigaam-multilingual-ctc-onnx/resolve/main/multilingual_ctc.int8.onnx', vocab: GIGA_HF + 'gigaam-multilingual-ctc-onnx/resolve/main/multilingual_vocab.txt' },
+  'gigaam-multilingual-large': { onnx: GIGA_HF + 'gigaam-multilingual-large-ctc-onnx/resolve/main/multilingual_large_ctc.int8.onnx', vocab: GIGA_HF + 'gigaam-multilingual-large-ctc-onnx/resolve/main/multilingual_vocab.txt' },
+};
+// Функции ниже — самодостаточные: они же уходят в воркер как текст (toString), без обращений к остальному коду.
+/** Лог-мел как у GigaAM: torchaudio MelSpectrogram — окно Ханна 320, шаг 160, 64 полосы HTK, без центрирования; ln(clamp). → {f: [64 × T], T} */
+function gigaMel(y) {
+  const N = 320, H = 160, B = 161, M = 64, SR = 16000, T = y.length < N ? 0 : 1 + Math.floor((y.length - N) / H);
+  let tb = gigaMel.tb;
+  if (!tb) {
+    const win = new Float64Array(N); for (let n = 0; n < N; n++) win[n] = 0.5 - 0.5 * Math.cos(2 * Math.PI * n / N);
+    const cs = new Float64Array(B * N), sn = new Float64Array(B * N);
+    for (let k = 0; k < B; k++) for (let n = 0; n < N; n++) { const a = 2 * Math.PI * ((k * n) % N) / N; cs[k * N + n] = Math.cos(a); sn[k * N + n] = Math.sin(a); }
+    const h2m = f => 2595 * Math.log10(1 + f / 700), m2h = m => 700 * (Math.pow(10, m / 2595) - 1), mMax = h2m(SR / 2), fp = [];
+    for (let i = 0; i < M + 2; i++) fp.push(m2h(mMax * i / (M + 1)));
+    const fb = [];                                    // для каждой полосы — [с какого бина, веса] (треугольники, как в torchaudio)
+    for (let m = 0; m < M; m++) { const w = []; let k0 = -1; for (let k = 0; k < B; k++) { const f = SR / 2 * k / (B - 1), v = Math.max(0, Math.min((f - fp[m]) / (fp[m + 1] - fp[m]), (fp[m + 2] - f) / (fp[m + 2] - fp[m + 1]))); if (v > 0) { if (k0 < 0) k0 = k; w[k - k0] = v; } else if (k0 >= 0) break; } fb.push([Math.max(0, k0), Float64Array.from(w)]); }
+    tb = gigaMel.tb = { win, cs, sn, fb };
+  }
+  const f = new Float32Array(M * T), fr = new Float64Array(N), pw = new Float64Array(B);
+  for (let t = 0; t < T; t++) {
+    const o = t * H; for (let n = 0; n < N; n++) fr[n] = y[o + n] * tb.win[n];
+    for (let k = 0; k < B; k++) { let re = 0, im = 0; const r = k * N; for (let n = 0; n < N; n++) { re += fr[n] * tb.cs[r + n]; im -= fr[n] * tb.sn[r + n]; } pw[k] = re * re + im * im; }
+    for (let m = 0; m < M; m++) { const [k0, w] = tb.fb[m]; let v = 0; for (let j = 0; j < w.length; j++) v += w[j] * pw[k0 + j]; f[m * T + t] = Math.log(Math.min(1e9, Math.max(1e-9, v))); }
+  }
+  return { f, T };
+}
+/** Жадная расшифровка CTC: самая вероятная буква в каждом кадре, повторы склеиваются, «пусто» (последний класс) выбрасывается. */
+function gigaDecode(lp, T, V, vocab) {
+  let prev = -1, s = '';
+  for (let t = 0; t < T; t++) { let best = 0, bv = -Infinity; for (let v = 0; v < V; v++) { const x = lp[t * V + v]; if (x > bv) { bv = x; best = v; } } if (best !== prev && best !== V - 1) s += vocab[best] || ''; prev = best; }
+  return s.replace(/\u2581/g, ' ').replace(/\s+/g, ' ').trim();
+}
+/** Модель — из кэша браузера, а в первый раз скачивается с прогрессом (и сразу кладётся в кэш). */
+async function gigaFetch(url, onP) {
+  let cache = null;
+  try { cache = await caches.open('montage-models'); const hit = await cache.match(url); if (hit) return new Uint8Array(await hit.arrayBuffer()); } catch (e) { cache = null; }
+  const r = await fetch(url); if (!r.ok) throw new Error('модель распознавания не скачалась (' + r.status + ')');
+  const total = +r.headers.get('content-length') || 0, parts = []; let got = 0;
+  const [a, b] = r.body.tee(), put = cache ? cache.put(url, new Response(b, { headers: { 'content-type': 'application/octet-stream' } })).catch(() => {}) : null;
+  const rd = a.getReader();
+  for (;;) { const x = await rd.read(); if (x.done) break; parts.push(x.value); got += x.value.length; if (onP) onP(got, total); }
+  const buf = new Uint8Array(got); let o = 0; for (const p of parts) { buf.set(p, o); o += p.length; }
+  if (put) await put;
+  return buf;
+}
+async function gigaLoad(ort, spec, onP) {
+  const vocab = (await (await fetch(spec.vocab)).text()).split('\n').filter(Boolean).map(l => l.slice(0, l.lastIndexOf(' ')));
+  const bytes = await gigaFetch(spec.onnx, onP);
+  const sess = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
+  return { sess, vocab };
+}
+async function gigaRun(ort, g, y) {
+  const { f, T } = gigaMel(y); if (T < 8) return '';
+  const out = await g.sess.run({ features: new ort.Tensor('float32', f, [1, 64, T]), feature_lengths: new ort.Tensor('int64', BigInt64Array.from([BigInt(T)]), [1]) });
+  const lp = out.log_probs, V = lp.dims[2], n = Math.min(lp.dims[1], Number(out.encoded_lengths.data[0]));
+  return gigaDecode(lp.data, n, V, g.vocab);
+}
+const GIGA_WORKER_SRC = [gigaMel, gigaDecode, gigaFetch, gigaLoad, gigaRun].map(fn => fn.toString()).join('\n') + `
+let ort = null, g = null;
+self.onmessage = async (e) => {
+  const m = e.data;
+  try {
+    if (m.type === 'load') {
+      ort = await import(m.ort + 'ort.wasm.min.mjs'); ort.env.wasm.wasmPaths = m.ort;
+      ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1)) : 1;
+      g = await gigaLoad(ort, m.spec, (loaded, total) => self.postMessage({ type: 'dl', file: m.spec.onnx, loaded, total }));
+      self.postMessage({ type: 'ready' });
+    } else if (m.type === 'run') {
+      self.postMessage({ type: 'text', id: m.id, text: await gigaRun(ort, g, m.audio), chunks: [] });
+    }
+  } catch (err) { self.postMessage({ type: 'error', id: m.id, message: String(err && err.message || err) }); }
+};`;
 // ------------------------------------------------------------------ распознавание в воркере
 const WORKER_SRC = `
 let pipe = null;
@@ -120,6 +198,15 @@ let worker = null, workerModel = null, workerDevice = null;
 async function getWorker(modelId, onDl) {
   if (worker && workerModel === modelId) return worker;
   if (worker) worker.terminate();
+  if (GIGA[modelId]) {                                   // GigaAM — свой воркер: onnxruntime-web, процессор (WebAssembly)
+    const w = new Worker(URL.createObjectURL(new Blob([GIGA_WORKER_SRC], { type: 'text/javascript' })), { type: 'module' });
+    await new Promise((res, rej) => {
+      w.onmessage = e => { const m = e.data; if (m.type === 'dl') onDl(m); else if (m.type === 'ready') res(); else if (m.type === 'error') rej(new Error(m.message)); };
+      w.onerror = e => rej(new Error(e.message || 'воркер не запустился'));
+      w.postMessage({ type: 'load', ort: ORT_BASE, spec: GIGA[modelId] });
+    });
+    worker = w; workerModel = modelId; workerDevice = 'процессор'; return w;
+  }
   const tryDevice = async device => {
     const w = new Worker(URL.createObjectURL(new Blob([WORKER_SRC], { type: 'text/javascript' })), { type: 'module' });
     await new Promise((res, rej) => {
@@ -148,6 +235,13 @@ async function getRecognizer(modelId, onDl) {
     rec = { model: modelId, run: (audio, stamps) => transcribe(w, audio, stamps) };
     return rec;
   } catch (err) { console.warn('воркер недоступен, распознаю на странице:', err.message); }
+  if (GIGA[modelId]) {
+    const ort = await import(ORT_BASE + 'ort.wasm.min.mjs'); ort.env.wasm.wasmPaths = ORT_BASE; ort.env.wasm.numThreads = 1;
+    const g = await gigaLoad(ort, GIGA[modelId], (loaded, total) => onDl({ file: GIGA[modelId].onnx, loaded, total }));
+    workerDevice = 'процессор';
+    rec = { model: modelId, run: async audio => { await new Promise(r => setTimeout(r, 0)); return { text: await gigaRun(ort, g, audio), chunks: [] }; } };
+    return rec;
+  }
   const T = await import(TJS);
   T.env.allowLocalModels = false;
   const dl = p => { if (p.status === 'progress') onDl({ file: p.file, loaded: p.loaded, total: p.total }); };
@@ -1173,7 +1267,7 @@ function bind() {
 }
 
 // для проверки из консоли и автотестов
-window.montage = { tlFx: () => ({ lift: +TLFX.lift.v.toFixed(3), liftIds: TLFX.liftIds && [...TLFX.liftIds], hoverId: TLFX.hoverId, hover: +TLFX.hover.v.toFixed(3), pulse: TLFX.pulse ? +TLFX.pulse.m.v.toFixed(3) : null, band: !!TLFX.band, snap: tlState().drag ? tlState().drag.snapT : undefined, delta: tlState().drag ? tlState().drag.delta : undefined }), S, C, PRESETS, play: (y, btn) => play(y, btn), stop: () => stop(), progress: (t, p) => progress(t, p), notify: t => notify(t), DECK: typeof DECK !== 'undefined' ? DECK : null, MOTION: typeof MOTION !== 'undefined' ? MOTION : null, audioLevel: () => audioLevel(), projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses, recOpenFor: k => recOpenFor(k), recOpen: l => recOpen(l), REC: typeof REC !== 'undefined' ? REC : null, srtText: () => srtText(), vttText: () => vttText(), subCues: () => subCues(), buildVideo: o => buildVideo(o), videoFormat: () => videoFormat(1280, 720, 24), slipDiff: (a, b) => slipDiff(a, b), slipOf: c => slipOf(c) , ED: typeof ED !== 'undefined' ? ED : null, EDK: typeof EDK !== 'undefined' ? EDK : null, edTime: () => edTime(), edBarUi: () => edBarUi(), edDraw: () => edDraw(), edMix: () => edMix(), goTab: (t, o) => goTab(t, o) , stageState, musicState, musAddFiles: l => musAddFiles(l), projectJson, spaceSetMove: (ids, k) => spaceSetMove(ids, k), hrtf: () => HRTF_CAL, idle: () => !S.busy && !remixRunning && !remixReq, remixState: () => ({ busy: S.busy, running: !!remixRunning, req: remixReq && remixReq.kind, timer: !!remixTimer }) };
+window.montage = { tlFx: () => ({ lift: +TLFX.lift.v.toFixed(3), liftIds: TLFX.liftIds && [...TLFX.liftIds], hoverId: TLFX.hoverId, hover: +TLFX.hover.v.toFixed(3), pulse: TLFX.pulse ? +TLFX.pulse.m.v.toFixed(3) : null, band: !!TLFX.band, snap: tlState().drag ? tlState().drag.snapT : undefined, delta: tlState().drag ? tlState().drag.delta : undefined }), S, C, PRESETS, play: (y, btn) => play(y, btn), stop: () => stop(), progress: (t, p) => progress(t, p), notify: t => notify(t), DECK: typeof DECK !== 'undefined' ? DECK : null, MOTION: typeof MOTION !== 'undefined' ? MOTION : null, audioLevel: () => audioLevel(), projectJson, remix, renderMix, HIST, histUndo: () => histUndo(), histRedo: () => histRedo(), tlSetFull: on => tlSetFull(on), tlMenuOpen: (x, y, c) => tlMenuOpen(x, y, c), refreshMix: () => refreshMix(), tlSelect: (ids, add) => tlSelect(ids, add), TP, tpPlay: t => tpPlay(t), tpPause: () => tpPause(), tpTime: () => tpTime(), remixSoon: (k, ids) => remixSoon(k, ids), computeTakes: () => computeTakes(), takeOf: id => takeOf(id), rerecText: s => rerecText(s), rerecList: () => rerecList(), exportStems: () => exportStems(), chaptersText: () => chaptersText(), id3Chapters: t => id3Chapters(t), ambAutoAll: () => ambAutoAll(), ambState: () => ambState(), fxOfLine: (c, v) => fxOfLine(c, v), drawTimeline: () => drawTimeline(), tlState: () => tlState(), sfxAudio, sfxAuto, renderSounds, dbSearch, dbRun, dbAutoAll, dbQuery, dbPick, dbState, dbRestore, workerSrc: () => (typeof DSP_WORKER_SRC === 'undefined' ? null : DSP_WORKER_SRC), render, renderCleanup, analyzeFile, applyFile, preview, analyze, mixdown, setScript, addFiles, matchAll, sourceOf, statusOf, reportCsv, reportPauses, recOpenFor: k => recOpenFor(k), recOpen: l => recOpen(l), REC: typeof REC !== 'undefined' ? REC : null, srtText: () => srtText(), vttText: () => vttText(), subCues: () => subCues(), buildVideo: o => buildVideo(o), videoFormat: () => videoFormat(1280, 720, 24), slipDiff: (a, b) => slipDiff(a, b), slipOf: c => slipOf(c) , ED: typeof ED !== 'undefined' ? ED : null, EDK: typeof EDK !== 'undefined' ? EDK : null, edTime: () => edTime(), edBarUi: () => edBarUi(), edDraw: () => edDraw(), edMix: () => edMix(), asr: async (model, file) => { const y = C.to16k(await decodeFile(file)), dur = y.length / 16000, r = await getRecognizer(model, () => {}), t0 = performance.now(), out = await r.run(y, false); return { text: out.text, ms: performance.now() - t0, dur, device: workerDevice }; }, goTab: (t, o) => goTab(t, o) , stageState, musicState, musAddFiles: l => musAddFiles(l), projectJson, spaceSetMove: (ids, k) => spaceSetMove(ids, k), hrtf: () => HRTF_CAL, idle: () => !S.busy && !remixRunning && !remixReq, remixState: () => ({ busy: S.busy, running: !!remixRunning, req: remixReq && remixReq.kind, timer: !!remixTimer }) };
 if (typeof fdrInit === 'function') fdrInit();
 if (typeof numInit === 'function') numInit();
 bind(); render();
