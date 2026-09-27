@@ -15,6 +15,28 @@ const edT = x => ED.scroll + (x - EDK.HEAD) / ED.zoom;
 const edEnd = () => ED.clips.reduce((m, c) => Math.max(m, c.at + c.dur), 0);
 const edTrack = id => ED.tracks.find(t => t.id === id);
 const edClip = id => ED.clips.find(c => c.id === id);
+// ------------------------------------------------------------------ эффекты клипов (как у реплик спектакля)
+const ED_FX = new Map();                                  // ключ (запись, кусок, плавность, эффект) → { y, buf } или { wait: true }
+const edFxKey = c => `${c.src}|${c.off.toFixed(4)}|${c.dur.toFixed(4)}|${(c.fin || 0).toFixed(3)}|${(c.fout || 0).toFixed(3)}|${c.fx}`;
+const edFxName = k => (typeof FX_PRESETS !== 'undefined' && FX_PRESETS[k] ? FX_PRESETS[k].name : k);
+function edFxReady(c) { if (!c.fx) return null; const e = ED_FX.get(edFxKey(c)); return e && e.y ? e : null; }
+/** Посчитать эффект клипа в фоне; готово — если играет, продолжить с того же места уже с эффектом. */
+function edFxWant(c) {
+  const key = edFxKey(c); if (ED_FX.has(key)) return ED_FX.get(key).p || Promise.resolve();
+  const src = ED.srcs.get(c.src); if (!src || !src.y) return Promise.resolve();
+  const o = Math.round(c.off * C.SR), n = Math.max(1, Math.min(Math.round(c.dur * C.SR), src.y.length - o)), x = src.y.slice(o, o + n), fi = (c.fin || 0) * C.SR, fo = (c.fout || 0) * C.SR;
+  for (let j = 0; j < n; j++) { let e = 1; if (j < fi) e *= j / fi; if (n - j < fo) e *= (n - j) / fo; x[j] *= e; }
+  const run = typeof fxInWorker === 'function' ? fxInWorker(x, c.fx) : Promise.resolve(C.fxProcess(x, c.fx));
+  const ent = { wait: true };
+  ent.p = run.then(y => { ent.y = y; ent.wait = false; if (ED_FX.size > 80) ED_FX.delete(ED_FX.keys().next().value); if (ED.play) edPlay(edTime()); edDraw(); }).catch(() => { ED_FX.delete(key); });
+  ED_FX.set(key, ent); return ent.p;
+}
+function edSetFx(list, k) {
+  if (!list.length) return;
+  edPush(k ? `эффект «${edFxName(k)}»` : 'без эффекта');
+  for (const c of list) { if (k) c.fx = k; else delete c.fx; if (k) edFxWant(c); }
+  edChanged();
+}
 const edAudible = tr => !tr.mute && (!ED.tracks.some(t => t.solo) || tr.solo);
 
 // ------------------------------------------------------------------ хранение в браузере
@@ -146,6 +168,16 @@ function edPlay(t = ED.t) {
   const c0 = ctx.currentTime + 0.04, out = audioOut(), nodes = [];
   for (const c of ED.clips) {
     const tr = edTrack(c.tr), src = ED.srcs.get(c.src); if (!tr || !src || !edAudible(tr) || c.at + c.dur <= t) continue;
+    if (c.fx) {
+      const fx = edFxReady(c);
+      if (fx) {
+        const skip = Math.max(0, t - c.at); if (skip >= fx.y.length / C.SR) continue;
+        if (!fx.buf) { fx.buf = ctx.createBuffer(1, fx.y.length, C.SR); fx.buf.copyToChannel(fx.y, 0); }
+        const s = ctx.createBufferSource(), g = ctx.createGain(); g.gain.value = edLin(c.gain);
+        s.buffer = fx.buf; s.connect(g); g.connect(out); s.start(c0 + Math.max(0, c.at - t), skip); nodes.push(s); continue;
+      }
+      edFxWant(c);                                        // ещё считается — пока без эффекта
+    }
     if (!src.buf) { src.buf = ctx.createBuffer(1, src.y.length, C.SR); src.buf.copyToChannel(src.y, 0); }
     const s = ctx.createBufferSource(), g = ctx.createGain(), k = edLin(c.gain), from = Math.max(t, c.at);
     const env = tt => k * (c.fin > 0 ? Math.min(1, (tt - c.at) / c.fin) : 1) * (c.fout > 0 ? Math.min(1, (c.at + c.dur - tt) / c.fout) : 1);
@@ -189,11 +221,15 @@ function edHead() {
 // ------------------------------------------------------------------ скачивание
 /** Всё, что звучит, одной дорожкой 48 кГц: громкость клипов, входы и выходы, без заглушённых дорожек. */
 async function edMix() {
-  const list = ED.clips.filter(c => { const tr = edTrack(c.tr); return tr && edAudible(tr); }), end = list.reduce((m, c) => Math.max(m, c.at + c.dur), 0);
+  const list = ED.clips.filter(c => { const tr = edTrack(c.tr); return tr && edAudible(tr); });
+  if (list.some(c => c.fx && !edFxReady(c))) { progress('Считаю эффекты…', 0.05); await Promise.all(list.filter(c => c.fx).map(edFxWant)); }
+  const end = list.reduce((m, c) => { const fx = edFxReady(c); return Math.max(m, c.at + (fx ? fx.y.length / C.SR : c.dur)); }, 0);
   if (!end) return null;
   const out = new Float32Array(Math.ceil(end * C.SR) + 1), tick = budget(12);
   for (let q = 0; q < list.length; q++) {
-    const c = list[q], y = ED.srcs.get(c.src).y, k = edLin(c.gain), a0 = Math.round(c.at * C.SR), o0 = Math.round(c.off * C.SR);
+    const c = list[q], fx = edFxReady(c);
+    if (fx) { const k = edLin(c.gain), a0 = Math.round(c.at * C.SR), n = Math.min(fx.y.length, out.length - a0); for (let j = 0; j < n; j++) out[a0 + j] += fx.y[j] * k; await tick(); continue; }
+    const y = ED.srcs.get(c.src).y, k = edLin(c.gain), a0 = Math.round(c.at * C.SR), o0 = Math.round(c.off * C.SR);
     const n = Math.min(Math.round(c.dur * C.SR), y.length - o0, out.length - a0), fi = c.fin * C.SR, fo = c.fout * C.SR;
     for (let a = 0; a < n; a += 1 << 18) {
       for (let j = a, b = Math.min(n, a + (1 << 18)); j < b; j++) { let e = k; if (j < fi) e *= j / fi; if (n - j < fo) e *= (n - j) / fo; out[a0 + j] += y[o0 + j] * e; }
@@ -240,7 +276,7 @@ function edInfoHtml() {
   if (sel.length > 1) return `<b>Выбрано ${sel.length}</b>${gain}<button class="ghost-b tiny" data-ed="g0">громкость 0 дБ</button><button class="ghost-b tiny" data-ed="desel">снять выделение</button>`;
   const c = sel[0], src = ED.srcs.get(c.src);
   return `<b>${esc(edName(src && src.name))}</b><span>начало <b>${C.ts(c.at)}</b></span><span>длина <b>${c.dur.toFixed(2)} с</b></span>${gain}${c.gain ? `<span><b>${c.gain > 0 ? '+' : '−'}${Math.abs(c.gain)} дБ</b></span>` : ''}
-    ${c.fin ? `<span>вход <b>${c.fin.toFixed(2)} с</b></span>` : ''}${c.fout ? `<span>выход <b>${c.fout.toFixed(2)} с</b></span>` : ''}${c.fin || c.fout ? '<button class="ghost-b tiny" data-ed="nofade">без плавности</button>' : ''}`;
+    ${c.fin ? `<span>вход <b>${c.fin.toFixed(2)} с</b></span>` : ''}${c.fout ? `<span>выход <b>${c.fout.toFixed(2)} с</b></span>` : ''}${c.fin || c.fout ? '<button class="ghost-b tiny" data-ed="nofade">без плавности</button>' : ''}${c.fx ? `<span>эффект <b>${esc(edFxName(c.fx))}</b></span>` : ''}`;
 }
 function edBarUi() {
   const bar = $('#ed .ed-bar'); if (!bar) return;
@@ -335,7 +371,7 @@ function edDraw() {
     if (x1 - x0 > 40) {
       g.save(); g.beginPath(); g.rect(x0 + 4, y, Math.max(0, x1 - x0 - 8), h); g.clip();
       g.fillStyle = ink; g.font = `600 11.5px ${cssVar('--sans')}`; g.textBaseline = 'top';
-      g.fillText(edName(src && src.name) + (c.gain ? `  ${c.gain > 0 ? '+' : '−'}${Math.abs(c.gain)} дБ` : ''), Math.max(x0, EDK.HEAD) + 6, y + 4); g.restore();
+      g.fillText(edName(src && src.name) + (c.gain ? `  ${c.gain > 0 ? '+' : '−'}${Math.abs(c.gain)} дБ` : '') + (c.fx ? `  · ${edFxName(c.fx)}` : ''), Math.max(x0, EDK.HEAD) + 6, y + 4); g.restore();
     }
     if (sel || (ED.hover === c.id)) {
       g.fillStyle = accent; for (const hx of [edX(c.at + c.fin), edX(c.at + c.dur - c.fout)]) { g.beginPath(); g.roundRect(hx - 4, y - 1, 8, 8, 2); g.fill(); }
@@ -438,7 +474,7 @@ function edMenuHtml(ctx) {
       <button role="menuitem" data-m="seltrack"><span>Выделить все клипы дорожки</span>${edKbd('щелчок по имени')}</button>
       <button role="menuitemcheckbox" aria-checked="${!!tr.mute}" data-m="mute"><span>${tr.mute ? 'Вернуть звук' : 'Без звука'}</span>${edKbd('M')}</button>
       <button role="menuitemcheckbox" aria-checked="${!!tr.solo}" data-m="solo"><span>${tr.solo ? 'Слушать все дорожки' : 'Только эта дорожка'}</span>${edKbd('S')}</button>
-      ${n ? `<div class="m-lbl">Громкость всех клипов дорожки</div>${gains}` : ''}
+      ${n ? `<div class="m-lbl">Эффект всех клипов дорожки</div>${edFxRow(ED.clips.filter(c => c.tr === tr.id), 'tfx')}<div class="m-lbl">Громкость всех клипов дорожки</div>${gains}` : ''}
       <div class="m-sep"></div><button role="menuitem" data-m="rmtrack"><span>${ic('trash')}Убрать дорожку</span>${edKbd('×')}</button>${undo}`;
   }
   const sel = ED.clips.filter(c => ED.sel.has(c.id)), n = sel.length, c = n === 1 ? sel[0] : null, src = c ? ED.srcs.get(c.src) : null;
@@ -447,7 +483,7 @@ function edMenuHtml(ctx) {
   return `<div class="m-head">${head}</div>
     ${ctx.t != null ? `<button role="menuitem" data-m="play" data-v="${ctx.t}"><span>${ic('play')}Слушать отсюда</span>${edKbd('пробел')}</button>` : ''}
     ${inside ? `<button role="menuitem" data-m="split" data-v="${ctx.t}"><span>${ic('cut')}Разрезать здесь</span>${edKbd('S')}</button>` : ''}
-    ${n ? `<div class="m-lbl">Громкость${n > 1 ? ' выбранных' : ''}</div>${gains}
+    ${n ? `<div class="m-lbl">Эффект${n > 1 ? ' для всех выбранных' : ''}</div>${edFxRow(sel, 'fx')}<div class="m-lbl">Громкость${n > 1 ? ' выбранных' : ''}</div>${gains}
     <div class="m-lbl">Плавность</div><div class="m-row"><button role="menuitem" data-m="fin" data-v="0.5">вход 0,5 с</button><button role="menuitem" data-m="fout" data-v="0.5">выход 0,5 с</button><button role="menuitem" data-m="fade0">без плавности</button></div>
     <div class="m-lbl">Время</div><div class="m-row"><button role="menuitem" data-m="nudge" data-v="-0.5" aria-label="раньше на 0,5 с">${ic('left')}0,5 с</button><button role="menuitem" data-m="nudge" data-v="-0.1" aria-label="раньше на 0,1 с">${ic('left')}0,1 с</button><button role="menuitem" data-m="nudge" data-v="0.1" aria-label="позже на 0,1 с">0,1 с${ic('right')}</button><button role="menuitem" data-m="nudge" data-v="0.5" aria-label="позже на 0,5 с">0,5 с${ic('right')}</button></div>
     <button role="menuitem" data-m="dup"><span>Дублировать</span>${edKbd('Ctrl+D')}</button>
@@ -456,6 +492,12 @@ function edMenuHtml(ctx) {
     <button role="menuitem" data-m="selall"><span>Выделить всё</span>${edKbd('Ctrl+A')}</button>
     ${n ? `<button role="menuitem" data-m="clear"><span>Снять выделение</span>${edKbd('Esc')}</button>` : ''}
     <button role="menuitem" data-m="full"><span>${ED.full ? 'Свернуть таймлайн' : 'Таймлайн на весь экран'}</span>${edKbd(ED.full ? 'Esc' : 'F')}</button>${undo}`;
+}
+/** Эффекты сеткой, как в меню таймлайна спектакля; отмечен общий у всех клипов. */
+function edFxRow(list, attr) {
+  if (typeof FX_PRESETS === 'undefined') return '';
+  const fxs = new Set(list.map(c => c.fx || '')), cur = fxs.size === 1 ? [...fxs][0] : null;
+  return `<div class="m-fx">${Object.entries(FX_PRESETS).filter(([k]) => k !== 'none').map(([k, p]) => `<button role="menuitemradio" aria-checked="${cur === k}" class="${cur === k ? 'on' : ''}" data-m="${attr}" data-v="${k}">${p.name}</button>`).join('')}<button role="menuitemradio" aria-checked="${cur === ''}" class="${cur === '' ? 'on' : ''}" data-m="${attr}" data-v="">без эффекта</button></div>`;
 }
 function edMenuOpen(cx, cy, ctx) {
   const m = $('#ed-menu'); if (!m) return;
@@ -473,6 +515,7 @@ function edMenuOpen(cx, cy, ctx) {
   m.dataset.ax = toL ? 'r' : 'l'; m.dataset.ay = toT ? 'b' : 't';
   m.style.left = toL ? 'auto' : ax + 'px'; m.style.right = toL ? (vw - ax) + 'px' : 'auto'; m.style.top = toT ? 'auto' : ay + 'px'; m.style.bottom = toT ? (vh - ay) + 'px' : 'auto';
   m.style.setProperty('--mw', W + 'px'); m.style.setProperty('--mh', H + 'px'); m.dataset.open = 'true';
+  if (typeof segInd === 'function') m.querySelectorAll('.m-fx').forEach((b, i) => segInd(b, 'ed-fx' + i));   // подложка переезжает к выбранному эффекту
   const f = m.querySelector('button:not([disabled])'); if (f) f.focus({ preventScroll: true });
 }
 function edMenuClose(refocus = true) {
@@ -505,11 +548,13 @@ function edFade(kind, v) {
 }
 function edMenuAct(b) {
   const ctx = ED.menu, a = b.dataset.m, v = b.dataset.v; if (!ctx) return;
-  const keep = ['g', 'nudge', 'mute', 'solo', 'fin', 'fout', 'fade0'].includes(a), tr = ctx.track;
+  const keep = ['g', 'nudge', 'mute', 'solo', 'fin', 'fout', 'fade0', 'fx', 'tfx'].includes(a), tr = ctx.track;
   if (a === 'play') { edPlay(+v); }
   else if (a === 'split') { ED.t = +v; edSplit(); }
   else if (a === 'g' && tr) { const ids = ED.clips.filter(c => c.tr === tr.id).map(c => c.id), was = ED.sel; ED.sel = new Set(ids); edGain(+v); ED.sel = was; }
   else if (a === 'g') edGain(+v);
+  else if (a === 'fx') edSetFx(ED.clips.filter(c => ED.sel.has(c.id)), v || null);
+  else if (a === 'tfx') edSetFx(ED.clips.filter(c => c.tr === tr.id), v || null);
   else if (a === 'fin' || a === 'fout') edFade(a, +v);
   else if (a === 'fade0') edFade('none');
   else if (a === 'nudge') edNudge(+v);
