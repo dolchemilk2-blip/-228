@@ -214,7 +214,7 @@ function fadeList(el) { if (typeof el.animate === 'function') el.animate([{ opac
 let paneDir = 1;
 function paneIn(pane) { if (MOTION.ready) mIn(pane, { opacity: 0, transform: `translateX(${12 * paneDir}px)` }, [0.92, 0.36]); }
 function motionTab(prev, next) {
-  const order = ['home', 'build', 'tl', 'clean', 'sfx'], a = order.indexOf(prev), b = order.indexOf(next); paneDir = b >= a ? 1 : -1;
+  const order = ['home', 'plot', 'build', 'tl', 'clean', 'sfx'], a = order.indexOf(prev), b = order.indexOf(next); paneDir = b >= a ? 1 : -1;
   tabIndicator(false);
 }
 /** Смена вкладки через View Transitions: старая уезжает в сторону, новая приезжает с другой. */

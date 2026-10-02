@@ -1025,6 +1025,14 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
 .hcard-go { display: inline-flex; align-items: center; gap: 6px; color: var(--accent-text); font-weight: 600; font-size: 13.5px; }
 .hcard-go .ic { transition: transform var(--duration-quick) var(--ease-smooth-out); }
 .hcard:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* доска сюжета — первая и во всю строку: с неё история начинается, а остальные восемь ложатся ровными рядами */
+.hcard.wide { grid-column: 1 / -1; }
+@media (min-width: 720px) {
+  .hcard.wide { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: 16px; row-gap: 4px; align-items: center; }
+  .hcard.wide .hcard-ic { grid-row: 1 / 3; }
+  .hcard.wide .hcard-t, .hcard.wide .hcard-d { grid-column: 2; }
+  .hcard.wide .hcard-go { grid-column: 3; grid-row: 1 / 3; }
+}
 @media (hover: hover) and (pointer: fine) { .hcard:hover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), var(--sh-1); } .hcard:hover .hcard-go .ic { transform: translateX(3px); } }
 .home-how { gap: 12px !important; }
 .home-how h3 { margin: 0; font: 600 17px/1.2 var(--display); }
@@ -1068,6 +1076,89 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
 .tlcard .primary { gap: 8px; }
 @media (prefers-reduced-motion: reduce) { .ha-head { animation: none; transform: translateX(38%); } }
 :root[data-motion="reduce"] .ha-head { animation: none; transform: translateX(38%); }
+/* ------------------------------------------------------------------ доска сюжета */
+.plp { min-width: 0; padding-bottom: 12px; }
+.plp > * { min-width: 0; }
+.pl-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
+.pl-top .step { margin: 0; }
+.pl-title { flex: 1 1 160px; min-width: 0; max-width: 300px; height: 32px; padding: 0 10px; font: inherit; font-size: 14px; }
+.pl-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: auto; }
+.pl-tools .file-b input { display: none; }
+.pl-hist { display: inline-flex; gap: 2px; }
+.pl-board { position: relative; height: clamp(420px, calc(100dvh - 250px), 880px); overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-l); background-color: var(--well);
+  background-image: radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--muted) 38%, transparent) 1px, transparent 1.3px); background-size: 24px 24px;
+  touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; outline: none; overscroll-behavior: contain; }
+.pl-board:focus-visible { border-color: var(--focus); box-shadow: 0 0 0 1px var(--focus); }
+.pl-board.panning { cursor: grabbing; }
+.pl-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.pl-links { position: absolute; overflow: visible; pointer-events: none; }
+.pl-l .hit { fill: none; stroke: transparent; stroke-width: 16; pointer-events: stroke; cursor: pointer; }
+.pl-l .ln, .pl-l .ar { fill: none; stroke: color-mix(in srgb, var(--muted) 75%, transparent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: stroke var(--duration-quick) ease-out; }
+.pl-l.on .ln, .pl-l.on .ar { stroke: var(--accent-text); stroke-width: 2.4; }
+.pl-l.back .ln { stroke-dasharray: 6 5; }
+.pl-wire { fill: none; stroke: var(--accent-text); stroke-width: 2; stroke-dasharray: 5 5; stroke-linecap: round; }
+#pl-labels, #pl-cards { position: absolute; left: 0; top: 0; }
+.pl-lab { position: absolute; left: 0; top: 0; max-width: 150px; padding: 1px 9px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: var(--ink); font-size: 12px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.pl-lab.ph { color: var(--muted); border-style: dashed; }
+.pl-lab.on { border-color: var(--accent-text); }
+.pl-lab[contenteditable] { max-width: none; overflow: visible; text-overflow: clip; cursor: text; outline: none; box-shadow: 0 0 0 2px var(--focus); user-select: text; -webkit-user-select: text; }
+.pl-card { --k: var(--muted); position: absolute; left: 0; top: 0; box-sizing: border-box; width: 216px; padding: 9px 12px 11px 14px; border: 1px solid var(--line); border-radius: var(--r-l); background: var(--surface); color: var(--ink); box-shadow: var(--sh-1); cursor: grab;
+  transition: border-color var(--duration-quick) ease-out, box-shadow var(--duration-quick) ease-out; }
+.pl-card::before { content: ""; position: absolute; left: -1px; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: var(--k); }
+.pl-card[data-k=turn] { --k: var(--accent); }
+.pl-card[data-k=fork] { --k: #3B78C2; }
+.pl-card[data-k=end] { --k: var(--ok); }
+.pl-card[data-k=note] { --k: var(--line); background: color-mix(in srgb, var(--surface) 55%, var(--well)); border-style: dashed; }
+.pl-card.on { border-color: var(--accent-text); box-shadow: 0 0 0 1px var(--accent-text), var(--sh-1); }
+.pl-card.lift { z-index: 2; cursor: grabbing; box-shadow: 0 0 0 1px var(--accent-text), var(--sh-2); }
+.pl-card.tgt { border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--accent-soft), var(--sh-1); }
+.pl-kind { display: flex; align-items: center; gap: 6px; height: 16px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
+.pl-kind i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--k); }
+.pl-sc { margin-left: auto; font: 11px var(--mono); letter-spacing: 0; text-transform: none; }
+.pl-t, .pl-n { white-space: pre-wrap; overflow-wrap: anywhere; outline: none; border-radius: 4px; }
+.pl-t { margin-top: 4px; min-height: 19px; font-size: 14.5px; font-weight: 600; line-height: 1.3; }
+.pl-n { margin-top: 4px; max-height: 7em; overflow: hidden; color: var(--muted); font-size: 13px; line-height: 1.4; }
+.pl-t:empty::before { content: attr(data-ph); color: var(--muted); font-weight: 500; }
+.pl-n:empty { display: none; }
+.pl-card.ed { cursor: default; }
+.pl-card.ed .pl-n { display: block; max-height: none; }
+.pl-card.ed .pl-n:empty::before { content: attr(data-ph); color: color-mix(in srgb, var(--muted) 70%, transparent); }
+.pl-card.ed [data-f] { margin-left: -4px; margin-right: -4px; padding: 1px 4px; cursor: text; user-select: text; -webkit-user-select: text; }
+.pl-card.ed [data-f]:focus { background: var(--well); box-shadow: 0 0 0 1px var(--line); }
+.pl-next, .pl-fork { position: absolute; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--ink); cursor: pointer; opacity: 0; transform: scale(.8); touch-action: none; pointer-events: none;
+  transition: opacity var(--duration-quick) ease-out, transform var(--duration-fast) var(--ease-smooth-out), background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out; }
+.pl-next { right: -13px; top: 18px; cursor: crosshair; }
+.pl-fork { left: 50%; bottom: -13px; margin-left: -12px; }
+.pl-next .ic, .pl-fork .ic { width: 14px; height: 14px; }
+/* скрытые кнопки не ловят касания: иначе палец «доводится» до них вместо карточки */
+.pl-card.on .pl-next, .pl-card.on .pl-fork { opacity: 1; transform: none; pointer-events: auto; }
+@media (hover: hover) and (pointer: fine) {
+  .pl-card:hover .pl-next, .pl-card:hover .pl-fork { opacity: 1; transform: none; pointer-events: auto; }
+  .pl-next:hover, .pl-fork:hover { background: var(--accent); border-color: transparent; color: var(--accent-ink); }
+  .pl-l:hover .ln, .pl-l:hover .ar { stroke: var(--ink); }
+  .pl-zoom button:hover { background: var(--well); }
+}
+@media (pointer: coarse) { .pl-next, .pl-fork { width: 32px; height: 32px; } .pl-next { right: -17px; top: 14px; } .pl-fork { bottom: -17px; margin-left: -16px; } }
+.pl-card.ed .pl-next, .pl-card.ed .pl-fork, .pl-card.lift .pl-next, .pl-card.lift .pl-fork { opacity: 0; pointer-events: none; }
+.pl-band { position: absolute; border: 1px solid var(--accent-text); background: color-mix(in srgb, var(--accent) 12%, transparent); pointer-events: none; }
+.pl-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; pointer-events: none; }
+.pl-empty-in { max-width: 420px; padding: 20px 22px; border: 1px solid var(--line); border-radius: var(--r-l); background: var(--surface); box-shadow: var(--sh-1); text-align: center; pointer-events: auto; cursor: default; user-select: text; -webkit-user-select: text; }
+.pl-empty-in b { font-size: 16px; }
+.pl-empty-in p { margin: 8px 0 0; text-wrap: pretty; }
+.pl-empty-b { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 14px; }
+.pl-zoom { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); box-shadow: var(--sh-1); }
+.pl-zoom button { display: grid; place-items: center; min-width: 30px; height: 28px; padding: 0 6px; border: 0; border-radius: 999px; background: transparent; color: var(--ink); font: 600 12px var(--mono); font-variant-numeric: tabular-nums; cursor: pointer; }
+.pl-zoom .ic { width: 14px; height: 14px; }
+.pl-help { margin: 8px 2px 0; text-wrap: pretty; }
+@media (hover: none) { .pl-help .pl-keys { display: none; } }
+@media (max-width: 560px) {
+  .pl-title { max-width: none; flex-basis: 100%; }
+  .pl-tools { flex: 1 0 100%; min-width: 0; flex-wrap: nowrap; margin-left: 0; padding-bottom: 2px; overflow-x: auto; scrollbar-width: none; }
+  .pl-tools::-webkit-scrollbar { display: none; }
+  .pl-tools > * { flex: none; }
+  .pl-board { height: clamp(380px, calc(100dvh - 230px), 680px); }
+}
+@media (prefers-reduced-motion: reduce) { .pl-next, .pl-fork { transition: none; } }
 </style>
 </head>
 <body>
@@ -1085,6 +1176,7 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
     <nav class="tabs" role="tablist" aria-label="Разделы">
       <span class="tab-ind" aria-hidden="true"></span>
       <button data-tab="home" role="tab">Главная</button>
+      <button data-tab="plot" role="tab">Сюжет</button>
       <button data-tab="build" role="tab">Сборка</button>
       <button data-tab="tl" role="tab">Таймлайн</button>
       <button data-tab="clean" role="tab">Чистка<span class="tab-lg"> звука</span></button>
@@ -1109,6 +1201,7 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
 </header>
 <main class="wrap" id="main">
   <div data-tabpane="home" class="pane" hidden><div id="home"></div></div>
+  <div data-tabpane="plot" class="pane" hidden><section class="card plp" id="plp"></section></div>
   <div data-tabpane="build" class="pane pane-build">
     <nav class="rail" aria-label="Шаги сборки">
       <ol>

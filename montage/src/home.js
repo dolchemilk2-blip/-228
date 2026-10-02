@@ -32,6 +32,7 @@ function notifyAct(text, label, fn) {
 
 // ------------------------------------------------------------------ главная
 const HOME_CARDS = [
+  { go: 'plot', wide: true, icon: 'branch', t: 'Доска сюжета', d: 'События на линии, развилки и ветки — разложить историю до записи. Сцены из сценария встают на доску сами.', cta: 'Открыть доску' },
   { go: 'build', at: 's1', icon: 'lines', t: 'Сборка по сценарию', d: 'Вставьте сценарий и киньте записи актёров — каждая реплика найдётся сама, громкость выровняется, паузы встанут по ремаркам.', cta: 'Собрать спектакль' },
   { go: 'tl', icon: 'tracks', t: 'Таймлайн', d: 'Паузы, громкость и эффект каждой реплики — на дорожках персонажей. Или свои записи без сценария: подрезать, разрезать, склеить.', cta: 'Открыть таймлайн' },
   { go: 'build', at: 'review', icon: 'check', t: 'Проверка и оговорки', d: 'Что нашлось, что нет и где актёр оговорился — по словам, рядом со сценарием. Дубли — на выбор.', cta: 'К проверке' },
@@ -72,7 +73,7 @@ function renderHome() {
       </div>
     </section>
     ${cont}
-    <div class="home-grid">${HOME_CARDS.map(c => `<button class="card hcard" type="button" data-go="${c.go}"${c.at ? ` data-at="${c.at}"` : ''}${c.go === 'tl' && !S.result ? ' data-mode="files"' : c.go === 'tl' ? ' data-mode="show"' : ''}>
+    <div class="home-grid">${HOME_CARDS.map(c => `<button class="card hcard${c.wide ? ' wide' : ''}" type="button" data-go="${c.go}"${c.at ? ` data-at="${c.at}"` : ''}${c.go === 'tl' && !S.result ? ' data-mode="files"' : c.go === 'tl' ? ' data-mode="show"' : ''}>
       <span class="hcard-ic">${ic(c.icon)}</span><b class="hcard-t">${c.t}</b><span class="hcard-d">${c.d}</span><span class="hcard-go">${c.cta}${ic('right')}</span></button>`).join('')}</div>
     <section class="card home-how">
       <h3>Как собирается спектакль</h3>
