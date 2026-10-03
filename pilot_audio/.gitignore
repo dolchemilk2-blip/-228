@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+sources/чисто/
+out/_*.wav

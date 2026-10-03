@@ -1,0 +1,76 @@
+{
+  "meta": {
+    "name": "Монтажка — монтажная радиодома",
+    "description": "Инструмент монтажа радиоспектакля в браузере. Мир — аппаратная радиодома: тёмная дека с катушками, стрелочным индикатором и лампой «Эфир», рабочий стол из алюминия (светлая тема) или магнитной ленты (тёмная), жёлтый жировой карандаш монтажёра как акцент. Схема — zanwei/design-dna; процесс и запреты — pbakaus/impeccable; движение — emilkowalski/skills и Jakubantalik/transitions.dev.",
+    "source_references": ["PRODUCT.md", "DESIGN.md", "пожелание автора: «красиво, плавные и приятные глазу анимации везде»"],
+    "created_at": "2026-09-25"
+  },
+  "design_system": {
+    "color": {
+      "palette_type": "сдержанная: нейтральная база (алюминий / окись ленты) + один акцент-карандаш + восемь цветов персонажей-ракордов",
+      "primary": { "hex": "#EBA51C", "role": "главное действие, выделение, отметка «проверить», индикатор вкладки; текст на нём — #1B1400" },
+      "secondary": { "hex": "#1A1613", "role": "дека: верхняя панель, транспорт плеера, номера шагов, выбранные фильтры" },
+      "accent": { "hex": "#D23A2D", "role": "только лампа «Эфир», курсор плеера, ошибки" },
+      "neutral": { "scale": ["#F8F8F6", "#EEEFEB", "#E4E6E1", "#DDE0DA", "#C6CAC3", "#565D61", "#15171A"], "usage": "панель, утопленное поле, фон, линия 2, линия, вторичный текст, текст" },
+      "surface": { "background": "#E4E6E1", "card": "#F8F8F6", "elevated": "#F8F8F6", "well": "#EEEFEB" },
+      "semantic": { "success": "#1E6C42", "warning": "#875600", "error": "#B3261E", "info": "#2F5E9E" },
+      "dark": { "background": "#14110F", "card": "#1D1916", "well": "#171412", "accent": "#F2B233", "text": "#EFE9E2", "muted": "#ABA197", "deck": "#0E0C0B" },
+      "contrast_strategy": "все текстовые пары ≥ 4,5:1 в обеих темах (проверено в браузере); акцент как текст на светлом — #875600; цвет персонажа всегда рядом с именем"
+    },
+    "typography": {
+      "font_families": { "heading": "Tektur 600–700, ширина 92–95 — логотип, заголовки шагов, номера, метки", "body": "Golos Text 400–700", "mono": "JetBrains Mono — время, номера реплик, дБ" },
+      "type_scale": {
+        "display": { "size": "21px", "weight": 700, "line_height": 1, "tracking": "0.01em" },
+        "heading_2": { "size": "19px", "weight": 600, "line_height": 1.2, "tracking": "0.005em" },
+        "body": { "size": "15px", "weight": 400, "line_height": 1.5, "tracking": "0" },
+        "caption": { "size": "12.5px", "weight": 400, "line_height": 1.4, "tracking": "0" },
+        "overline": { "size": "10.5px", "weight": 700, "line_height": 1, "tracking": "0.08em" }
+      },
+      "font_style_notes": "фиксированная шкала без clamp; цифры данных табличные; моно — только для измерений"
+    },
+    "spacing": { "base_unit": "4px", "scale": [4, 8, 12, 14, 16, 20, 24, 28], "section_rhythm": "20px между панелями, 14px внутри, разделы внутри панели — линией", "content_density": "средняя-плотная: инструмент" },
+    "layout": { "grid_system": "дека во всю ширину; под ней 1320px: лист шагов 216px + поток панелей; чистка — список файлов 220px + модули", "columns": 2, "gutter": "20–28px", "max_content_width": "1320px", "breakpoints": [520, 720, 860, 880, 980, 1100], "alignment_tendency": "левое" },
+    "shape": { "border_radius": { "small": "6px", "medium": "8px", "large": "12px", "pill": "999px" }, "border_usage": "волосяная 1px; вложенных карточек нет — разделы внутри панели отделены линиями", "divider_style": "1px line2" },
+    "elevation": { "shadow_style": "мягкая тень со смещением и блик сверху; в тёмной теме — почти без тени", "levels": { "low": "0 1px 0 #fff inset, 0 1px 2px rgb(30 26 20 / 7%), 0 6px 16px -10px rgb(30 26 20 / 28%)", "medium": "—", "high": "0 14px 34px -10px rgb(24 18 12 / 34%), 0 2px 6px rgb(24 18 12 / 12%)" }, "depth_cues": "таймлайн и поля утоплены (well), панели подняты, дека — тёмный металл" },
+    "iconography": { "style": "контурные SVG, заливка только у «играть/пауза»", "stroke_weight": "1.6px", "preferred_set": "свои, src/icons.js; без символов-стрелок и крестиков", "size_scale": [12, 13, 15, 16, 22] },
+    "motion": {
+      "philosophy": "Operate: движение объясняет состояние и не заставляет ждать. Один авторский момент — «заправка ленты» после сведения; живая деталь — дека.",
+      "easing": { "standard": "cubic-bezier(0.22, 1, 0.36, 1)", "emphasized": "cubic-bezier(0.34, 1.36, 0.64, 1)", "exit": "cubic-bezier(0.22, 1, 0.36, 1), короче входа", "press": "cubic-bezier(0.23, 1, 0.32, 1)", "ambient": "пружина k=160, затухание 0,7 — стрелка VU" },
+      "duration_scale": { "micro": "150ms", "normal": "250ms", "macro": "400ms" },
+      "entrance_pattern": "проявление + подъём 8–12px + размытие 2–3px; лесенка 40мс, не больше 10 строк",
+      "exit_pattern": "уходит копия («призрак») за 150–250мс; с клавиатуры — мгновенно"
+    },
+    "components": {
+      "button_style": "главная — заливка карандашом с тёмным текстом, 8px, нажатие 0,97; вторичная — панельная с рамкой; выбранная — цвет деки",
+      "card_style": "панель #F8F8F6, радиус 12px, волосяная рамка, мягкая тень; при перетаскивании файлов — обводка карандашом",
+      "navigation_pattern": "вкладки-сегменты на деке с едущей подложкой; лист шагов слева с едущей подсветкой и сводкой по каждому шагу",
+      "input_style": "утопленное поле #EEEFEB, радиус 8px, фокус — обводка и кольцо карандашом; ползунок — колпачок фейдера",
+      "list_style": "строки без цветных полос: статус — точкой и словом; «проверить» — подложка карандаша",
+      "modal_style": "меню растёт из точки щелчка; тост и прогресс — тёмные плашки деки снизу",
+      "component_notes": "номер шага превращается в галочку со штрихом; выключатели модулей — тумблеры; плеер — транспорт со счётчиком"
+    }
+  },
+  "design_style": {
+    "aesthetic": { "mood": "вечерняя монтажная: тёплый свет индикатора, металл, лента", "personality": ["точная", "тёплая", "тихая"], "genre": "профессиональный инструмент (DAW-lite)" },
+    "visual_language": { "whitespace_usage": "умеренная", "contrast_level": "средний; акцент — только на действии и отметках", "ornamentation": "никакой, кроме деталей аппаратуры" },
+    "composition": { "hierarchy_method": "шаги 1–5 с номерами на табличках, одна главная кнопка на шаг", "balance_type": "асимметрия: лист шагов слева, поток справа" },
+    "imagery": { "graphic_elements": "катушки, стрелочный индикатор, спектрограммы, таймлайн — вместо картинок" },
+    "interaction_feel": { "hover_behavior": "смена фона и рамки за 150 мс, только с мышью", "microinteraction_density": "высокая, но тихая" },
+    "brand_voice_in_ui": { "tone": "по делу, на «вы», без восклицаний" }
+  },
+  "visual_effects": {
+    "overview": { "effect_intensity": "низкая", "performance_tier": "light: без библиотек, CSS и Web Animations" },
+    "background_effects": { "enabled": false },
+    "particle_systems": { "enabled": false },
+    "3d_elements": { "enabled": false },
+    "shader_effects": { "enabled": false },
+    "scroll_effects": { "parallax": { "enabled": false }, "scroll_triggered_animations": { "enabled": false }, "scroll_morphing": { "enabled": false }, "notes": "лист шагов подсвечивает шаг, который сейчас на экране" },
+    "text_effects": { "enabled": true, "type": "блик по надписи прогресса, пока идёт работа (shimmer)" },
+    "cursor_effects": { "enabled": false },
+    "image_effects": { "enabled": false },
+    "glassmorphism_neumorphism": { "enabled": false, "notes": "размытие фона только у липких полос поверх прокрутки — ради читаемости" },
+    "canvas_drawings": { "enabled": true, "notes": "таймлайн, спектрограммы в тёплой палитре (окись → янтарь → белый), эквалайзер" },
+    "svg_animations": { "enabled": true, "notes": "стрелка VU на пружине, катушки, галочки штрихом, смена значков с размытием" },
+    "composite_notes": "prefers-reduced-motion обнуляет токены сдвига, масштаба и размытия: остаются проявления, стрелка встаёт сразу, катушки стоят."
+  }
+}
