@@ -1,4 +1,4 @@
-// Монтажка — фон сцен: по описанию сцены («кабинет, идёт урок», «гул, подносы, очередь») из базы BBC
+// Монтажка — фон сцен: по описанию сцены («кабинет, идёт урок», «гул, подносы, очередь») из базы звуков (Freesound или BBC)
 // подбирается атмосфера, растягивается на всю сцену с плавными стыками и приглушается под репликами.
 // Использует S, $, esc, fmt, notify, progress, play, stop, playing, saveEdits, remixSoon, renderMix из app.js;
 // sfxState, dbSearch, dbAdd, dbFetch, dbState из sounds.js/sfxdb.js; C — ядро.
@@ -29,33 +29,41 @@ function ambPick(items, rule) {
   const scored = items.filter(it => it.dur >= 20).map(it => {
     const all = (it.rubric || '') + ' ' + it.text.toLowerCase(); let s = 0;
     if (rule.good.test(all)) s += 3; if (rule.bad.test(all)) s -= 4; if (/^NHU/i.test(it.id)) s -= 3;
-    s -= it.dur < 40 ? 1.5 : 0; s -= it.dur > 400 ? 0.5 : 0;
+    if (it.src === 'fs' && FS_FAKE.test(all)) s -= 4;
+    // в сведение идут первые три минуты — длинное только дольше качается
+    s -= it.dur < 40 ? 1.5 : 0; s -= it.dur > 180 ? 0.8 : 0; s -= it.dur > 400 ? 0.5 : 0;
     return { it, s };
   }).sort((a, b) => b.s - a.s);
   return scored.map(x => x.it);
 }
 async function ambAutoAll() {
   const st = ambState(), scenes = ambScenes().filter(sc => sc.rule); if (!scenes.length) return notify('В описаниях сцен не нашлось мест, под которые есть фон. Выберите фон у сцены вручную.');
-  let ok = 0; const byQ = new Map();
+  let ok = 0, done = 0; const byQ = new Map(), picks = [];
   try {
+    // сначала поиски (их мало — повторяющиеся места ищутся один раз), потом фоны качаются по четыре сразу
     for (let i = 0; i < scenes.length; i++) {
       const sc = scenes[i], cur = st.scenes[sc.n]; if (cur && cur.manual && cur.src) continue;
-      progress(`Подбираю фон: сцена ${sc.n} — ${sc.rule.name}…`, i / scenes.length);
+      progress(`Ищу фон: сцена ${sc.n} — ${sc.rule.name}…`, 0.3 * i / scenes.length);
       try {
-        let list = byQ.get(sc.rule.q); if (!list) { list = (await dbSearch(sc.rule.q, 40)).items; byQ.set(sc.rule.q, list); }
-        const cands = ambPick(list, sc.rule); if (!cands.length) continue;
+        let list = byQ.get(sc.rule.q); if (!list) { list = (await dbSearch(sc.rule.q, 40, 'amb')).items; byQ.set(sc.rule.q, list); }
+        let cands = ambPick(list, sc.rule);
+        if (!cands.length && dbSrc() === 'fs') cands = ambPick((await bbcSearch(sc.rule.q, 40)).items, sc.rule);   // во Freesound не нашлось — добираем из BBC
+        if (!cands.length) continue;
         st.cands[sc.n] = cands.slice(0, 8).map(it => ({ id: it.id, text: it.text, dur: it.dur }));
-        const name = await dbAdd(cands[0]);
-        st.scenes[sc.n] = { src: 'lib:' + name, gain: cur?.gain ?? -18, on: true, pick: 0 }; ok++;
+        picks.push([sc, cur, cands[0]]);
       } catch (e) { console.warn('фон:', e); }
     }
+    await dbPool(picks, 4, async ([sc, cur, it]) => {
+      try { const name = await dbAdd(it); st.scenes[sc.n] = { src: 'lib:' + name, gain: cur?.gain ?? -18, on: true, pick: 0 }; ok++; } catch (e) { console.warn('фон:', e); }
+      progress(`Качаю фон сцен: ${++done} из ${picks.length}`, 0.3 + 0.7 * done / picks.length);
+    });
   } finally { progress('', 0); ambSave(); renderSounds(); if (S.result) remixSoon(); }
   notify(ok ? `Фон подобран для ${ok} сцен. Послушайте ▶, «другой» — следующий вариант из базы.` : 'База не ответила — проверьте интернет.');
 }
 async function ambNext(n) {
   const st = ambState(), sc = ambScenes().find(x => x.n === n); if (!sc) return;
   let cands = st.cands[n];
-  if (!cands || !cands.length) { const rule = sc.rule || AMB_RULES[AMB_RULES.length - 1]; cands = ambPick((await dbSearch(rule.q, 40)).items, rule).slice(0, 8).map(it => ({ id: it.id, text: it.text, dur: it.dur })); st.cands[n] = cands; }
+  if (!cands || !cands.length) { const rule = sc.rule || AMB_RULES[AMB_RULES.length - 1]; cands = ambPick((await dbSearch(rule.q, 40, 'amb')).items, rule).slice(0, 8).map(it => ({ id: it.id, text: it.text, dur: it.dur })); st.cands[n] = cands; }
   if (!cands.length) return;
   const cur = st.scenes[n] || { gain: -18, on: true, pick: -1 }, pick = ((cur.pick ?? -1) + 1) % cands.length;
   const name = await dbAdd(cands[pick]);
@@ -126,7 +134,7 @@ function* ambMixSteps(mix, lay, mixR = null) {
       else for (let i = c0, c1 = Math.min(end, c0 + CH); i < c1; i++) { bed[i] *= lin[((i0 + i) / hop) | 0]; mix[i0 + i] += bed[i]; }
       yield;
     }
-    const cfg = st.scenes[sc.n]; clips.push({ n: sc.n, at: a, dur, name: cfg.src.replace(/^lib:BBC \S+ — |^lib:|^synth:/, ''), audio: bed, audioR: bedR, g });
+    const cfg = st.scenes[sc.n]; clips.push({ n: sc.n, at: a, dur, name: cfg.src.replace(/^lib:(BBC|Freesound) \S+ — |^lib:|^synth:/, ''), audio: bed, audioR: bedR, g });
   }
   return clips;
 }
@@ -135,7 +143,7 @@ function ambHtml() {
   const on = scenes.filter(sc => st.scenes[sc.n] && st.scenes[sc.n].on && st.scenes[sc.n].src).length;
   const rows = scenes.map(sc => {
     const cfg = st.scenes[sc.n] || {}, has = !!cfg.src, lib = has && cfg.src.startsWith('lib:') ? sfxState().lib.find(x => x.name === cfg.src.slice(4)) : null;
-    const label = !has ? '<span class="muted">нет фона</span>' : cfg.src.startsWith('synth:') ? esc(C.sfxName(cfg.src.slice(6))) : lib ? esc(lib.name.replace(/^BBC \S+ — /, '')) + ` <i>${fmt(lib.dur)}</i>` : '<span class="muted">качаю…</span>';
+    const label = !has ? '<span class="muted">нет фона</span>' : cfg.src.startsWith('synth:') ? esc(C.sfxName(cfg.src.slice(6))) : lib ? esc(lib.name.replace(/^(BBC|Freesound) \S+ — /, '')) + ` <i>${fmt(lib.dur)}</i>` : '<span class="muted">качаю…</span>';
     return `<div class="arow ${cfg.on && has ? 'on' : ''}" data-n="${esc(sc.n)}">
       <label class="mini"><input type="checkbox" data-p="on" ${cfg.on && has ? 'checked' : ''} ${has ? '' : 'disabled'} aria-label="фон сцены ${esc(sc.n)}"></label>
       <div class="stext"><b>Сцена ${esc(sc.n)}</b> <span class="muted">${esc(sc.desc.slice(0, 70))}</span>${sc.rule ? `<div class="small muted">место: ${esc(sc.rule.name)}</div>` : ''}</div>

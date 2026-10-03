@@ -34,12 +34,14 @@ S.tab = (Object.entries(TAB_HASH).find(([, h]) => h === location.hash) || [store
 if (!TAB_HASH[S.tab]) S.tab = 'home';
 const PALETTE = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8'];
 const colorOf = key => { const i = S.P ? S.P.chars.findIndex(c => c.key === key) : -1; return PALETTE[(i < 0 ? 0 : i) % PALETTE.length]; };
+/** Что звучит в сведении: звуки ремарок, фон сцен, музыка. Выключенное не теряет настроек — просто не идёт в дорожку. */
+const mixUse = k => !(S.mixUse && S.mixUse[k] === false);
 const charName = key => (S.P && S.P.chars.find(c => c.key === key) || { name: key }).name;
 
 // ------------------------------------------------------------------ состояние правок
 const editsKey = () => 'montage:' + hash(S.scriptText);
-function saveEdits() { store.set(editsKey(), { room: S.room, edits: S.edits, gains: S.gains, voiced: S.voiced, voiceGains: S.voiceGains, timing: S.timing, tempo: S.tempo, fxVoice: S.fxVoice, fxLine: S.fxLine, amb: ambSaved(), takes: S.takePick, sfx: S.sfxSaved || {}, stage: S.stage ? stageSaved() : null, music: S.music ? musicSaved() : null }); }
-function loadEdits() { const v = store.get(editsKey()); S.room = v?.room !== false; S.edits = v?.edits || {}; S.gains = v?.gains || {}; S.voiced = v?.voiced || {}; S.voiceGains = v?.voiceGains || {}; S.timing = v?.timing || {}; S.tempo = v?.tempo || 1; S.fxVoice = v?.fxVoice || {}; S.fxLine = v?.fxLine || {}; S.amb = v?.amb ? { duck: 8, scenes: {}, cands: {}, ...v.amb } : null; S.takePick = v?.takes || {}; S.sfxSaved = v?.sfx || {}; sfxState().cues = JSON.parse(JSON.stringify(S.sfxSaved)); stageLoad(v?.stage); musicLoad(v?.music); }
+function saveEdits() { store.set(editsKey(), { room: S.room, edits: S.edits, gains: S.gains, voiced: S.voiced, voiceGains: S.voiceGains, timing: S.timing, tempo: S.tempo, fxVoice: S.fxVoice, fxLine: S.fxLine, amb: ambSaved(), takes: S.takePick, sfx: S.sfxSaved || {}, stage: S.stage ? stageSaved() : null, music: S.music ? musicSaved() : null, mixUse: S.mixUse || {} }); }
+function loadEdits() { const v = store.get(editsKey()); S.room = v?.room !== false; S.edits = v?.edits || {}; S.gains = v?.gains || {}; S.voiced = v?.voiced || {}; S.voiceGains = v?.voiceGains || {}; S.timing = v?.timing || {}; S.tempo = v?.tempo || 1; S.fxVoice = v?.fxVoice || {}; S.fxLine = v?.fxLine || {}; S.amb = v?.amb ? { duck: 8, scenes: {}, cands: {}, ...v.amb } : null; S.takePick = v?.takes || {}; S.sfxSaved = v?.sfx || {}; sfxState().cues = JSON.parse(JSON.stringify(S.sfxSaved)); stageLoad(v?.stage); musicLoad(v?.music); S.mixUse = v?.mixUse && typeof v.mixUse === 'object' ? v.mixUse : {}; }
 
 // ------------------------------------------------------------------ звук
 let actx = null, playing = null;
@@ -542,8 +544,8 @@ async function remixInner(mode, ids) {
   }
   lap('сумма');
   r.room = typeof roomToneMix === 'function' ? roomToneMix(mix, lay, mixR) : [];
-  r.amb = typeof ambMixSteps === 'function' ? await runSteps(ambMixSteps(mix, lay, mixR), tick) : [];
-  r.mus = st && typeof musicMixSteps === 'function' ? await runSteps(musicMixSteps(mix, mixR, lay), tick) : [];
+  r.amb = mixUse('amb') && typeof ambMixSteps === 'function' ? await runSteps(ambMixSteps(mix, lay, mixR), tick) : [];
+  r.mus = st && mixUse('music') && typeof musicMixSteps === 'function' ? await runSteps(musicMixSteps(mix, mixR, lay), tick) : [];
   lap('фон и музыка');
   if (mode === 'full') { const m = await runSteps(C.masterSteps(mix, lay.placed, { targetLufs: r.target, R: mixR }), tick); r.out = m.out; r.outR = m.outR; r.master = m; r.gain = Math.pow(10, m.gainDb / 20); r.approx = false; }
   else { const L = st ? C.limiterStream2(mix, mixR, 0.84, r.gain) : C.limiterStream(mix, 0.84, r.gain); for (let a = 0; a < N; a += CH) { L.step(a, Math.min(N, a + CH)); await tick(); } L.finish(); r.out = mix; r.outR = mixR; r.approx = true; }
@@ -746,7 +748,7 @@ function reportCsv() {
 function projectJson() {
   return JSON.stringify({ app: 'montage', v: 1, script: S.scriptText,
     files: S.files.map(f => ({ name: f.name, size: f.size, chars: [...f.chars] })),
-    room: S.room !== false, edits: S.edits, gains: S.gains, voiced: S.voiced, voiceGains: S.voiceGains, timing: S.timing, tempo: S.tempo, fxVoice: S.fxVoice, fxLine: S.fxLine, amb: ambSaved(), takes: S.takePick, sfx: S.sfxSaved || {}, stage: S.stage ? stageSaved() : null, music: S.music ? musicSaved() : null, plot: typeof plotSaved === 'function' ? plotSaved() : null, sfxLib: (S.sfx ? S.sfx.lib : []).map(f => f.db ? { name: f.name, db: f.db, text: f.text || '' } : f.name),
+    room: S.room !== false, edits: S.edits, gains: S.gains, voiced: S.voiced, voiceGains: S.voiceGains, timing: S.timing, tempo: S.tempo, fxVoice: S.fxVoice, fxLine: S.fxLine, amb: ambSaved(), takes: S.takePick, sfx: S.sfxSaved || {}, stage: S.stage ? stageSaved() : null, music: S.music ? musicSaved() : null, mixUse: S.mixUse || {}, plot: typeof plotSaved === 'function' ? plotSaved() : null, sfxLib: (S.sfx ? S.sfx.lib : []).map(f => f.db ? { name: f.name, db: f.db, text: f.text || '', ...(String(f.db).startsWith('fs:') && fsMeta(f.db) ? { meta: fsMeta(f.db) } : {}) } : f.name),
     cleanup: S.files.filter(f => f.clean && f.clean.chain).map(f => ({ name: f.name, chain: f.clean.chain, preset: f.clean.preset, applied: !!f.raw48 })) }, null, 1);
 }
 
@@ -832,6 +834,7 @@ function render(opt = {}) {
   if (DIRTY[S.tab] !== false) { DIRTY[S.tab] = false; if (S.tab === 'clean') renderCleanup(); else if (S.tab === 'sfx') renderSounds(); else if (S.tab === 'home') renderHome(); else if (S.tab === 'plot') renderPlot(); else if (S.tab === 'tl') renderTl(); else { renderScript(); renderFiles(); renderRun(); renderReview(); renderMix(); } }
   // сведение пересчиталось, пока таймлайн был закрыт (звук, музыка, фон) — дорожки устарели: нарисовать заново
   if (S.tab === 'tl' && S.result && S.result.out && !S.tlTracks && typeof drawTimeline === 'function') requestAnimationFrame(() => { drawTimeline(); if (typeof drawOverview === 'function') drawOverview(); });
+  if (typeof renderMixUse === 'function' && S.tab === 'build') renderMixUse();
   if (typeof motionSteps === 'function') motionSteps();
   if (flipBefore) flipPlay(flipBefore, PAGE_FLIP, el => el.id, { damping: 0.9, response: 0.4 });
 }
@@ -1165,6 +1168,7 @@ function bind() {
       S.sfxPendingDb = (p.sfxLib || []).filter(e => e && typeof e === 'object' && e.db);
       S.pendingClean = new Map((p.cleanup || []).map(x => [x.name, x]));
       if (p.plot && typeof plotFromProject === 'function') plotFromProject(p.plot);
+      S.mixUse = p.mixUse && typeof p.mixUse === 'object' ? p.mixUse : {}; saveEdits();
       for (const f of S.files) if (f.y48) restoreClean(f);
       notify('Проект открыт. Добавьте те же файлы записей — роли подставятся сами.'); render();
     } catch { notify('Это не файл проекта Монтажки.'); if (typeof motionShake === 'function') motionShake(e.target.closest('label')); }

@@ -32,12 +32,12 @@ const musTrack = id => (S.music && id ? S.music.lib.find(t => t.id === id) : nul
 const musReady = id => { const t = musTrack(id); return !!(t && t.pcm); };
 /** Есть ли в сведении музыка — тогда оно стерео. */
 function musicOn() {
-  const m = S.music; if (!m) return false;
+  const m = S.music; if (!m || !mixUse('music')) return false;
   return MUS_SLOTS.some(([k]) => m[k] && m[k].on && musReady(m[k].id)) || Object.values(m.beds).some(b => b && b.on && musReady(b.id));
 }
 /** Что музыка добавляет к раскладке: вступление до первой реплики, паузы между сценами, хвост под финал. */
 function musicLayout() {
-  const m = S.music; if (!m) return {};
+  const m = S.music; if (!m || !mixUse('music')) return {};
   const on = k => m[k] && m[k].on && musReady(m[k].id);
   return { lead: on('intro') ? Math.max(0, +m.intro.lead || 0) : 0, sceneGap: on('sting') ? (+m.sting.len || 5) + 0.6 : 0, tail: on('outro') ? Math.max(0, 0.6 + (+m.outro.len || 20) - 1.5) : 0 };
 }

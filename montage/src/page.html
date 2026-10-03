@@ -1076,6 +1076,68 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
 .tlcard .primary { gap: 8px; }
 @media (prefers-reduced-motion: reduce) { .ha-head { animation: none; transform: translateX(38%); } }
 :root[data-motion="reduce"] .ha-head { animation: none; transform: translateX(38%); }
+/* ------------------------------------------------------------------ что звучит в сведении, вкладка «Звуки» */
+.mix-use { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+#mix .mix-use { margin-top: 12px; }
+.mix-use:empty { display: none; }
+.mu-l { margin-right: 2px; color: var(--muted); font-size: 13px; }
+.mu { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 12px 0 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); font: inherit; font-size: 13.5px; cursor: pointer;
+  transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out, border-color var(--duration-quick) ease-out; }
+.mu.on { color: var(--ink); border-color: color-mix(in srgb, var(--accent-text) 45%, var(--line)); }
+.mu.none { padding-left: 12px; border-style: dashed; }
+.mu-sw { position: relative; flex: none; width: 28px; height: 16px; border-radius: 999px; background: var(--line); transition: background-color var(--duration-fast) var(--ease-smooth-out); }
+.mu-sw::after { content: ""; position: absolute; left: 2px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / 25%); transition: transform var(--duration-fast) var(--ease-smooth-out); }
+.mu.on .mu-sw { background: var(--accent); }
+.mu.on .mu-sw::after { transform: translateX(12px); }
+.mu-n { min-width: 18px; padding: 0 6px; border-radius: 999px; background: var(--well); color: var(--muted); font: 600 12px/18px var(--mono); text-align: center; }
+.mu.none .mu-n { background: transparent; padding: 0; font-family: inherit; font-weight: 500; color: var(--accent-text); }
+.mu:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) { .mu:hover { border-color: var(--ink); color: var(--ink); } }
+.mu:active { transform: scale(var(--scale-press)); }
+.sfx-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.sfx-tabs button i { font-style: normal; font-family: var(--mono); font-size: 12px; opacity: .7; }
+.sfx-panel { display: grid; gap: 12px; padding-top: 14px; border-top: 1px solid var(--line2); }
+.sfx-panel > .ambbox, .sfx-panel > .musbox, .sfx-panel > .dbbox { padding-top: 0; border-top: 0; }
+.sfx-panel > .sfx-lib + .dbbox { padding-top: 14px; border-top: 1px solid var(--line2); }
+.sfx-lib { display: grid; gap: 10px; }
+.sfx-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.sfx-tools .filters button i { font-style: normal; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.sfx-tools .filters button.on i { color: inherit; opacity: .75; }
+.sfx-bulk { display: flex; flex-wrap: wrap; gap: 6px; }
+.sfx-hint { margin: 0; }
+.srow { grid-template-columns: auto minmax(0, 1fr) minmax(140px, 180px) auto 132px 34px auto; }
+.srow:not(.on) > select, .srow:not(.on) > .smode, .srow:not(.on) > .gain { opacity: .6; }
+.srow.open { background: color-mix(in srgb, var(--well) 70%, transparent); border-bottom-color: transparent; }
+.srow .num { font: 12px var(--mono); color: var(--muted); }
+.skind { display: inline-block; margin-left: 4px; padding: 0 7px; border-radius: 999px; background: var(--well); color: var(--muted); font-size: 11.5px; line-height: 18px; white-space: nowrap; vertical-align: 1px; }
+.skind.strong { background: var(--accent-soft); color: var(--accent-text); }
+.smode { display: inline-flex; padding: 2px; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--well); }
+.smode button { min-height: 26px; padding: 0 9px; border: 0; border-radius: var(--r-s); background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; transition: background-color var(--duration-quick) ease-out, color var(--duration-quick) ease-out; }
+.smode button[aria-pressed=true] { background: var(--surface); color: var(--ink); box-shadow: var(--sh-1); font-weight: 600; }
+.sfind-b span { margin-left: 2px; }
+.warn-t { margin: 0; color: var(--warn); }
+.dbsrc { flex: none; }
+.sfind-b.on { background: var(--deck); border-color: var(--deck); color: var(--deck-ink); }
+.sfind { display: grid; gap: 8px; margin: 0 0 8px; padding: 10px 12px 12px 40px; border-bottom: 1px solid var(--line2); background: color-mix(in srgb, var(--well) 70%, transparent); border-radius: 0 0 var(--r-m) var(--r-m); }
+.sfind .dbrows { max-height: 300px; }
+.sfind p { margin: 0; }
+@media (max-width: 1100px) { .srow { grid-template-columns: auto minmax(0, 1fr) minmax(130px, 170px) auto 34px auto; } .srow > .gain { grid-column: 3 / 5; grid-row: 2; } }
+@media (max-width: 860px) {
+  .srow { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .srow > .mini { grid-row: 1; grid-column: 1; } .srow > .stext { grid-row: 1; grid-column: 2 / 4; }
+  .srow > select { grid-row: 2; grid-column: 2 / 4; } .srow > .smode { grid-row: 3; grid-column: 2; justify-self: start; }
+  .srow > .gain { grid-row: 4; grid-column: 2 / 4; } .srow > .play { grid-row: 3; grid-column: 3; justify-self: end; }
+  .srow > .sfind-b { grid-row: 5; grid-column: 2 / 4; justify-self: start; }
+  .sfind { padding-left: 12px; }
+  .sfx-head { justify-content: flex-start; }
+  .sfx-tabs { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+  .sfx-tabs::-webkit-scrollbar { display: none; }
+  .sfx-tabs button { flex: none; }
+  .sfx-tools { display: grid; justify-content: stretch; }
+  .sfx-tools .filters, .sfx-bulk { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; min-width: 0; }
+  .sfx-tools .filters::-webkit-scrollbar, .sfx-bulk::-webkit-scrollbar { display: none; }
+  .sfx-tools .filters > *, .sfx-bulk > * { flex: none; }
+}
 /* ------------------------------------------------------------------ доска сюжета */
 .plp { min-width: 0; padding-bottom: 12px; }
 .plp > * { min-width: 0; }
@@ -1279,6 +1341,7 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
           <label class="chk" for="room" title="Паузы между репликами заполняются тихим звуком той же комнаты — без провалов в цифровую тишину"><input type="checkbox" id="room" checked> Комнатный тон в паузах</label>
           <button class="primary" id="mixgo">Свести</button>
         </div>
+        <div class="mix-use" data-mixuse role="group" aria-label="Что звучит в сведении"></div>
         <p class="muted small">Голоса сводятся к одному уровню, реплики подтягиваются к уровню своего голоса; шёпот остаётся тише, крик громче — по ремаркам «(шёпотом)», «(громко)» и капсу. Кнопки ± у реплики — ручная поправка в дБ.</p>
         <div id="mix-out"></div>
       </section>
@@ -1304,7 +1367,7 @@ footer { display: grid; gap: 4px; padding: 20px 0 8px; margin-top: 12px; border-
   <div data-tabpane="sfx" class="pane" hidden>
     <section class="card" id="sfx">
       <h2 class="step">Звуки по сценарию <small>дверь, стук, шаги, грохот — из ремарок</small></h2>
-      <p class="muted">Ремарки, которые звучат, находятся сами. К каждой можно подставить свой файл или встроенный звук-заглушку, чтобы услышать, где он ляжет. «Между репликами» — реплики ждут звук; «фоном» — звук стелется под следующими репликами тише. В сведение уходит всё отмеченное галочкой.</p>
+      <p class="muted">Звуки к ремаркам, фон сцен и музыка — каждое в своём разделе. «В сведении» — что из этого звучит в дорожке: выключенное не теряет настроек.</p>
       <div id="sfx-body"></div>
     </section>
   </div>
