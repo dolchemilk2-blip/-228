@@ -1,0 +1,35 @@
+{
+  "hosting": {
+    "public": "montage",
+    "ignore": [
+      "**/.*",
+      "**/node_modules/**",
+      "src/**",
+      "dist/**",
+      "*.md",
+      "build.mjs",
+      "design-dna.json",
+      "access/database.rules.json"
+    ],
+    "headers": [
+      {
+        "source": "/",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(html|js)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      }
+    ]
+  }
+}

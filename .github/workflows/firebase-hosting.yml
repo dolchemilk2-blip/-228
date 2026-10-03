@@ -1,0 +1,40 @@
+# Монтажка на Firebase Hosting: страница входа и админка — по адресу https://montaje-624fe.web.app
+# (сама программа лежит в базе Firebase, её загружают через админку).
+# Выкладывается при каждом изменении montage/ в main; вручную — Actions → «Сайт на Firebase» → Run workflow.
+# Нужен секрет репозитория FIREBASE_SERVICE_ACCOUNT — JSON-ключ сервисного аккаунта с ролью
+# «Firebase Hosting Admin» (как его получить — montage/ACCESS.md, раздел «Сайт на Firebase Hosting»).
+name: Сайт на Firebase
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'montage/**'
+      - 'firebase.json'
+      - '.firebaserc'
+      - '.github/workflows/firebase-hosting.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: firebase-hosting
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Есть ли ключ Firebase
+        id: key
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -n "$SA" ]; then echo "ok=1" >> "$GITHUB_OUTPUT"
+          else echo "::notice::Нет секрета FIREBASE_SERVICE_ACCOUNT — выкладка на Firebase пропущена"; fi
+      - uses: actions/checkout@v4
+        if: steps.key.outputs.ok == '1'
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        if: steps.key.outputs.ok == '1'
+        with:
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: montaje-624fe
+          channelId: live

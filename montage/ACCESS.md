@@ -267,3 +267,28 @@ GitHub → репозиторий → **Settings** → **General** → в сам
 «конец подписки или сейчас + срок кода», и только вместе с отметкой нового кода (`subs/КОД`) — каждый код продлевает один
 раз, чужой или вечный не подходит. Владелец продлевает кнопкой «+30 дней» в списке пользователей (поле `grant`).
 **После обновления опубликуйте новые правила базы** — со старыми месячная ссылка откроет доступ навсегда.
+
+## Сайт на Firebase Hosting
+
+Страница входа и админка выкладываются ещё и на Firebase Hosting:
+**https://montaje-624fe.web.app** (админка — `https://montaje-624fe.web.app/admin.html`). Адрес на GitHub Pages
+продолжает работать. Выкладывает GitHub Action `.github/workflows/firebase-hosting.yml` — при каждом
+изменении `montage/` в ветке `main`; вручную — вкладка Actions → «Сайт на Firebase» → Run workflow.
+На хостинг уходят только `index.html`, `admin.html` и `access/config.js`, `access/fb.js` (см. `firebase.json`):
+сама программа лежит в базе и загружается через админку, как раньше.
+
+Один раз нужно дать GitHub ключ для выкладки:
+
+1. **Firebase → Hosting → «Начать»** — пройти шаги, команды из них выполнять не нужно.
+2. **Ключ.** Откройте https://console.cloud.google.com/iam-admin/serviceaccounts?project=montaje-624fe →
+   «Создать сервисный аккаунт» → имя `github-deploy` → роли **Firebase Hosting Admin** и **API Keys Viewer** →
+   «Готово». Откройте созданный аккаунт → «Ключи» → «Добавить ключ» → «Создать новый ключ» → JSON —
+   скачается файл. Никуда его не пересылайте.
+3. **GitHub → репозиторий → Settings → Secrets and variables → Actions → New repository secret**:
+   имя `FIREBASE_SERVICE_ACCOUNT`, значение — всё содержимое скачанного JSON-файла. Файл после этого можно удалить.
+4. Запустить выкладку: Actions → «Сайт на Firebase» → Run workflow (или любое изменение сайта в `main`).
+
+Свой домен: Firebase → Hosting → «Добавить собственный домен» → прописать у регистратора записи,
+которые покажет Firebase (сертификат выпустится сам за несколько часов). Затем **Authentication →
+Settings → Authorized domains → Add domain** — иначе вход через Google на новом адресе не пустит. Чтобы
+ссылки покупателям из админки вели на новый домен, впишите его в `siteUrl` в `access/config.js`.
