@@ -1,6 +1,6 @@
 /* Письма и капсулы времени */
 
-import { cloud, trackUnread, watchTrip } from './cloud.js';
+import { cloud, trackUnread, watchTrip, trackChessTurn } from './cloud.js';
 
 let trip = null;
 watchTrip((t) => { trip = t; });
@@ -336,6 +336,7 @@ paintShelf();
 await cloud.ready();
 cloud.presence(meKey);
 trackUnread();
+trackChessTurn();
 
 cloud.watch('letters', (data) => {
   const first = !loaded;

@@ -1,6 +1,6 @@
 /* Главная: талон до встречи, два города, настроение, вопрос дня, обнимашки */
 
-import { cloud, renderCloudBadge, trackUnread, watchTrip, normalizeTrip } from './cloud.js';
+import { cloud, renderCloudBadge, trackUnread, watchTrip, normalizeTrip, trackChessTurn } from './cloud.js';
 
 const CFG = window.SITE_CONFIG;
 const $ = (id) => document.getElementById(id);
@@ -642,6 +642,7 @@ function showPing(kind, at) {
 await cloud.ready();
 cloud.presence(meKey);
 trackUnread();
+trackChessTurn();
 
 $('room-sub').textContent = cloud.mode === 'cloud'
   ? 'вы оба видите одно и то же в реальном времени'

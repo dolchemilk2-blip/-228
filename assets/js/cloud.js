@@ -324,3 +324,32 @@ export async function watchTrip(cb) {
   await readyPromise;
   driver.watch('trip', (data) => cb(normalizeTrip(data && data.wall ? data : null)));
 }
+
+/* ============================================================
+   Шахматы: точка на вкладке, когда ваш ход
+   (или вам предложили ничью). Движок здесь не нужен:
+   чей ход — видно по числу ходов.
+   ============================================================ */
+
+export async function trackChessTurn() {
+  const me = (window.App && App.getMe()) || 'a';
+  await readyPromise;
+  driver.watch('chess', (g) => {
+    let on = false;
+    if (g && g.id && !(g.end && g.end.reason)) {
+      const n = String(g.moves || '').trim().split(/\s+/).filter(Boolean).length;
+      const meWhite = (g.white === 'b' ? 'b' : 'a') === me;
+      on = (n % 2 === 0) === meWhite || Boolean(g.drawOffer && g.drawOffer !== me);
+    }
+    document.querySelectorAll('a[href="chess.html"]').forEach((a) => {
+      let b = a.querySelector('.tab-badge');
+      if (!on) { if (b) b.remove(); return; }
+      if (!b) {
+        b = document.createElement('b');
+        b.className = 'tab-badge dot';
+        b.setAttribute('aria-label', 'ваш ход');
+        a.appendChild(b);
+      }
+    });
+  });
+}

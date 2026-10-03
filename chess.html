@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f3f0ec" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e0c11" />
+<title>Шахматы · Мы вдвоём</title>
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+<link rel="stylesheet" href="assets/css/style.css" />
+<style>
+  /* ---------- цвета доски: клетки окрашены в цвет того, кто играет ---------- */
+  :root {
+    --sq-l: #ece6f3;
+    --sq-d: #a690cf;
+    --last-l: #f5e8a3;
+    --last-d: #dcc76c;
+    --sq-mark: rgba(28, 14, 40, .2);
+    --pc-w-fill: #fffdfa; --pc-w-line: #2a2430;
+    --pc-b-fill: #2d2833; --pc-b-line: #120f15; --pc-b-detail: rgba(255, 255, 255, .62);
+  }
+  @supports (color: color-mix(in oklab, red, blue)) {
+    :root {
+      --sq-l: color-mix(in oklab, var(--accent-fill) 9%, #fbf8f4);
+      --sq-d: color-mix(in oklab, var(--accent-fill) 52%, #ddd5ca);
+    }
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --sq-l: #c8bfd6; --sq-d: #776596;
+      --last-l: #ddd08e; --last-d: #ac9a4f;
+      --sq-mark: rgba(10, 4, 16, .3);
+    }
+    @supports (color: color-mix(in oklab, red, blue)) {
+      :root {
+        --sq-l: color-mix(in oklab, var(--accent-fill) 14%, #cdc6d2);
+        --sq-d: color-mix(in oklab, var(--accent-fill) 50%, #6e6676);
+      }
+    }
+  }
+
+  .chess { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  .chess .left, .chess .right { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+
+  /* ---------- игроки над доской и под ней ---------- */
+  .player {
+    display: flex; align-items: center; gap: 10px;
+    min-height: 44px;
+    padding: 0 4px;
+  }
+  .player .p-info { flex: 1; min-width: 0; }
+  .player .p-name {
+    display: flex; align-items: center; gap: 7px;
+    font-weight: 600; font-size: var(--t-callout);
+  }
+  .p-color {
+    width: 12px; height: 12px; border-radius: 50%;
+    box-shadow: inset 0 0 0 1.5px var(--text);
+    flex: none;
+  }
+  .p-color.w { background: #fff; box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, .45); }
+  .p-color.b { background: #2d2833; box-shadow: none; }
+  .p-caps {
+    display: flex; align-items: center;
+    height: 18px; margin-top: 1px;
+    color: var(--text-3); font-size: var(--t-foot); font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .p-caps svg { width: 17px; height: 17px; margin-right: -5px; flex: none; }
+  .p-caps svg .f { stroke-width: 2.4; stroke-linejoin: round; }
+  .p-caps svg .d, .p-caps svg .e { display: none; }
+  .p-caps .pc-w .f { fill: var(--surface); stroke: var(--text-2); }
+  .p-caps .pc-b .f { fill: var(--text-2); stroke: var(--text-2); }
+  .p-caps svg + b { margin-left: 9px; }
+  .p-caps b { font-weight: 600; }
+  .p-caps .none { font-weight: 400; }
+  /* кто сейчас ходит */
+  .p-turn {
+    flex: none;
+    padding: 5px 11px;
+    border-radius: 999px;
+    font-size: var(--t-foot); font-weight: 700;
+    background: var(--fill); color: var(--text-2);
+    opacity: 0; transform: scale(.85);
+    transition: opacity var(--d-fast) ease, transform 420ms var(--spring);
+  }
+  .player.turn .p-turn { opacity: 1; transform: none; }
+  .player.turn.me .p-turn { background: var(--accent-fill); color: #fff; }
+  .player.turn .ava { box-shadow: 0 0 0 2.5px var(--bg), 0 0 0 4.5px var(--accent); }
+  .player .ava { transition: box-shadow 300ms var(--ease-out); }
+
+  /* ---------- доска ---------- */
+  .board {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1;
+    touch-action: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+    container-type: inline-size;
+  }
+  .squares {
+    position: absolute; inset: 0;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: var(--shadow-1), 0 0 0 .5px var(--sep);
+  }
+  .sq { position: relative; background: var(--sq-l); }
+  .sq.dk { background: var(--sq-d); }
+  .sq::before, .sq::after { content: ''; position: absolute; inset: 0; pointer-events: none; }
+  /* последний ход — тёплым светом, как от лампы над доской */
+  .sq.last { background: var(--last-l); }
+  .sq.dk.last { background: var(--last-d); }
+  .sq.last .co { color: rgba(60, 46, 10, .55); }
+  .sq.sel::before { background: color-mix(in srgb, var(--accent-fill) 42%, transparent); }
+  .sq.check::before {
+    background: radial-gradient(circle, rgba(255, 30, 60, .95) 0, rgba(255, 30, 60, .55) 32%, rgba(255, 30, 60, 0) 72%);
+    animation: check-in 520ms var(--spring) both;
+  }
+  @keyframes check-in { from { transform: scale(.4); opacity: 0; } }
+  /* куда можно пойти: точка; что можно съесть — уголки */
+  .sq.to::after {
+    inset: 35%;
+    border-radius: 50%;
+    background: var(--sq-mark);
+    animation: mark-in 260ms var(--ease-out) both;
+  }
+  .sq.to.cap::after {
+    inset: 0; border-radius: 0;
+    background: radial-gradient(circle, transparent 0 66%, var(--sq-mark) 67%);
+  }
+  @keyframes mark-in { from { transform: scale(.3); opacity: 0; } }
+  /* клетка под пальцем, когда тащишь фигуру */
+  .sq.hover::before { background: color-mix(in srgb, var(--accent-fill) 34%, transparent); }
+  .sq .co {
+    position: absolute;
+    font-size: max(9px, 2.4cqi);
+    font-weight: 700;
+    line-height: 1;
+    color: var(--sq-d);
+    pointer-events: none;
+  }
+  .sq.dk .co { color: var(--sq-l); }
+  .sq .co.rank { top: 3px; left: 3px; }
+  .sq .co.file { bottom: 3px; right: 4px; }
+
+  .board:focus-visible { outline: none; }
+  .board:focus-visible .sq.kf { box-shadow: inset 0 0 0 3px var(--accent); }
+
+  .pieces { position: absolute; inset: 0; pointer-events: none; }
+  .pc {
+    position: absolute; left: 0; top: 0;
+    width: 12.5%; height: 12.5%;
+    will-change: translate;
+    transition: scale 300ms var(--spring), opacity 200ms ease, filter 200ms ease;
+  }
+  .pc svg { width: 100%; height: 100%; filter: drop-shadow(0 1.5px 1px rgba(0, 0, 0, .26)); }
+  .pc.moving { z-index: 2; }
+  .pc.lifted { z-index: 3; scale: 1.14; }
+  .pc.lifted svg { filter: drop-shadow(0 10px 10px rgba(0, 0, 0, .28)); }
+  @media (pointer: coarse) { .pc.lifted { scale: 1.32; } }
+  .pc.born { animation: pc-born 380ms var(--spring) both; }
+  @keyframes pc-born { from { scale: .6; opacity: 0; } }
+  .pc.gone { scale: .6; opacity: 0; transition: scale 260ms var(--ease-out), opacity 200ms ease 60ms; }
+
+  .pc svg .f { stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+  .pc svg .d { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .pc-w .f { fill: var(--pc-w-fill); stroke: var(--pc-w-line); }
+  .pc-w .d { stroke: var(--pc-w-line); }
+  .pc-w .e { fill: var(--pc-w-line); }
+  .pc-b .f { fill: var(--pc-b-fill); stroke: var(--pc-b-line); }
+  .pc-b .d { stroke: var(--pc-b-detail); }
+  .pc-b .e { fill: #f4eff7; }
+
+  /* просмотр старых ходов: доска чуть приглушена */
+  .board.review .pieces { opacity: .9; }
+  .board.idle .squares { filter: saturate(.7); }
+
+  /* ---------- превращение пешки ---------- */
+  .promo {
+    position: absolute; inset: 0; z-index: 5;
+    border-radius: 14px;
+    background: rgba(20, 12, 24, .38);
+    -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+    animation: fade-in 200ms ease both;
+  }
+  @keyframes fade-in { from { opacity: 0; } }
+  .promo-col {
+    position: absolute;
+    width: 12.5%;
+    display: grid; gap: 0;
+  }
+  .promo-col button {
+    aspect-ratio: 1;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    /* светлый круг в обеих темах: на нём видны и белые, и чёрные фигуры */
+    background: #fbf8f4;
+    box-shadow: var(--shadow-2);
+    margin: 4%;
+    animation: promo-in 420ms var(--spring) both;
+    --ps: .9;
+    transition: transform var(--release);
+  }
+  .promo-col button:nth-child(2) { animation-delay: 30ms; }
+  .promo-col button:nth-child(3) { animation-delay: 60ms; }
+  .promo-col button:nth-child(4) { animation-delay: 90ms; }
+  .promo-col svg { width: 86%; height: 86%; }
+  @keyframes promo-in { from { transform: scale(.4); opacity: 0; } }
+
+  /* ---------- строка состояния ---------- */
+  .status {
+    display: flex; align-items: center; gap: 12px;
+    min-height: 56px;
+    padding: 10px 10px 10px 16px;
+    border-radius: 18px;
+    background: var(--surface);
+    box-shadow: var(--shadow-1);
+  }
+  .status .s-text { flex: 1; min-width: 0; }
+  .status .s-main { font-weight: 700; font-size: var(--t-body); letter-spacing: -.015em; }
+  .status .s-sub { color: var(--text-2); font-size: var(--t-foot); margin-top: 1px; }
+  .status .btn-row { flex-wrap: nowrap; }
+  .status.enter { animation: status-in 420ms var(--spring-soft) both; }
+  @keyframes status-in { from { transform: translateY(6px) scale(.98); opacity: .2; } }
+  .status.alert .s-main { color: var(--danger); }
+  .status.win .s-main { color: var(--accent); }
+
+  /* ---------- ходы ---------- */
+  .moves-bar { display: flex; align-items: center; gap: 6px; }
+  .moves-bar .icon-btn { width: 36px; height: 36px; }
+  .moves-bar .icon-btn:disabled { opacity: .35; }
+  .moves {
+    flex: 1; min-width: 0;
+    display: flex; align-items: center; gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 4px 2px;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 10px, #000 calc(100% - 10px), transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 10px, #000 calc(100% - 10px), transparent);
+  }
+  .moves::-webkit-scrollbar { display: none; }
+  .moves .n { color: var(--text-3); font-size: var(--t-foot); padding: 0 2px 0 8px; font-variant-numeric: tabular-nums; }
+  .moves .n:first-child { padding-left: 4px; }
+  .moves button {
+    flex: none;
+    padding: 5px 8px;
+    border-radius: 8px;
+    font-size: var(--t-sub); font-weight: 600;
+    white-space: nowrap;
+    color: var(--text);
+    --ps: .92;
+    transition: transform var(--release), background-color var(--d-fast);
+  }
+  .moves button[aria-current="true"] { background: var(--accent-soft); color: var(--accent); }
+  .moves .empty { color: var(--text-3); font-size: var(--t-sub); padding: 5px 6px; white-space: nowrap; }
+
+  /* ---------- кнопки партии ---------- */
+  .tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .tool {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+    min-height: 68px;
+    padding: 10px 6px;
+    border-radius: 18px;
+    background: var(--surface);
+    box-shadow: var(--shadow-1);
+    color: var(--text);
+    font-size: var(--t-foot); font-weight: 600;
+    --ps: .95;
+    transition: transform var(--release), opacity var(--d-fast);
+  }
+  .tool .i { width: 24px; height: 24px; color: var(--accent); }
+  .tool.danger .i { color: var(--danger); }
+  .tool:disabled { opacity: .4; cursor: default; }
+
+  /* ---------- счёт ---------- */
+  .score {
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+    padding: 18px 16px;
+  }
+  .score .side { display: flex; flex-direction: column; align-items: center; gap: 6px; font-weight: 600; font-size: var(--t-sub); }
+  .score .big {
+    font-family: var(--font-round);
+    font-size: 2.2rem; font-weight: 700; letter-spacing: -.03em;
+    font-variant-numeric: tabular-nums;
+    padding: 0 10px;
+  }
+  .score .draws { grid-column: 1 / -1; text-align: center; color: var(--text-3); font-size: var(--t-foot); margin-top: 8px; }
+  .history .row-item .sub { margin-top: 0; }
+  .history .res { flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-family: var(--font-round); color: #fff; background: var(--text-3); }
+  .history .res[data-p="a"] { background: var(--dima-fill); }
+  .history .res[data-p="b"] { background: var(--ragim-fill); }
+
+  .new-game-colors .segmented { margin-top: 6px; }
+
+  /* ---------- компьютер: доска слева, всё остальное справа ---------- */
+  @media (min-width: 900px) {
+    body[data-page="chess"] .shell { max-width: 1040px; }
+    .chess { grid-template-columns: minmax(0, 560px) minmax(300px, 1fr); align-items: start; gap: 28px; }
+    .chess .left { display: grid; gap: 10px; }
+    .chess .right { display: grid; gap: 14px; position: sticky; top: 76px; }
+  }
+  @media (max-width: 899px) {
+    .chess .left, .chess .right { display: grid; gap: 12px; }
+  }
+  /* на узком телефоне доска — во всю ширину экрана */
+  @media (max-width: 440px) {
+    .board { width: calc(100% + 2 * var(--gutter) - 12px); margin-inline: calc(6px - var(--gutter)); }
+  }
+</style>
+</head>
+<body data-page="chess">
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="index.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#heart-fill"/></svg>Мы&nbsp;вдвоём</a>
+    <div class="bar-title" aria-hidden="true"></div>
+    <nav class="nav" aria-label="Разделы">
+      <span class="nav-pill" aria-hidden="true"></span>
+      <a href="index.html">Главная</a>
+      <a href="chat.html">Чат</a>
+      <a href="letters.html">Письма</a>
+      <a href="games.html">Игры</a>
+      <a href="chess.html">Шахматы</a>
+      <a href="memories.html">История</a>
+    </nav>
+    <button class="who-chip" id="who-chip" type="button" aria-label="Сменить, кто за экраном"></button>
+  </div>
+</header>
+
+<main class="shell" id="main">
+
+  <header class="page-head">
+    <h1 class="page-title">Шахматы</h1>
+    <p class="page-sub" id="page-sub">Партия на двоих: ходите, когда удобно, — второй увидит ход сразу.</p>
+  </header>
+
+  <div class="chess">
+    <div class="left">
+      <div class="player" id="p-top"></div>
+      <div class="board idle" id="board" role="grid" aria-label="Шахматная доска">
+        <div class="squares" id="squares"></div>
+        <div class="pieces" id="pieces"></div>
+      </div>
+      <div class="player" id="p-bottom"></div>
+    </div>
+
+    <div class="right">
+      <div class="status" id="status" aria-live="polite">
+        <div class="s-text"><div class="s-main" id="s-main">…</div><div class="s-sub" id="s-sub"></div></div>
+        <div class="btn-row" id="s-actions"></div>
+      </div>
+
+      <div class="moves-bar">
+        <button class="icon-btn" type="button" id="prev" aria-label="Ход назад"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#chev-left"/></svg></button>
+        <div class="moves" id="moves" aria-label="Ходы партии"></div>
+        <button class="icon-btn" type="button" id="next" aria-label="Ход вперёд"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#chev-right"/></svg></button>
+      </div>
+
+      <div class="tools" id="tools">
+        <button class="tool" type="button" id="t-undo"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#undo"/></svg>Вернуть ход</button>
+        <button class="tool" type="button" id="t-draw"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#draw"/></svg>Ничья</button>
+        <button class="tool danger" type="button" id="t-resign"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#flag"/></svg>Сдаться</button>
+      </div>
+
+      <button class="btn gray block" type="button" id="new-game"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#refresh"/></svg>Новая партия</button>
+
+      <section aria-labelledby="score-title">
+        <div class="section-head"><h2 class="section-title" id="score-title">Счёт</h2></div>
+        <div class="card score" id="score"></div>
+        <div class="group history" id="history" style="margin-top:12px"></div>
+      </section>
+    </div>
+  </div>
+
+  <p class="section-note" style="margin-top:22px">Фигуру можно перетащить пальцем или нажать на неё, а потом на клетку. Своим ходом можно передумать, пока второй не ответил.</p>
+
+</main>
+
+<nav class="tabbar" aria-label="Разделы">
+  <span class="tab-pill" aria-hidden="true" style="--i:4"></span>
+  <a href="index.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#home"/></svg><span>Главная</span></a>
+  <a href="chat.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#chat"/></svg><span>Чат</span></a>
+  <a href="letters.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#letter"/></svg><span>Письма</span></a>
+  <a href="games.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#games"/></svg><span>Игры</span></a>
+  <a href="chess.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#chess"/></svg><span>Шахматы</span></a>
+  <a href="memories.html"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#story"/></svg><span>История</span></a>
+</nav>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/common.js"></script>
+<script type="module" src="assets/js/chess.js"></script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 /* Игры для двоих: причины, вопросы, скретч-карточка, колесо свиданий */
 
-import { cloud, trackUnread } from './cloud.js';
+import { cloud, trackUnread, trackChessTurn } from './cloud.js';
 
 const CFG = window.SITE_CONFIG;
 const $ = (id) => document.getElementById(id);
@@ -376,3 +376,4 @@ $('wheel-btn').addEventListener('click', () => {
 await cloud.ready();
 cloud.presence(meKey);
 trackUnread();
+trackChessTurn();

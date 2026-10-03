@@ -1,6 +1,6 @@
 /* Наша история: мост, общая лента моментов, фото, список желаний */
 
-import { cloud, trackUnread, watchTrip } from './cloud.js';
+import { cloud, trackUnread, watchTrip, trackChessTurn } from './cloud.js';
 
 const CFG = window.SITE_CONFIG;
 const $ = (id) => document.getElementById(id);
@@ -717,6 +717,7 @@ watchTrip((t) => {
 await cloud.ready();
 cloud.presence(meKey);
 trackUnread();
+trackChessTurn();
 
 cloud.watch('photos', (data) => {
   photos = Object.entries(data || {})

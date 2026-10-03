@@ -390,7 +390,7 @@ p { text-wrap: pretty; }
   translate: -50% 0;
   padding: 5px;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   border-radius: 999px;
   background: var(--bar-bg);
   -webkit-backdrop-filter: saturate(180%) blur(22px);
@@ -416,11 +416,15 @@ p { text-wrap: pretty; }
 /* значок активной вкладки делает маленький упругий «вдох» */
 .tabbar a[aria-current="page"] .i { animation: tab-bounce 520ms var(--spring) both; }
 @keyframes tab-bounce { from { transform: scale(.82); } }
+/* шесть вкладок на самом узком экране (iPhone SE): подписи чуть мельче */
+@media (max-width: 360px) {
+  .tabbar a { font-size: .56rem; letter-spacing: -.01em; }
+}
 
 .tab-pill {
   position: absolute;
   top: 5px; bottom: 5px; left: 5px;
-  width: calc((100% - 10px) / 5);
+  width: calc((100% - 10px) / 6);
   border-radius: 999px;
   background: var(--fill);
   transform: translateX(calc(var(--i, 0) * 100%));
@@ -442,6 +446,8 @@ p { text-wrap: pretty; }
   animation: badge-in 420ms var(--spring) both;
 }
 @keyframes badge-in { from { transform: scale(.4); opacity: 0; } }
+/* точка без цифры: «ваш ход» в шахматах */
+.tab-badge.dot { min-width: 10px; width: 10px; height: 10px; padding: 0; top: 7px; left: calc(50% + 9px); }
 
 /* ============================================================
    Поверхности
@@ -910,6 +916,7 @@ html.no-vt.leaving .shell { opacity: 0; transition: opacity 150ms var(--ease-in)
   }
   .nav a[aria-current="page"] { color: var(--text); }
   .nav .tab-badge { top: -3px; left: auto; right: -2px; box-shadow: 0 0 0 2px var(--bar-solid); }
+  .nav .tab-badge.dot { top: 2px; right: 2px; }
   .nav-pill {
     position: absolute;
     z-index: 0;
@@ -924,6 +931,13 @@ html.no-vt.leaving .shell { opacity: 0; transition: opacity 150ms var(--ease-in)
   }
   .nav-pill.on { opacity: 1; }
   .nav-pill.glide { transition: transform 440ms var(--ease-drawer), width 440ms var(--ease-drawer); }
+
+  /* шесть вкладок на нешироком экране: меню плотнее, от логотипа — только сердце */
+  @media (max-width: 960px) {
+    .nav a { padding: 7px 11px; }
+    .brand { font-size: 0; gap: 0; }
+    .brand .i { width: 24px; height: 24px; }
+  }
 
   .who-chip { margin-left: 0; padding: 4px 14px 4px 4px; background: var(--fill); }
   .who-chip .who-name { display: inline; }

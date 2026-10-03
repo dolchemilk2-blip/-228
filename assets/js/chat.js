@@ -1,6 +1,6 @@
 /* Живой чат на двоих */
 
-import { cloud, markChatRead } from './cloud.js';
+import { cloud, markChatRead, trackChessTurn } from './cloud.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -1027,6 +1027,7 @@ $('btn-hug').addEventListener('click', async (e) => {
 
 await cloud.ready();
 cloud.presence(meKey);
+trackChessTurn();
 
 let firstLoad = true;
 
