@@ -62,6 +62,7 @@ function renderHome() {
         <h2 class="home-h">Сценарий и записи актёров — на входе. Готовый спектакль — на выходе.</h2>
         <p class="home-lead">Монтажка сама находит реплики в записях, выравнивает громкость, расставляет паузы по ремаркам и сводит дорожку. Всё считается на вашем компьютере: записи никуда не уходят.</p>
         <div class="home-cta"><button class="primary" data-go="build" data-at="s1">${ic('lines')}Собрать спектакль</button><button class="ghost-b" data-go="tl" data-mode="files">${ic('tracks')}Смонтировать свои записи</button></div>
+        <button class="ghost-b tiny guide-replay" type="button" data-guide-open>${ic('play')}Показать возможности</button>
       </div>
       <div class="home-art" aria-hidden="true">
         <div class="ha-ruler"></div>

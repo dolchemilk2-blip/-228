@@ -28,7 +28,7 @@ self.onmessage = e => {
 };`;
 const app = strip(read('app.js')), cleanup = strip(read('cleanup.js')), sounds = strip(read('sounds.js')), sfxdb = strip(read('sfxdb.js')), timeline = strip(read('history.js')) + '\n' + strip(read('space.js')) + '\n' + strip(read('music.js')) + '\n' + strip(read('timeline.js')) + '\n' + strip(read('motion.js')) + '\n' + strip(read('deck.js')) + '\n' + strip(read('editor.js')) + '\n' + strip(read('home.js')) + '\n' + strip(read('plot.js')), fx = strip(read('fx.js')), amb = strip(read('amb.js')), extras = strip(read('extras.js')) + '\n' + strip(read('video.js')) + '\n' + strip(read('read.js')) + '\n' + strip(read('record.js'));
 const icons = strip(read('icons.js')) + '\n' + strip(read('spring.js')) + '\n' + strip(read('fader.js')) + '\n' + strip(read('nums.js'));
-const bundle = `${bundleLib}\nconst DSP_WORKER_SRC = ${JSON.stringify(workerSrc)};\n\n${icons}\n\n${cleanup}\n\n${sounds}\n\n${sfxdb}\n\n${fx}\n\n${amb}\n\n${timeline}\n\n${extras}\n\n${app}`;
+const bundle = `${bundleLib}\nconst DSP_WORKER_SRC = ${JSON.stringify(workerSrc)};\n\n${icons}\n\n${cleanup}\n\n${sounds}\n\n${sfxdb}\n\n${fx}\n\n${amb}\n\n${timeline}\n\n${extras}\n\n${strip(read('guide.js'))}\n\n${app}`;
 const page = read('page.html').replace('/*BUNDLE*/', () => bundle);
 fs.mkdirSync(new URL('./dist/', import.meta.url), { recursive: true });
 fs.writeFileSync(new URL('./dist/montage.html', import.meta.url), page);

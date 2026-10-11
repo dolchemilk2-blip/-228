@@ -1279,3 +1279,4 @@ bind(); render();
 if (typeof motionInit === 'function') motionInit();
 if (typeof initDeck === 'function') initDeck();
 if (typeof initTheme === 'function') initTheme();
+if (typeof guideInit === 'function') guideInit();
