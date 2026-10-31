@@ -11,9 +11,9 @@
 ## Сайт «Мы вдвоём»
 
 Исходники сайта для пары и история его изменений выделены в отдельный
-репозиторий [dolchemilk2-blip/couple](https://github.com/dolchemilk2-blip/couple).
+репозиторий [dolchemilk2-blip/kkk](https://github.com/dolchemilk2-blip/kkk).
 
-[Новый адрес сайта](https://dolchemilk2-blip.github.io/couple/).
+[Новый адрес сайта](https://dolchemilk2-blip.github.io/kkk/).
 Прежние HTML-страницы в корне перенаправляют на соответствующие страницы
 нового сайта с сохранением параметров и фрагмента ссылки, в том числе
 писем-ссылок. Настройки Firebase и идентификатор комнаты сохранены.
